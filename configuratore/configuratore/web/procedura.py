@@ -313,14 +313,14 @@ def leggi_log(testo: str) -> Avanzamento:
         if nel_riepilogo:
             continue
         # solo i messaggi di mediabox ("· …", "✔ …", "! …"), non quelli tecnici di Docker
-        nostra = re.match(r"^\s+([·✔!])\s+(.*)$", riga)
+        nostra = re.match(r"^\s+([·✔√!])\s+(.*)$", riga)
         if nostra:
             a.ultima_riga = nostra.group(2)
             scarico = re.search(r"Scarico (.+?) \((\d+) di (\d+)\)", riga)
             a.scarico = (
                 {"nome": scarico.group(1), "n": int(scarico.group(2)), "di": int(scarico.group(3))} if scarico else None
             )
-        if riga.strip().startswith("✘"):
+        if riga.strip()[:1] in ("✘", "×"):  # × su Windows
             problema = {"nome": a.passi[-1]["testo"] if a.passi else "", "cosa": riga.strip()[1:].strip(), "cosa_fare": ""}
             a.problemi.append(problema)
             if a.passi:

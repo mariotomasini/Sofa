@@ -105,6 +105,12 @@ def test_lettura_del_registro():
     assert a.ultima_riga == "Creo le librerie"
 
 
+def test_registro_di_windows():
+    a = p.leggi_log("== Configuro Bazarr ==\n  √ Pronto\n== Configuro Jellyfin ==\n  × Jellyfin non risponde.\n")
+    assert [x["stato"] for x in a.passi] == ["fatto", "errore"]
+    assert a.problemi[0]["cosa"] == "Jellyfin non risponde."
+
+
 def test_avanzamento_finito_legge_esito(cartella):
     (cartella / p.LOG).write_text(LOG)
     (cartella / p.STATO).write_text("fatto\n")
