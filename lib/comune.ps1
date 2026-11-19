@@ -13,6 +13,7 @@ function Esci-ConErrore([string]$Cosa, [string]$CosaFare = "") {
     Write-Host "  ✘ $Cosa" -ForegroundColor Red
     if ($CosaFare) { Write-Host "    Cosa fare: $CosaFare" }
     Write-Host ""
+    if ($script:InRegistro) { Scrivi-StatoInstallazione "errore" }
     # Durante l'installazione (finestra aperta con doppio clic) aspettiamo prima di chiudere
     if ($script:PausaSuErrore) { Read-Host "  Premi Invio per chiudere" | Out-Null }
     exit 1
@@ -123,14 +124,30 @@ function Riavvia-Segnati {
     Remove-Item $file -Force
 }
 
+# Scarica le immagini una alla volta: la pagina nel browser mostra "3 di 12"
+function Scarica-Immagini {
+    $immagini = @(Invoca-Compose config --images 2>$null | Where-Object { $_ -and $_ -notlike "mediabox/*" } | Sort-Object -Unique)
+    $i = 0
+    foreach ($immagine in $immagini) {
+        $i++
+        Scrivi-Info "Scarico $(($immagine -split '/')[-1]) ($i di $($immagini.Count))"
+        & docker pull -q $immagine *> $null
+        if ($LASTEXITCODE -ne 0) { Scrivi-Avviso "Non riesco a scaricare $(($immagine -split '/')[-1]): riprovo all'avvio." }
+    }
+}
+
 # Tutto il ciclo: genera → prepara → avvia → configura via API. Restituisce $true se tutto è andato bene.
 function Applica-Configurazione {
     Genera-File
-    Scrivi-Titolo "Scarico e avvio i servizi (la prima volta può richiedere diversi minuti)"
+    Scrivi-Titolo "Scarico i programmi (la prima volta può richiedere diversi minuti)"
+    Scarica-Immagini
+    Scrivi-Info "Preparo Cerca"
     Invoca-Compose build -q cerca | Out-Host
     if ($LASTEXITCODE -ne 0) { Esci-ConErrore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova." }
-    Invoca-Compose pull -q --ignore-buildable | Out-Host
+    Scrivi-Titolo "Avvio i servizi"
     Invoca-Compose run --rm --remove-orphans -T configuratore prepara | Out-Host
+    # la pagina della configurazione passa a Caddy (/impostazioni): libera la porta
+    Ferma-ProceduraWeb
     Invoca-Compose up -d --remove-orphans | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Esci-ConErrore "Alcuni servizi non sono partiti." "Guarda i messaggi qui sopra; spesso basta riprovare con: mediabox configura"
@@ -139,6 +156,90 @@ function Applica-Configurazione {
     Scrivi-Ok "Servizi avviati"
     Invoca-Compose run --rm -T configuratore configura | Out-Host
     return ($LASTEXITCODE -eq 0)
+}
+
+# --- Configurazione dal browser -----------------------------------------------------
+$script:NomeProcedura = "mediabox-procedura"
+
+function Scrivi-StatoInstallazione([string]$Valore) {
+    [System.IO.File]::WriteAllText((Join-Path $script:MediaboxDir "installazione.stato"), "$Valore`n", $Utf8SenzaBom)
+}
+
+# Esegue un blocco scrivendo tutto anche nel registro che la pagina legge. Restituisce $true se è andato bene.
+function Con-Registro([scriptblock]$Blocco) {
+    $registro = Join-Path $script:MediaboxDir "installazione.log"
+    [System.IO.File]::WriteAllText($registro, "", $Utf8SenzaBom)
+    Scrivi-StatoInstallazione "in_corso"
+    $script:InRegistro = $true
+    $esito = $false
+    Start-Transcript -Path $registro -Append | Out-Null
+    try {
+        $esito = [bool](& $Blocco | Select-Object -Last 1)
+    } finally {
+        Stop-Transcript | Out-Null
+        $script:InRegistro = $false
+        Scrivi-StatoInstallazione $(if ($esito) { "fatto" } else { "errore" })
+    }
+    return $esito
+}
+
+# I dischi da proporre per i media, con lo spazio libero
+function Scrivi-Dischi {
+    $dischi = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Sort-Object FreeSpace -Descending)
+    $migliore = $dischi | Select-Object -First 1
+    $elenco = foreach ($d in $dischi) {
+        $percorso = if ($d.DeviceID -eq "C:") { "C:/Mediabox/dati" } else { "$($d.DeviceID)/Mediabox" }
+        $nome = if ($d.VolumeName) { "Disco $($d.DeviceID) ($($d.VolumeName))" } else { "Disco $($d.DeviceID)" }
+        [ordered]@{
+            percorso = $percorso; nome = $nome
+            libero_gb = [math]::Round($d.FreeSpace / 1GB); totale_gb = [math]::Round($d.Size / 1GB)
+            consigliato = ($d.DeviceID -eq $migliore.DeviceID)
+        }
+    }
+    $json = ConvertTo-Json -InputObject @($elenco) -Depth 3
+    [System.IO.File]::WriteAllText((Join-Path $script:MediaboxDir "dischi.json"), $json, $Utf8SenzaBom)
+}
+
+function Avvia-ProceduraWeb {
+    $porta = Leggi-Env "HTTP_PORT" $script:EnvFile
+    if (-not $porta) { $porta = "80" }
+    Ferma-ProceduraWeb
+    # se c'è un mediabox vecchio acceso, la porta è sua: lo spengo
+    if (Test-Path (Join-Path $script:MediaboxDir "generato\docker-compose.yml")) { Invoca-Compose stop caddy *> $null }
+    & docker run -d --name $script:NomeProcedura -p "$($porta):8080" -v "$($script:MediaboxDir):/mediabox" `
+        mediabox/configuratore:locale web | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Esci-ConErrore "Non riesco ad aprire la pagina di configurazione sulla porta $porta." `
+            "Controlla che nessun altro programma usi quella porta e rilancia l'installer."
+    }
+}
+
+function Ferma-ProceduraWeb {
+    & docker rm -f $script:NomeProcedura *> $null
+}
+
+# Aspetta che la configurazione nel browser sia finita
+function Attendi-ProceduraWeb {
+    $flag = Join-Path $script:MediaboxDir ".configurazione-pronta"
+    Scrivi-Info "Aspetto che tu finisca la configurazione nel browser… (per interrompere chiudi questa finestra)"
+    while (-not (Test-Path $flag)) {
+        $attivo = & docker ps -q --filter "name=^$($script:NomeProcedura)$"
+        if (-not $attivo) {
+            Scrivi-Avviso "La pagina di configurazione si è chiusa: la riapro."
+            Avvia-ProceduraWeb
+        }
+        Start-Sleep -Seconds 2
+    }
+    Remove-Item $flag -Force
+    Scrivi-Ok "Configurazione ricevuta"
+}
+
+function Indirizzo-Principale {
+    $porta = Leggi-Env "HTTP_PORT" $script:EnvFile
+    $ip = Leggi-Env "HOST_IP" $script:EnvFile
+    if (-not $ip) { $ip = "mediabox.local" }
+    if (-not $porta -or $porta -eq "80") { return "http://$ip" }
+    return "http://$($ip):$porta"
 }
 
 # --- HDHomeRun ----------------------------------------------------------------------

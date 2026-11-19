@@ -83,18 +83,11 @@ aggiorna_codice() {
 
 # Timer giornaliero (systemd) che controlla se è uscita una nuova versione
 installa_aggiornamenti_automatici() {
-  local attivi
   if [[ ! -d /run/systemd/system ]]; then
     avviso "Questo sistema non usa systemd: aggiornamenti automatici non attivati (usa \"mediabox update\")."
     return 0
   fi
-  attivi="$(leggi_env AGGIORNAMENTI_AUTOMATICI "$ENV_FILE")"
-  if [[ "${attivi:-si}" != "si" ]]; then
-    if systemctl list-unit-files mediabox-aggiorna.timer >/dev/null 2>&1; then
-      sudo systemctl disable --now mediabox-aggiorna.timer >/dev/null 2>&1 || true
-    fi
-    return 0
-  fi
+  # Il timer c'è sempre: se gli aggiornamenti sono spenti nelle impostazioni, non fa nulla
   sudo tee /etc/systemd/system/mediabox-aggiorna.service >/dev/null <<UNIT
 [Unit]
 Description=mediabox: controlla e installa gli aggiornamenti
@@ -120,5 +113,43 @@ WantedBy=timers.target
 UNIT
   sudo systemctl daemon-reload
   sudo systemctl enable --now mediabox-aggiorna.timer >/dev/null 2>&1
-  ok "Aggiornamenti automatici attivi (ogni notte verso le 4:30)"
+  if [[ "$(leggi_env AGGIORNAMENTI_AUTOMATICI "$ENV_FILE")" == "no" ]]; then
+    info "Aggiornamenti automatici spenti (si accendono dalle impostazioni)"
+  else
+    ok "Aggiornamenti automatici attivi (ogni notte verso le 4:30)"
+  fi
+}
+
+# Le impostazioni salvate dal browser si applicano da sole: systemd guarda il file .da-applicare
+installa_controllo_impostazioni() {
+  if [[ ! -d /run/systemd/system ]]; then
+    avviso "Senza systemd le modifiche fatte nel browser si applicano con: mediabox applica-impostazioni"
+    return 0
+  fi
+  sudo tee /etc/systemd/system/mediabox-impostazioni.path >/dev/null <<UNIT
+[Unit]
+Description=mediabox: guarda se nel browser sono cambiate le impostazioni
+
+[Path]
+PathExists=$MEDIABOX_DIR/.da-applicare
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo tee /etc/systemd/system/mediabox-impostazioni.service >/dev/null <<UNIT
+[Unit]
+Description=mediabox: applica le impostazioni cambiate nel browser
+After=docker.service
+
+[Service]
+Type=oneshot
+User=$(id -un)
+SupplementaryGroups=docker
+# la nuova cartella dei media la crea l'amministratore, il resto gira con il tuo utente
+ExecStartPre=+$MEDIABOX_DIR/mediabox prepara-cartella
+ExecStart=$MEDIABOX_DIR/mediabox applica-impostazioni
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now mediabox-impostazioni.path >/dev/null 2>&1
+  ok "Impostazioni dal browser pronte: $(indirizzo_principale)/impostazioni/"
 }

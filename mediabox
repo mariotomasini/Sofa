@@ -24,7 +24,7 @@ Uso: mediabox <comando>
   restart [servizio] riavvia tutto (o un solo servizio, es. "mediabox restart jellyfin")
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
-  impostazioni       cambia cosa usi: serie, anime, musica, sottotitoli, notifiche
+  impostazioni       cambia cosa usi dal terminale (più comodo dal browser: /impostazioni)
   configura          rigenera la configurazione dal file .env e la riapplica
   update             aggiorna mediabox e i servizi all'ultima versione (fa prima un backup)
   versione           mostra la versione installata e l'ultima disponibile
@@ -123,6 +123,20 @@ remote() {
   echo "  Non serve aprire nessuna porta sul router."
 }
 
+# Le impostazioni salvate dal browser (/impostazioni): le applica il servizio di sistema
+applica_impostazioni_web() {
+  local flag="$MEDIABOX_DIR/.da-applicare" cartella_prima
+  [[ -f "$flag" ]] || return 0
+  cartella_prima="$(cat "$flag")"
+  rm -f "$flag"
+  applica_scelte() {
+    sposta_media "$cartella_prima" "$(leggi_env MEDIA_DIR "$ENV_FILE")"
+    aggiorna_ip
+    applica
+  }
+  con_registro applica_scelte
+}
+
 comando="${1:-aiuto}"
 shift || true
 case "$comando" in
@@ -143,8 +157,18 @@ case "$comando" in
     compose logs -f --tail 200 "$@" ;;
   configura)
     controlla_installazione; prepara_docker; aggiorna_ip; applica ;;
+  applica-impostazioni)
+    controlla_installazione; prepara_docker; applica_impostazioni_web ;;
+  prepara-cartella)
+    # avviato da systemd come amministratore prima di applica-impostazioni
+    cartella="$(leggi_env MEDIA_DIR "$ENV_FILE")"
+    if [[ -n "$cartella" && "$cartella" == /* ]]; then
+      mkdir -p "$cartella"
+      chown "$(leggi_env PUID "$ENV_FILE"):$(leggi_env PGID "$ENV_FILE")" "$cartella"
+    fi ;;
   impostazioni)
     controlla_installazione; prepara_docker; configuratore_costruisci
+    info "Le stesse scelte le trovi anche nel browser: $(indirizzo_principale)/impostazioni/"
     cartella_prima="$(leggi_env MEDIA_DIR "$ENV_FILE")"
     esito=0
     # shellcheck disable=SC2119  # nessun argomento: menu normale

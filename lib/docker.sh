@@ -72,19 +72,117 @@ riavvia_segnati() {
   rm -f "$file"
 }
 
+# Scarica le immagini una alla volta: la pagina nel browser mostra "3 di 12"
+scarica_immagini() {
+  local immagini=() i=0 immagine
+  mapfile -t immagini < <(compose config --images 2>/dev/null | grep -v '^mediabox/' | sort -u)
+  for immagine in "${immagini[@]}"; do
+    i=$((i + 1))
+    info "Scarico ${immagine##*/} ($i di ${#immagini[@]})"
+    "${DOCKER[@]}" pull -q "$immagine" >/dev/null 2>&1 \
+      || avviso "Non riesco a scaricare ${immagine##*/}: riprovo all'avvio."
+  done
+}
+
 # Tutto il ciclo: genera → prepara → avvia → configura via API
 applica() {
   configuratore_genera
-  titolo "Scarico e avvio i servizi (la prima volta può richiedere diversi minuti)"
+  titolo "Scarico i programmi (la prima volta può richiedere diversi minuti)"
+  scarica_immagini
+  info "Preparo Cerca"
   compose build -q cerca || errore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova."
-  compose pull -q --ignore-buildable 2>/dev/null || compose pull --ignore-pull-failures -q || true
+  titolo "Avvio i servizi"
   compose run --rm --remove-orphans -T configuratore prepara
+  # la pagina della configurazione passa a Caddy (/impostazioni): libera la porta
+  ferma_procedura_web
   compose up -d --remove-orphans || errore "Alcuni servizi non sono partiti." \
     "Guarda i messaggi qui sopra; spesso basta riprovare con \"mediabox configura\"."
   riavvia_segnati
   ok "Servizi avviati"
   # configura restituisce errore se qualcosa non è andato: il riepilogo lo spiega
   compose run --rm -T configuratore configura || return 1
+}
+
+# --- Configurazione dal browser -----------------------------------------------------------
+NOME_PROCEDURA="mediabox-procedura"
+
+indirizzo_principale() {
+  local porta ip
+  porta="$(leggi_env HTTP_PORT "$ENV_FILE")"
+  ip="$(leggi_env HOST_IP "$ENV_FILE")"
+  [[ "${porta:-80}" == "80" ]] && porta="" || porta=":$porta"
+  printf 'http://%s%s' "${ip:-mediabox.local}" "$porta"
+}
+
+stato_installazione() {
+  printf '%s\n' "$1" > "$MEDIABOX_DIR/installazione.stato"
+}
+
+# Esegue un comando scrivendo tutto anche nel registro che la pagina legge
+con_registro() {
+  local registro="$MEDIABOX_DIR/installazione.log" esito=0
+  : > "$registro"
+  stato_installazione in_corso
+  ( "$@" ) 2>&1 | tee -a "$registro" || esito="${PIPESTATUS[0]}"
+  if [[ "$esito" -eq 0 ]]; then stato_installazione fatto; else stato_installazione errore; fi
+  return "$esito"
+}
+
+# I dischi da proporre per i media: quello di sistema e quelli molto capienti
+scrivi_dischi() {
+  local file="$MEDIABOX_DIR/dischi.json" libero_root totale_root
+  read -r totale_root libero_root < <(df -P -B1G / | awk 'NR==2 {print $2, $4}')
+  {
+    printf '[{"percorso": "/srv/mediabox/dati", "nome": "Disco del sistema", "libero_gb": %s, "totale_gb": %s}' \
+      "$libero_root" "$totale_root"
+    df -P -B1G -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null \
+      | awk -v root="$libero_root" 'NR>1 && $6 != "/" && $6 !~ "^/(boot|snap|run|dev|sys|proc|var/lib/docker)" && $4 >= 20 \
+          {gsub(/"/, "", $6); printf ", {\"percorso\": \"%s/mediabox\", \"nome\": \"Disco %s\", \"libero_gb\": %s, \"totale_gb\": %s, \"consigliato\": %s}", \
+           $6, $6, $4, $2, ($4 > 2 * root ? "true" : "false")}'
+    printf ']\n'
+  } > "$file"
+}
+
+avvia_procedura_web() {
+  local porta
+  porta="$(leggi_env HTTP_PORT "$ENV_FILE")"
+  ferma_procedura_web
+  # se c'è un mediabox vecchio acceso, la porta è sua: lo spengo
+  [[ -f "$MEDIABOX_DIR/generato/docker-compose.yml" ]] && compose stop caddy >/dev/null 2>&1 || true
+  "${DOCKER[@]}" run -d --name "$NOME_PROCEDURA" -p "${porta:-80}:8080" \
+    --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" \
+    mediabox/configuratore:locale web >/dev/null \
+    || errore "Non riesco ad aprire la pagina di configurazione sulla porta ${porta:-80}." \
+      "Controlla che nessun altro programma usi quella porta e rilancia l'installer."
+}
+
+ferma_procedura_web() {
+  "${DOCKER[@]}" rm -f "$NOME_PROCEDURA" >/dev/null 2>&1 || true
+}
+
+# Aspetta che la configurazione nel browser sia finita
+attendi_procedura_web() {
+  local flag="$MEDIABOX_DIR/.configurazione-pronta"
+  info "Aspetto che tu finisca la configurazione nel browser… (per interrompere: Ctrl+C)"
+  until [[ -f "$flag" ]]; do
+    if ! "${DOCKER[@]}" ps -q --filter "name=^${NOME_PROCEDURA}\$" | grep -q .; then
+      avviso "La pagina di configurazione si è chiusa: la riapro."
+      avvia_procedura_web
+    fi
+    sleep 2
+  done
+  rm -f "$flag"
+  ok "Configurazione ricevuta"
+}
+
+# Crea la cartella dei media; sudo solo se serve davvero
+assicura_cartella() {
+  local cartella="$1"
+  if mkdir -p "$cartella" 2>/dev/null && [[ -w "$cartella" ]]; then
+    return 0
+  fi
+  sudo mkdir -p "$cartella"
+  sudo chown "$(id -u):$(id -g)" "$cartella"
 }
 
 # Sposta film, musica e download quando cambia MEDIA_DIR (servizi spenti)
@@ -94,8 +192,7 @@ sposta_media() {
   titolo "Sposto film, musica e download"
   info "Da $vecchia a $nuova (con tanti film può richiedere molto tempo: non spegnere il PC)"
   compose stop >/dev/null 2>&1 || true
-  sudo mkdir -p "$nuova"
-  sudo chown "$(id -u):$(id -g)" "$nuova"
+  assicura_cartella "$nuova"
   if [[ -d "$vecchia" ]]; then
     if [[ "$(stat -c %d "$vecchia")" == "$(stat -c %d "$nuova")" ]]; then
       # stesso disco: spostamento istantaneo

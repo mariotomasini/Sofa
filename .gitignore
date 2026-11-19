@@ -9,3 +9,10 @@ __pycache__/
 *.egg-info/
 
 aggiornamenti.log
+
+# configurazione dal browser (scambio tra installer e pagina)
+dischi.json
+installazione.log
+installazione.stato
+.configurazione-pronta
+.da-applicare

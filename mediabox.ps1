@@ -26,7 +26,7 @@ Uso: mediabox <comando>
   restart [servizio] riavvia tutto (o un solo servizio, es. "mediabox restart jellyfin")
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
-  impostazioni       cambia cosa usi: serie, anime, musica, sottotitoli, notifiche
+  impostazioni       cambia cosa usi dal terminale (più comodo dal browser: /impostazioni)
   configura          rigenera la configurazione dal file .env e la riapplica
   update             aggiorna mediabox e i servizi all'ultima versione (fa prima un backup)
   versione           mostra la versione installata e l'ultima disponibile
@@ -119,6 +119,22 @@ function Attiva-Remoto {
     Write-Host "  Non serve aprire nessuna porta sul router."
 }
 
+# Le impostazioni salvate dal browser (/impostazioni)
+function Applica-ImpostazioniWeb {
+    $flag = Join-Path $script:MediaboxDir ".da-applicare"
+    if (-not (Test-Path $flag)) { return }
+    $cartellaPrima = (Get-Content -LiteralPath $flag -Raw -ErrorAction SilentlyContinue)
+    if ($cartellaPrima) { $cartellaPrima = $cartellaPrima.Trim() }
+    Remove-Item $flag -Force
+    $ok = Con-Registro {
+        Sposta-Media $cartellaPrima (Leggi-Env "MEDIA_DIR" $script:EnvFile)
+        New-Item -ItemType Directory -Force -Path ((Leggi-Env "MEDIA_DIR" $script:EnvFile) -replace "/", "\") | Out-Null
+        Aggiorna-Ip
+        Applica-Configurazione
+    }
+    if (-not $ok) { exit 1 }
+}
+
 switch ($Comando.ToLower()) {
     { $_ -in "aiuto", "help", "-h", "--help" } { Mostra-Aiuto }
     "up" { Controlla-Installazione; Invoca-Compose up -d --remove-orphans; Scrivi-Ok "Servizi accesi" }
@@ -127,13 +143,23 @@ switch ($Comando.ToLower()) {
     "status" { Controlla-Installazione; Mostra-Stato }
     "logs" { Controlla-Installazione; Invoca-Compose logs -f --tail 200 @Altri }
     "configura" { Controlla-Installazione; Aggiorna-Ip; [void](Applica-Configurazione) }
+    "applica-impostazioni" { Controlla-Installazione; Applica-ImpostazioniWeb }
+    "controlla-impostazioni" {
+        # avviato all'accesso a Windows (nascosto): applica le modifiche fatte nel browser
+        while ($true) {
+            if (Test-Path (Join-Path $script:MediaboxDir ".da-applicare")) {
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:MediaboxDir "mediabox.ps1") applica-impostazioni
+            }
+            Start-Sleep -Seconds 5
+        }
+    }
     "impostazioni" {
         Controlla-Installazione; Costruisci-Configuratore
+        Scrivi-Info "Le stesse scelte le trovi anche nel browser: $(Indirizzo-Principale)/impostazioni/"
         $cartellaPrima = Leggi-Env "MEDIA_DIR" $script:EnvFile
         $esito = Mostra-MenuImpostazioni
         if ($esito -eq 0) {
             Sposta-Media $cartellaPrima (Leggi-Env "MEDIA_DIR" $script:EnvFile)
-            Installa-AggiornamentiAutomatici
             Aggiorna-Ip; [void](Applica-Configurazione)
         }
         elseif ($esito -ne 3) { exit $esito }

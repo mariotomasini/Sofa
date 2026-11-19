@@ -73,18 +73,33 @@ function Aggiorna-Codice {
 
 # Attività pianificata: ogni notte controlla se è uscita una nuova versione
 function Installa-AggiornamentiAutomatici {
+    # L'attività c'è sempre: se gli aggiornamenti sono spenti nelle impostazioni, non fa nulla
     $nome = "mediabox - aggiornamento automatico"
-    if ((Leggi-Env "AGGIORNAMENTI_AUTOMATICI" $script:EnvFile) -eq "no") {
-        Unregister-ScheduledTask -TaskName $nome -Confirm:$false -ErrorAction SilentlyContinue
-        return
-    }
     $script = Join-Path $script:MediaboxDir "mediabox.ps1"
-    $azione = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`" aggiorna-automatico"
+    $azione = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`" aggiorna-automatico"
     $quando = New-ScheduledTaskTrigger -Daily -At "04:20" -RandomDelay (New-TimeSpan -Minutes 40)
     $impostazioni = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries
     $chi = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
     Register-ScheduledTask -TaskName $nome -Action $azione -Trigger $quando -Settings $impostazioni -Principal $chi -Force | Out-Null
-    Scrivi-Ok "Aggiornamenti automatici attivi (ogni notte verso le 4:30)"
+    if ((Leggi-Env "AGGIORNAMENTI_AUTOMATICI" $script:EnvFile) -eq "no") {
+        Scrivi-Info "Aggiornamenti automatici spenti (si accendono dalle impostazioni)"
+    } else {
+        Scrivi-Ok "Aggiornamenti automatici attivi (ogni notte verso le 4:30)"
+    }
+}
+
+# Le impostazioni salvate dal browser si applicano da sole: un controllo nascosto,
+# avviato all'accesso a Windows, guarda il file .da-applicare
+function Installa-ControlloImpostazioni {
+    $nome = "mediabox - impostazioni dal browser"
+    $script = Join-Path $script:MediaboxDir "mediabox.ps1"
+    $azione = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`" controlla-impostazioni"
+    $quando = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $impostazioni = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+    $chi = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName $nome -Action $azione -Trigger $quando -Settings $impostazioni -Principal $chi -Force | Out-Null
+    Start-ScheduledTask -TaskName $nome -ErrorAction SilentlyContinue
+    Scrivi-Ok "Impostazioni dal browser pronte: $(Indirizzo-Principale)/impostazioni/"
 }
 
 # Sposta film, musica e download quando cambia MEDIA_DIR (servizi spenti)
