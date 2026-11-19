@@ -7,6 +7,7 @@ va tradotto prima di avvisare Jellyfin.
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -30,6 +31,7 @@ class Jellyfin:
         self.client = client
         self._token = ""
         self._utente = ""
+        self._in_libreria: dict[str, tuple[float, set[int]]] = {}
 
     async def _accedi(self) -> None:
         r = await self.client.post(
@@ -124,6 +126,115 @@ class Jellyfin:
             preferiti = sorted(conteggi, key=conteggi.get, reverse=True)[:limite]
             return [tutti.get(n, {"nome": n, "mbid": ""}) for n in preferiti]
         return list(tutti.values())[:limite]
+
+    # --- home in stile Netflix ----------------------------------------------------------
+    async def _id_utente(self) -> str:
+        if not self._utente:
+            await self._accedi()
+        return self._utente
+
+    async def generi_preferiti(self, tipo: str) -> list[str]:
+        """I generi di quello che hai visto o messo tra i preferiti, dal più frequente.
+
+        tipo: "movie" o "tv". Le serie contano per gli episodi visti, così una serie
+        seguita a lungo pesa più di un film visto una volta.
+        """
+        utente = await self._id_utente()
+        conteggi: dict[str, int] = {}
+        if tipo == "tv":
+            episodi = await self._get(
+                f"/Users/{utente}/Items",
+                {"IncludeItemTypes": "Episode", "Recursive": "true", "Filters": "IsPlayed", "Limit": 500,
+                 "SortBy": "DatePlayed", "SortOrder": "Descending"},
+            )
+            per_serie: dict[str, int] = {}
+            for e in episodi.get("Items", []):
+                if e.get("SeriesId"):
+                    per_serie[e["SeriesId"]] = per_serie.get(e["SeriesId"], 0) + 1
+            preferite = await self._get(
+                f"/Users/{utente}/Items",
+                {"IncludeItemTypes": "Series", "Recursive": "true", "Filters": "IsFavorite", "Limit": 100},
+            )
+            for v in preferite.get("Items", []):
+                per_serie[v["Id"]] = per_serie.get(v["Id"], 0) + 5
+            if per_serie:
+                serie = await self._get(
+                    f"/Users/{utente}/Items",
+                    {"Ids": ",".join(list(per_serie)[:200]), "Fields": "Genres"},
+                )
+                for v in serie.get("Items", []):
+                    for g in v.get("Genres") or []:
+                        conteggi[g] = conteggi.get(g, 0) + min(per_serie.get(v["Id"], 1), 10)
+        else:
+            for filtro, peso in (("IsPlayed", 1), ("IsFavorite", 3)):
+                film = await self._get(
+                    f"/Users/{utente}/Items",
+                    {"IncludeItemTypes": "Movie", "Recursive": "true", "Filters": filtro, "Fields": "Genres",
+                     "Limit": 300},
+                )
+                for v in film.get("Items", []):
+                    for g in v.get("Genres") or []:
+                        conteggi[g] = conteggi.get(g, 0) + peso
+        return sorted(conteggi, key=lambda g: (-conteggi[g], g))
+
+    async def tmdb_in_libreria(self, tipo: str) -> set[int]:
+        """Gli id TMDB dei film (o delle serie) che hai già: non ha senso consigliarteli."""
+        adesso = time.monotonic()
+        if tipo in self._in_libreria and adesso - self._in_libreria[tipo][0] < 600:
+            return self._in_libreria[tipo][1]
+        utente = await self._id_utente()
+        dati = await self._get(
+            f"/Users/{utente}/Items",
+            {"IncludeItemTypes": "Series" if tipo == "tv" else "Movie", "Recursive": "true",
+             "Fields": "ProviderIds", "Limit": 20000},
+        )
+        ids = set()
+        for v in dati.get("Items", []):
+            valore = str((v.get("ProviderIds") or {}).get("Tmdb") or "")
+            if valore.isdigit():
+                ids.add(int(valore))
+        self._in_libreria[tipo] = (adesso, ids)
+        return ids
+
+    @staticmethod
+    def _da_continuare(v: dict) -> dict:
+        episodio = v.get("Type") == "Episode"
+        immagine_id = v.get("SeriesId") if episodio and v.get("SeriesId") else v.get("Id")
+        dati = v.get("UserData") or {}
+        sottotitolo = ""
+        if episodio:
+            numero = ""
+            if v.get("ParentIndexNumber") is not None and v.get("IndexNumber") is not None:
+                numero = f"S{v['ParentIndexNumber']} E{v['IndexNumber']} · "
+            sottotitolo = numero + (v.get("Name") or "")
+        return {
+            "id": v.get("Id", ""),
+            "titolo": (v.get("SeriesName") if episodio else v.get("Name")) or "",
+            "sottotitolo": sottotitolo,
+            "anno": str(v.get("ProductionYear") or ""),
+            "poster": f"/jellyfin/Items/{immagine_id}/Images/Primary?fillHeight=450&quality=85",
+            "percentuale": round(dati.get("PlayedPercentage") or 0),
+            "link": f"/jellyfin/web/#/details?id={v.get('Id', '')}",
+            "jellyfin": True,
+        }
+
+    async def continua(self, tipo: str, limite: int = 12) -> list[dict]:
+        """Quello che hai lasciato a metà; per le serie anche il prossimo episodio da vedere."""
+        utente = await self._id_utente()
+        dati = await self._get(
+            f"/Users/{utente}/Items/Resume",
+            {"IncludeItemTypes": "Episode" if tipo == "tv" else "Movie", "Limit": limite, "MediaTypes": "Video"},
+        )
+        elementi = [self._da_continuare(v) for v in dati.get("Items", [])]
+        if tipo == "tv" and len(elementi) < limite:
+            prossimi = await self._get("/Shows/NextUp", {"UserId": utente, "Limit": limite})
+            gia = {e["titolo"] for e in elementi}
+            for v in prossimi.get("Items", []):
+                e = self._da_continuare(v)
+                if e["titolo"] not in gia:
+                    gia.add(e["titolo"])
+                    elementi.append(e)
+        return elementi[:limite]
 
     # --- pulizia ---------------------------------------------------------------------
     async def utenti(self) -> list[str]:

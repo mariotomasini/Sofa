@@ -1,0 +1,28 @@
+{# Selettore dei quattro mondi e campo di ricerca, in cima alle pagine iniziali #}
+{% macro selettore(mondo, base, mondi, kids) %}
+{% if not kids %}
+<nav class="mondi" aria-label="Cosa vuoi guardare">
+  {% for chiave, m in mondi.items() %}
+  <a class="mondo mondo-{{ chiave }}" href="{{ base }}{{ m.url }}"{% if chiave == mondo %} aria-current="page"{% endif %}>
+    <span class="pallino" aria-hidden="true"></span>{{ m.nome }}
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}
+{% endmacro %}
+
+{% macro ricerca(mondo, base, mondi, valore="", autofocus=true) %}
+<form class="ricerca" action="{{ base }}/cerca" method="get" role="search">
+  <input type="hidden" name="mondo" value="{{ mondo }}">
+  <label for="q" class="nascosto">Titolo</label>
+  <span class="lente" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></span>
+  <input id="q" name="q" type="search" value="{{ valore }}" placeholder="{{ mondi[mondo].segnaposto if mondo in mondi else 'Cerca un film…' }}"
+         autocomplete="off" required{% if autofocus %} autofocus{% endif %}>
+  <button type="submit">Cerca</button>
+</form>
+{% endmacro %}
+
+{# Fila dei generi sotto la ricerca: la riempie avviaGeneri() #}
+{% macro generi(mondo) %}
+<nav id="generi" class="generi" aria-label="Generi" data-mondo="{{ mondo }}" hidden></nav>
+{% endmacro %}

@@ -2,28 +2,55 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#17130f">
   <title>{% block titolo %}Cerca{% endblock %} · mediabox</title>
+  <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ base }}/static/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+  <!-- icone e "app" sul telefono (Aggiungi a schermata Home) -->
+  <link rel="icon" href="{{ base }}/static/logo.svg" type="image/svg+xml">
+  <link rel="icon" href="{{ base }}/static/icone/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ base }}/static/icone/apple-touch-icon.png">
+  <link rel="manifest" href="{{ base }}/static/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cerca">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-<body>
+<body data-mondo="{{ mondo }}" data-sezione="{{ sezione }}"{% if kids %} data-kids="si"{% endif %}>
+  <a class="salta" href="#contenuto">Vai al contenuto</a>
+  {% set icona_logo %}<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="currentColor"/><path d="M16 11.5 L28 20 L16 28.5 Z" fill="var(--su-accento)"/></svg>{% endset %}
+
   <header class="testata">
-    <a class="logo" href="{{ base }}/">🎬 Cerca</a>
-    <nav>
-      <a href="{{ base }}/musica">Musica</a>
-      <a href="{{ base }}/download">Download</a>
-      <a href="{{ base }}/spazio">Spazio</a>
-      <a href="{{ base }}/torrent">Aggiungi torrent</a>
-      <a href="/">mediabox</a>
+    <a class="logo" href="{{ base }}{{ '/kids' if kids else '/' }}" aria-label="Cerca, pagina iniziale">
+      <span class="logo-segno">{{ icona_logo }}</span><span>Cerca</span>
+    </a>
+    {% if kids %}
+    <nav class="nav" aria-label="Kids">
+      <a class="nav-voce esci-kids" href="{{ base }}/kids/esci">
+        <svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+        Esci da Kids
+      </a>
     </nav>
+    {% else %}
+    <nav class="nav" aria-label="Menu principale">
+      <a class="nav-voce" href="{{ base }}/download"{% if sezione == 'download' %} aria-current="page"{% endif %}>
+        Download{% if download_attivi %} <span class="contatore" aria-label="{{ download_attivi }} in corso">{{ download_attivi }}</span>{% endif %}
+      </a>
+      <a class="nav-voce" href="{{ base }}/spazio"{% if sezione == 'spazio' %} aria-current="page"{% endif %}>Spazio</a>
+      <a class="nav-voce" href="{{ base }}/torrent"{% if sezione == 'torrent' %} aria-current="page"{% endif %}>Aggiungi torrent</a>
+      <a class="nav-voce esterno" href="/">mediabox <span aria-hidden="true">↗</span></a>
+    </nav>
+    {% endif %}
   </header>
-  <main>
-    {% if disco and disco.quasi_pieno %}
-    <div class="errore" role="alert">
-      <strong>⚠️ Spazio quasi finito</strong>
-      <p>{{ disco.messaggio }} <a href="{{ base }}/spazio">Vedi cosa posso liberare →</a></p>
+
+  <main id="contenuto">
+    {% if disco and disco.quasi_pieno and not kids %}
+    <div class="errore avviso-disco" role="alert">
+      <strong>Spazio quasi finito</strong>
+      <p>{{ disco.messaggio }} {% if sezione != 'spazio' %}<a href="{{ base }}/spazio">Vedi cosa posso liberare →</a>{% endif %}</p>
     </div>
     {% endif %}
     {% if errore %}
@@ -34,12 +61,38 @@
     {% endif %}
     {% block contenuto %}{% endblock %}
   </main>
+
   <footer class="piede">
     Dati dei film da <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>.
     Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
   </footer>
+
+  {% if not kids %}
+  <nav class="barra-basso" aria-label="Menu">
+    <a href="{{ base }}/"{% if sezione == 'cerca' %} aria-current="page"{% endif %}>
+      <span class="pillola"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>Home
+    </a>
+    <a href="{{ base }}/download"{% if sezione == 'download' %} aria-current="page"{% endif %}>
+      <span class="pillola"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>{% if download_attivi %}<span class="punto"></span>{% endif %}</span>Download
+    </a>
+    <a href="{{ base }}/spazio"{% if sezione == 'spazio' %} aria-current="page"{% endif %}>
+      <span class="pillola"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>Spazio
+    </a>
+    <details class="altro">
+      <summary{% if sezione == 'torrent' %} aria-current="page"{% endif %}>
+        <span class="pillola"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></span>Altro
+      </summary>
+      <div class="menu-altro">
+        <a href="{{ base }}/torrent">Aggiungi torrent</a>
+        <a href="{{ base }}/kids">Modalità Kids</a>
+        <a href="/">mediabox ↗</a>
+      </div>
+    </details>
+  </nav>
+  {% endif %}
+
   <div id="avviso" class="avviso" role="status" hidden></div>
-  <script>window.BASE = "{{ base }}";</script>
+  <script>window.BASE = "{{ base }}"; window.MONDO = "{{ mondo }}"; window.KIDS = {{ 'true' if kids else 'false' }};</script>
   <script src="{{ base }}/static/app.js"></script>
   {% block script %}{% endblock %}
 </body>

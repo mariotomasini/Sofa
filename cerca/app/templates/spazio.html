@@ -1,26 +1,29 @@
 {% extends "base.html" %}
 {% block titolo %}Spazio{% endblock %}
 {% block contenuto %}
-<h1>💾 Spazio sul disco</h1>
+<h1 class="titolo-pagina">Spazio sul disco</h1>
 {% if disco.disponibile %}
-<div class="blocco">
-  <p><strong>{{ disco.libero | dimensione }} liberi</strong> su {{ disco.totale | dimensione }}
-    ({{ disco.libero_percento }}% libero)</p>
-  <div class="barra grande {{ 'piena' if disco.quasi_pieno else '' }}"><div style="width:{{ 100 - disco.libero_percento }}%"></div></div>
-  <p class="sottotitolo">Quando lo spazio libero scende sotto il {{ disco.soglia | int }}% mediabox fa pulizia da solo
-    {%- if ntfy %} e ti avvisa sul telefono{% endif %}.</p>
-</div>
+<section class="blocco disco">
+  <p class="disco-numeri"><strong>{{ disco.libero | dimensione }} liberi</strong> <span class="sottotitolo">su {{ disco.totale | dimensione }} · {{ ("%.0f" % disco.libero_percento) }}% libero</span></p>
+  <div class="barra grande{{ ' piena' if disco.quasi_pieno else '' }}" role="progressbar" aria-label="Spazio usato"
+       aria-valuenow="{{ (100 - disco.libero_percento) | round | int }}" aria-valuemin="0" aria-valuemax="100">
+    <div style="width:{{ 100 - disco.libero_percento }}%"></div>
+  </div>
+  <p class="sottotitolo">Quando lo spazio libero scende sotto il {{ disco.soglia | int }}% mediabox fa pulizia da solo{% if ntfy %} e ti avvisa sul telefono{% endif %}.</p>
+</section>
 {% endif %}
 
-<section class="blocco">
-  <h2>Cosa posso liberare</h2>
-  <div id="anteprima"><p class="caricamento">Controllo…</p></div>
-  <p><button id="libera">Libera spazio adesso</button></p>
-</section>
+<div class="due-colonne">
+  <section class="blocco">
+    <h2>Cosa posso liberare</h2>
+    <div id="anteprima"><p class="caricamento">Controllo…</p></div>
+    <p><button id="libera" disabled>Libera spazio adesso</button></p>
+  </section>
 
-<section class="blocco">
-  <h2>Pulizie fatte</h2>
-  <div id="registro"><p class="caricamento">Carico…</p></div>
-</section>
+  <section class="blocco">
+    <h2>Pulizie fatte</h2>
+    <div id="registro"><p class="caricamento">Carico…</p></div>
+  </section>
+</div>
 {% endblock %}
 {% block script %}<script>avviaSpazio();</script>{% endblock %}

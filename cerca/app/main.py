@@ -5,17 +5,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import mimetypes
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from . import home as home_netflix
 from .archive import InternetArchive
 from .avvisami import Avvisami
 from .config import Config
@@ -28,8 +30,9 @@ from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, nuovo_client
+from .serie import Serie
 from .stato import ControlloDisco
-from .tmdb import TMDB
+from .tmdb import TMDB, tipo_tmdb
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("cerca")
@@ -65,6 +68,7 @@ class Servizi:
         )
         self.avvisami = Avvisami(config, self.archivio, self.tmdb, client)
         self.download.notifica = self.avvisami.notifica
+        self.serie = Serie(config, client)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
@@ -91,6 +95,8 @@ async def ciclo_di_vita(app: FastAPI):
 
 
 app = FastAPI(title="Cerca", lifespan=ciclo_di_vita, docs_url=None, redoc_url=None, openapi_url=None)
+# il manifest dell'app per il telefono va servito con il suo tipo
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 app.mount("/static", StaticFiles(directory=CARTELLA / "static"), name="static")
 modelli = Jinja2Templates(directory=CARTELLA / "templates")
 
@@ -113,15 +119,39 @@ def servizi(request: Request) -> Servizi:
     return request.app.state.servizi
 
 
+MONDI = {
+    "film": {"nome": "Film", "segnaposto": "Cerca un film…", "url": "/"},
+    "serie": {"nome": "Serie TV", "segnaposto": "Cerca una serie…", "url": "/serie"},
+    "kids": {"nome": "Kids", "segnaposto": "Cerca un cartone…", "url": "/kids"},
+    "musica": {"nome": "Musica", "segnaposto": "Cerca un artista…", "url": "/musica"},
+}
+COOKIE_KIDS = "mediabox_kids"
+
+
+def in_kids(request: Request) -> bool:
+    return request.cookies.get(COOKIE_KIDS) == "si"
+
+
 def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     s = servizi(request)
     contesto.setdefault("errore", None)
+    contesto.setdefault("mondo", "kids" if in_kids(request) else "film")
+    contesto.setdefault("sezione", "cerca")
+    attivi = [d for d in s.archivio.elenco_download(60) if d["stato"] in ("in_corso", "completato", "importazione")]
     return modelli.TemplateResponse(
         request,
         nome,
         {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), "disco": s.disco.stato(),
-         "lidarr": bool(s.config.lidarr_url), **contesto},
+         "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
+         "kids": in_kids(request), "download_attivi": len(attivi), **contesto},
     )
+
+
+def solo_adulti(request: Request) -> RedirectResponse | None:
+    """In modalità Kids le pagine di download non si aprono."""
+    if in_kids(request):
+        return RedirectResponse(f"{servizi(request).config.root_path}/kids", status_code=303)
+    return None
 
 
 @app.exception_handler(ErroreServizio)
@@ -134,10 +164,13 @@ async def gestisci_errore(request: Request, exc: ErroreServizio):
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     s = servizi(request)
+    if in_kids(request):
+        return RedirectResponse(f"{s.config.root_path}/kids", status_code=303)
     avvisi = s.archivio.avvisami_elenco()
     return pagina(
         request,
         "home.html",
+        mondo="film",
         ricerche=s.archivio.ultime_ricerche(8),
         gratis=[a for a in avvisi if a["gratis_dal"]],
         in_attesa=[a for a in avvisi if not a["gratis_dal"]],
@@ -145,18 +178,48 @@ async def home(request: Request):
     )
 
 
+@app.get("/serie", response_class=HTMLResponse)
+async def home_serie(request: Request):
+    if (via := solo_adulti(request)) is not None:
+        return via
+    return pagina(request, "mondo.html", mondo="serie")
+
+
+@app.get("/kids", response_class=HTMLResponse)
+async def home_kids(request: Request):
+    risposta = pagina(request, "mondo.html", mondo="kids", kids=True)
+    risposta.set_cookie(COOKIE_KIDS, "si", max_age=365 * 86400, samesite="lax", path="/")
+    return risposta
+
+
+@app.get("/kids/esci")
+async def esci_kids(request: Request):
+    risposta = RedirectResponse(f"{servizi(request).config.root_path}/", status_code=303)
+    risposta.delete_cookie(COOKIE_KIDS, path="/")
+    return risposta
+
+
 @app.get("/cerca", response_class=HTMLResponse)
-async def risultati(request: Request, q: str = ""):
+async def risultati(request: Request, q: str = "", mondo: str = "film"):
     s = servizi(request)
+    if in_kids(request):
+        mondo = "kids"
+    if mondo not in ("film", "serie", "kids"):
+        mondo = "film"
     q = q.strip()
     if not q:
-        return pagina(request, "risultati.html", q="", film=[])
+        return pagina(request, "risultati.html", q="", film=[], mondo=mondo)
     try:
-        film = await s.tmdb.cerca(q)
-        s.archivio.aggiungi_ricerca(q)
+        if mondo == "serie":
+            film = await s.tmdb.cerca_serie(q)
+        elif mondo == "kids":
+            film = await s.tmdb.cerca_kids(q)
+        else:
+            film = await s.tmdb.cerca(q)
+            s.archivio.aggiungi_ricerca(q)
     except ErroreServizio as exc:
-        return pagina(request, "risultati.html", q=q, film=[], errore=exc)
-    return pagina(request, "risultati.html", q=q, film=film)
+        return pagina(request, "risultati.html", q=q, film=[], errore=exc, mondo=mondo)
+    return pagina(request, "risultati.html", q=q, film=film, mondo=mondo)
 
 
 @app.get("/film/{tmdb_id}", response_class=HTMLResponse)
@@ -169,24 +232,41 @@ async def scheda_film(request: Request, tmdb_id: int):
     return pagina(request, "film.html", film=film, avvisami=s.archivio.avvisami_presente(tmdb_id))
 
 
+@app.get("/genere/{genere}", response_class=HTMLResponse)
+async def pagina_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0):
+    s = servizi(request)
+    if in_kids(request):
+        mondo = "kids"
+    if mondo not in ("film", "serie", "kids"):
+        mondo = "film"
+    try:
+        elenco = await (s.tmdb.generi_kids() if mondo == "kids" else s.tmdb.generi(tipo_tmdb(mondo)))
+    except ErroreServizio as exc:
+        return pagina(request, "genere.html", mondo=mondo, genere=None, generi=[], gratis=False, errore=exc)
+    trovato = next((g for g in elenco if g["id"] == genere), None)
+    if trovato is None:
+        return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
+    return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco, gratis=bool(gratis))
+
+
 @app.get("/torrent", response_class=HTMLResponse)
 async def pagina_torrent(request: Request):
-    return pagina(request, "torrent.html")
+    return solo_adulti(request) or pagina(request, "torrent.html", sezione="torrent")
 
 
 @app.get("/download", response_class=HTMLResponse)
 async def pagina_download(request: Request):
-    return pagina(request, "download.html")
+    return solo_adulti(request) or pagina(request, "download.html", sezione="download")
 
 
 @app.get("/musica", response_class=HTMLResponse)
 async def pagina_musica(request: Request):
-    return pagina(request, "musica.html")
+    return solo_adulti(request) or pagina(request, "musica.html", mondo="musica")
 
 
 @app.get("/spazio", response_class=HTMLResponse)
 async def pagina_spazio(request: Request):
-    return pagina(request, "spazio.html")
+    return solo_adulti(request) or pagina(request, "spazio.html", sezione="spazio")
 
 
 @app.get("/salute")
@@ -202,17 +282,59 @@ async def api_tmdb(request: Request, q: str):
 
 
 @app.get("/api/novita")
-async def api_novita(request: Request):
-    """Film di tendenza e nuove uscite: se una delle due fallisce, l'altra si vede lo stesso."""
+async def api_novita(request: Request, mondo: str = "film"):
+    """Le due strisce della pagina iniziale di un mondo. Se una fallisce, l'altra si vede lo stesso."""
     s = servizi(request)
-    tendenze, cinema = await asyncio.gather(s.tmdb.tendenze(), s.tmdb.al_cinema(), return_exceptions=True)
-    risposta: dict = {"tendenze": [], "cinema": []}
-    for chiave, valore in (("tendenze", tendenze), ("cinema", cinema)):
+    if in_kids(request):
+        mondo = "kids"
+    fonti = {
+        "film": (s.tmdb.tendenze, s.tmdb.al_cinema),
+        "serie": (s.serie.nuovi_episodi, s.tmdb.tendenze_serie),
+        "kids": (s.tmdb.kids_cartoni, s.tmdb.kids_famiglia),
+    }.get(mondo, (s.tmdb.tendenze, s.tmdb.al_cinema))
+    prima, seconda = await asyncio.gather(fonti[0](), fonti[1](), return_exceptions=True)
+    risposta: dict = {"prima": [], "seconda": [], "mondo": mondo}
+    for chiave, valore in (("prima", prima), ("seconda", seconda)):
         if isinstance(valore, ErroreServizio):
             risposta["errore"] = valore.come_dizionario()
         elif isinstance(valore, list):
             risposta[chiave] = valore
     return risposta
+
+
+@app.get("/api/home")
+async def api_home(request: Request, mondo: str = "film"):
+    """Le righe della home in stile Netflix di Film e Serie TV."""
+    s = servizi(request)
+    if in_kids(request) or mondo not in ("film", "serie"):
+        return {"righe": []}
+    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo))
+    if mondo == "serie" and s.config.sonarr_url:
+        try:
+            episodi = await s.serie.nuovi_episodi()
+        except ErroreServizio:
+            episodi = []
+        if episodi:
+            risposta["righe"].append({"tipo": "episodi", "titolo": "Nuovi episodi delle tue serie", "elementi": episodi})
+    return risposta
+
+
+@app.get("/api/generi")
+async def api_generi(request: Request, mondo: str = "film"):
+    s = servizi(request)
+    if in_kids(request) or mondo == "kids":
+        return {"generi": await s.tmdb.generi_kids(), "mondo": "kids"}
+    mondo = "serie" if mondo == "serie" else "film"
+    return {"generi": await s.tmdb.generi(tipo_tmdb(mondo)), "mondo": mondo}
+
+
+@app.get("/api/genere/{genere}")
+async def api_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0, pagina: int = 1):
+    s = servizi(request)
+    kids = in_kids(request) or mondo == "kids"
+    tipo = "movie" if kids else tipo_tmdb(mondo)
+    elementi = await s.tmdb.scopri(tipo, genere, solo_gratis=bool(gratis), pagina=pagina, kids=kids)
+    return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
 
 
 @app.get("/api/musica/per-te")

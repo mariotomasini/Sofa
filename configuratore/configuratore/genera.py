@@ -22,6 +22,7 @@ FILE_DA_GENERARE = {
     "homepage/settings.yaml.j2": "homepage/settings.yaml",
     "homepage/widgets.yaml.j2": "homepage/widgets.yaml",
     "homepage/bookmarks.yaml.j2": "homepage/bookmarks.yaml",
+    "homepage/custom.css.j2": "homepage/custom.css",
 }
 
 

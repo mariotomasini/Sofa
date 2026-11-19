@@ -104,3 +104,28 @@ def test_novita_tendenze_e_cinema():
     tendenze, cinema = asyncio.run(prova())
     assert [f["id"] for f in tendenze] == [1]  # i film senza locandina non si mostrano
     assert [f["titolo"] for f in cinema] == ["Molto visto", "Poco visto"]  # i più visti prima
+
+
+def test_filtro_kids():
+    from app.tmdb import adatto_ai_bambini
+
+    assert adatto_ai_bambini({"genre_ids": [16, 10751]})
+    assert not adatto_ai_bambini({"genre_ids": [16, 27]})  # animazione horror: no
+    assert not adatto_ai_bambini({"genre_ids": [28]})  # azione: no
+    assert not adatto_ai_bambini({"genre_ids": [16], "adult": True})
+
+
+def test_calendario_sonarr_un_episodio_per_serie():
+    from app.serie import interpreta_calendario
+
+    episodi = [
+        {"seriesId": 1, "seasonNumber": 2, "episodeNumber": 3, "airDateUtc": "2026-11-10T20:00:00Z", "hasFile": True,
+         "series": {"id": 1, "title": "Serie A", "year": 2024, "images": [{"coverType": "poster", "remoteUrl": "http://p/a.jpg"}]}},
+        {"seriesId": 1, "seasonNumber": 2, "episodeNumber": 4, "airDateUtc": "2026-11-17T20:00:00Z", "hasFile": False,
+         "series": {"id": 1, "title": "Serie A", "images": []}},
+        {"seriesId": 2, "seasonNumber": 1, "episodeNumber": 1, "airDateUtc": "2026-11-12T20:00:00Z", "hasFile": True,
+         "series": {"id": 2, "title": "Serie B", "images": []}},
+    ]
+    r = interpreta_calendario(episodi)
+    assert [(x["titolo"], x["sottotitolo"], x["pronto"]) for x in r] == [
+        ("Serie A", "St. 2 · Ep. 4", False), ("Serie B", "St. 1 · Ep. 1", True)]

@@ -1,0 +1,21 @@
+{
+  "name": "Cerca · mediabox",
+  "short_name": "Cerca",
+  "description": "Cerca un film, guarda dove vederlo e scaricalo nel media server di casa.",
+  "lang": "it",
+  "start_url": "/cerca/",
+  "scope": "/cerca/",
+  "display": "standalone",
+  "background_color": "#17130f",
+  "theme_color": "#17130f",
+  "icons": [
+    { "src": "/cerca/static/icone/icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/cerca/static/icone/icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/cerca/static/icone/icona-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/cerca/static/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Download", "url": "/cerca/download", "icons": [{ "src": "/cerca/static/icone/icona-192.png", "sizes": "192x192" }] },
+    { "name": "Musica", "url": "/cerca/musica", "icons": [{ "src": "/cerca/static/icone/icona-192.png", "sizes": "192x192" }] }
+  ]
+}

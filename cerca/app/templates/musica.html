@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% from "_mondi.html" import selettore %}
 {% block titolo %}Musica{% endblock %}
 {% block contenuto %}
-<h1>🎵 Scopri musica</h1>
+{{ selettore(mondo, base, mondi, kids) }}
+<h1 class="titolo-pagina">Scopri musica</h1>
 <p class="sottotitolo">Suggerimenti basati su quello che ascolti in Jellyfin. I dati arrivano da ListenBrainz,
   un servizio aperto: viene inviato solo il nome degli artisti, nessun dato personale.</p>
 
@@ -12,7 +14,7 @@
 </section>
 
 <section>
-  <h2>🔥 Di tendenza questa settimana</h2>
+  <h2>Di tendenza questa settimana</h2>
   <p class="sottotitolo">Gli artisti più ascoltati nel mondo su ListenBrainz.</p>
   <div id="tendenze-musica" class="griglia-artisti"><p class="caricamento">Carico…</p></div>
 </section>

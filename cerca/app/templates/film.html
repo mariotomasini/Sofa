@@ -3,38 +3,52 @@
 {% block contenuto %}
 {% if film %}
 <article class="film" data-tmdb="{{ film.id }}">
-  <div class="film-testa{{ '' if film.poster else ' senza-locandina' }}">
-    {% if film.poster %}<img class="poster" src="{{ film.poster }}" alt="Locandina di {{ film.titolo }}">{% endif %}
-    <div>
-      <h1>{{ film.titolo }} {% if film.anno %}<span class="anno">({{ film.anno }})</span>{% endif %}</h1>
+  <header class="film-testa{{ '' if film.poster else ' senza-locandina' }}"{% if film.sfondo %} style="--sfondo-film: url('{{ film.sfondo }}')"{% endif %}>
+    <div class="film-locandina">
+      {% if film.poster %}<img class="poster" src="{{ film.poster }}" alt="Locandina di {{ film.titolo }}">
+      {% else %}<span class="senza-poster grande"><span class="titolo">{{ film.titolo }}</span><span class="anno">{{ film.anno }}</span></span>{% endif %}
+    </div>
+    <div class="film-info">
+      <h1>{{ film.titolo }}{% if film.anno %} <span class="anno">{{ film.anno }}</span>{% endif %}</h1>
       {% if film.titolo_originale != film.titolo %}<p class="originale">{{ film.titolo_originale }}</p>{% endif %}
-      <p class="dettagli">
-        {% if film.durata %}{{ film.durata }} minuti · {% endif %}{{ film.generi | join(', ') }}
-        {% if film.voto %} · ★ {{ film.voto }}{% endif %}
-      </p>
+      <ul class="chip" aria-label="Dettagli">
+        {% if film.durata %}<li>{{ film.durata }} minuti</li>{% endif %}
+        {% for g in film.generi[:3] %}<li>{{ g }}</li>{% endfor %}
+        {% if film.voto %}<li><span aria-hidden="true">★</span> {{ ("%.1f" % film.voto) | replace(".", ",") }}</li>{% endif %}
+      </ul>
       <p class="trama">{{ film.trama or "Trama non disponibile in italiano." }}</p>
-      <button id="avvisami" class="secondario" data-attivo="{{ 'si' if avvisami else 'no' }}">
+      <button id="avvisami" class="{{ 'attivo' if avvisami else 'secondario' }}" data-attivo="{{ 'si' if avvisami else 'no' }}">
         {{ "✓ Ti avviserò se diventa gratis" if avvisami else "🔔 Avvisami se diventa disponibile gratis" }}
       </button>
     </div>
+  </header>
+
+  <div class="film-corpo{% if kids %} solo-guarda{% endif %}">
+    <section class="blocco dove-vederlo" id="provider" aria-labelledby="titolo-provider">
+      <h2 id="titolo-provider">Dove vederlo legalmente in Italia</h2>
+      <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+      <p class="attribuzione">Dati sulla disponibilità forniti da
+        <a href="https://www.justwatch.com/it" target="_blank" rel="noopener"><strong>JustWatch</strong></a>.</p>
+    </section>
+
+    {% if not kids %}
+    <div class="colonna-scarica">
+      <section class="blocco" id="archive" aria-labelledby="titolo-archive">
+        <h2 id="titolo-archive">Scarica da Internet Archive</h2>
+        <p class="sottotitolo">Molti film sono di pubblico dominio: controlla la licenza nella pagina dell'item.</p>
+        <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+      </section>
+
+      <details class="blocco chiuso" id="prowlarr">
+        <summary>
+          <span><strong>Altre fonti (indexer)</strong><span class="sottotitolo" id="riassunto-prowlarr">Cerco… (può richiedere fino a un minuto)</span></span>
+          <span class="mostra" aria-hidden="true">Mostra ▾</span>
+        </summary>
+        <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+      </details>
+    </div>
+    {% endif %}
   </div>
-
-  <section class="blocco" id="provider">
-    <h2>Dove vederlo legalmente in Italia</h2>
-    <div class="contenuto"><p class="caricamento">Cerco…</p></div>
-    <p class="attribuzione">Dati sulla disponibilità forniti da
-      <a href="https://www.justwatch.com/it" target="_blank" rel="noopener"><strong>JustWatch</strong></a>.</p>
-  </section>
-
-  <section class="blocco" id="archive">
-    <h2>Internet Archive <small>molti film sono di pubblico dominio: controlla la licenza nella pagina dell'item</small></h2>
-    <div class="contenuto"><p class="caricamento">Cerco…</p></div>
-  </section>
-
-  <section class="blocco" id="prowlarr">
-    <h2>Indexer (Prowlarr)</h2>
-    <div class="contenuto"><p class="caricamento">Cerco… (può richiedere fino a un minuto)</p></div>
-  </section>
 </article>
 {% endif %}
 {% endblock %}

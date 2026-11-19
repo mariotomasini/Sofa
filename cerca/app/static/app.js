@@ -57,46 +57,58 @@ function htmlErrore(e) {
     (e.cosa_fare ? `<p>${esc(e.cosa_fare)}</p>` : "") + "</div>";
 }
 
+// Segnaposto per i film senza locandina: titolo in alto, anno in basso
+function htmlSenzaPoster(titolo, anno) {
+  return `<span class="senza-poster"><span class="titolo">${esc(titolo)}</span><span class="anno">${esc(anno || "")}</span></span>`;
+}
+
 // --- pagina del film ------------------------------------------------------
 function avviaFilm(tmdbId) {
   const sezione = (id) => document.querySelector(`#${id} .contenuto`);
 
-  // Le tre ricerche partono insieme, ognuna riempie la sua sezione.
+  // Le ricerche partono insieme, ognuna riempie la sua sezione.
   chiama(`/api/film/${tmdbId}/provider`)
     .then((d) => { sezione("provider").innerHTML = htmlProvider(d); })
     .catch((e) => { sezione("provider").innerHTML = htmlErrore(e); });
 
-  chiama(`/api/film/${tmdbId}/archive`)
-    .then((d) => { sezione("archive").innerHTML = htmlArchive(d); })
-    .catch((e) => { sezione("archive").innerHTML = htmlErrore(e); });
+  if (document.getElementById("archive")) {
+    chiama(`/api/film/${tmdbId}/archive`)
+      .then((d) => { sezione("archive").innerHTML = htmlArchive(d); })
+      .catch((e) => { sezione("archive").innerHTML = htmlErrore(e); });
 
-  chiama(`/api/film/${tmdbId}/prowlarr`)
-    .then((d) => { sezione("prowlarr").innerHTML = htmlProwlarr(d); })
-    .catch((e) => { sezione("prowlarr").innerHTML = htmlErrore(e); });
+    const riassunto = document.getElementById("riassunto-prowlarr");
+    chiama(`/api/film/${tmdbId}/prowlarr`)
+      .then((d) => {
+        sezione("prowlarr").innerHTML = htmlProwlarr(d);
+        riassunto.textContent = d.avviso ? d.avviso
+          : d.risultati.length === 1 ? "1 risultato" : `${d.risultati.length} risultati`;
+      })
+      .catch((e) => { sezione("prowlarr").innerHTML = htmlErrore(e); riassunto.textContent = e.errore || "Errore"; });
 
-  document.getElementById("archive").addEventListener("click", async (ev) => {
-    const b = ev.target.closest("button[data-identificativo]");
-    if (!b) return;
-    b.disabled = true;
-    try {
-      const r = await inviaJSON("/api/scarica/archive", {
-        tmdb_id: tmdbId, identificativo: b.dataset.identificativo, nome: b.dataset.nome, modo: b.dataset.modo,
-      });
-      avviso(r.messaggio);
-      b.textContent = "✓ Avviato";
-    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
-  });
+    document.getElementById("archive").addEventListener("click", async (ev) => {
+      const b = ev.target.closest("button[data-identificativo]");
+      if (!b) return;
+      b.disabled = true;
+      try {
+        const r = await inviaJSON("/api/scarica/archive", {
+          tmdb_id: tmdbId, identificativo: b.dataset.identificativo, nome: b.dataset.nome, modo: b.dataset.modo,
+        });
+        avviso(r.messaggio);
+        b.textContent = "✓ Avviato";
+      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
+    });
 
-  document.getElementById("prowlarr").addEventListener("click", async (ev) => {
-    const b = ev.target.closest("button[data-risultato]");
-    if (!b) return;
-    b.disabled = true;
-    try {
-      const r = await inviaJSON("/api/scarica/prowlarr", { tmdb_id: tmdbId, id: b.dataset.risultato });
-      avviso(r.messaggio);
-      b.textContent = "✓ Avviato";
-    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
-  });
+    document.getElementById("prowlarr").addEventListener("click", async (ev) => {
+      const b = ev.target.closest("button[data-risultato]");
+      if (!b) return;
+      b.disabled = true;
+      try {
+        const r = await inviaJSON("/api/scarica/prowlarr", { tmdb_id: tmdbId, id: b.dataset.risultato });
+        avviso(r.messaggio);
+        b.textContent = "✓ Avviato";
+      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
+    });
+  }
 
   const avvisami = document.getElementById("avvisami");
   avvisami.addEventListener("click", async () => {
@@ -104,11 +116,23 @@ function avviaFilm(tmdbId) {
     try {
       const r = await chiama(`/api/avvisami/${tmdbId}`, { method: "POST" });
       avvisami.textContent = r.attivo ? "✓ Ti avviserò se diventa gratis" : "🔔 Avvisami se diventa disponibile gratis";
+      avvisami.className = r.attivo ? "attivo" : "secondario";
       avviso(r.messaggio);
     } catch (e) { avviso(e.errore, true); }
     avvisami.disabled = false;
   });
 }
+
+// Logo del servizio, con l'iniziale al suo posto se l'immagine manca o non si carica
+function htmlLogo(p) {
+  const iniziale = `<span class="logo-iniziale" aria-hidden="true">${esc((p.nome || "?").charAt(0))}</span>`;
+  if (!p.logo) return iniziale;
+  return `<img src="${esc(p.logo)}" alt="" loading="lazy" ` +
+    `onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'logo-iniziale',textContent:this.dataset.i}))" ` +
+    `data-i="${esc((p.nome || "?").charAt(0))}">`;
+}
+
+const BREVE_OFFERTA = { ads: "gratis", free: "gratis", flatrate: "abbonamento", rent: "noleggio", buy: "acquisto" };
 
 function htmlProvider(d) {
   if (!d.gruppi.length) {
@@ -117,15 +141,15 @@ function htmlProvider(d) {
   }
   let html = "";
   for (const g of d.gruppi) {
-    html += `<div class="gruppo-provider ${g.tipo === "ads" || g.tipo === "free" ? "gratis" : ""}">` +
-      `<h3>${esc(g.etichetta)}</h3><div class="loghi">`;
+    const gratis = g.tipo === "ads" || g.tipo === "free";
+    html += `<div class="gruppo-provider${gratis ? " gratis" : ""}"><h3>${esc(g.etichetta)}</h3><div class="loghi">`;
     for (const p of g.provider) {
-      html += `<a href="${esc(d.link)}" target="_blank" rel="noopener" title="${esc(p.nome)}">` +
-        (p.logo ? `<img src="${esc(p.logo)}" alt="${esc(p.nome)}" loading="lazy">` : esc(p.nome)) + "</a>";
+      html += `<a class="servizio" href="${esc(d.link)}" target="_blank" rel="noopener">${htmlLogo(p)}` +
+        `<span class="nome-servizio">${esc(p.nome)}<span class="offerta"> · ${BREVE_OFFERTA[g.tipo] || ""}</span></span>` +
+        `<span class="freccia" aria-hidden="true">↗</span></a>`;
     }
     html += "</div></div>";
   }
-  if (d.link) html += `<p><a href="${esc(d.link)}" target="_blank" rel="noopener">Apri la pagina con tutti i link →</a></p>`;
   return html;
 }
 
@@ -137,15 +161,19 @@ function htmlArchive(d) {
   }
   let html = '<ul class="risultati">';
   d.versioni.slice(0, 5).forEach((v, i) => {
-    const risoluzione = v.altezza ? `${v.altezza}p` : "risoluzione sconosciuta";
-    html += `<li class="${i === 0 ? "migliore" : ""}">` +
-      `<div class="descrizione">${i === 0 ? '<span class="badge">Migliore</span> ' : ""}` +
-      `<strong>${esc(v.titolo_item || v.identificativo)}</strong><br>` +
-      `<span class="sottotitolo">${esc(v.nome)} · ${risoluzione} · ${esc(v.formato)} · ${dimensione(v.dimensione)}` +
-      `${v.originale ? " · originale" : ""} · <a href="${esc(v.pagina)}" target="_blank" rel="noopener">pagina e licenza</a></span></div>` +
+    const migliore = i === 0;
+    const dettagli = [v.altezza ? `${v.altezza}p` : "risoluzione sconosciuta", dimensione(v.dimensione)];
+    if (v.originale) dettagli.push("originale");
+    const dati = `data-identificativo="${esc(v.identificativo)}" data-nome="${esc(v.nome)}"`;
+    html += `<li class="${migliore ? "migliore" : ""}">` +
+      `<div class="descrizione">${migliore ? '<span class="badge">La migliore</span>' : ""}` +
+      `<strong>${esc(v.titolo_item || v.identificativo)}</strong>` +
+      `<span class="sottotitolo">${dettagli.map(esc).join(" · ")}` +
+      ` · <a href="${esc(v.pagina)}" target="_blank" rel="noopener">pagina e licenza</a>` +
+      `<span class="file"> · ${esc(v.nome)}</span></span></div>` +
       `<div class="azioni">` +
-      `<button data-identificativo="${esc(v.identificativo)}" data-nome="${esc(v.nome)}" data-modo="http">Scarica</button>` +
-      `<button class="secondario" data-identificativo="${esc(v.identificativo)}" data-nome="${esc(v.nome)}" data-modo="torrent">Via torrent</button>` +
+      `<button ${migliore ? "" : 'class="secondario" '}${dati} data-modo="http">Scarica</button>` +
+      `<button class="${migliore ? "contorno" : "testo"}" ${dati} data-modo="torrent">Via torrent</button>` +
       "</div></li>";
   });
   return html + "</ul>";
@@ -159,10 +187,10 @@ function htmlProwlarr(d) {
   let html = '<ul class="risultati">';
   for (const r of d.risultati.slice(0, 25)) {
     html += "<li>" +
-      `<div class="descrizione"><strong>${esc(r.titolo)}</strong><br>` +
+      `<div class="descrizione"><strong>${esc(r.titolo)}</strong>` +
       `<span class="sottotitolo">${dimensione(r.dimensione)} · seed ${r.seed ?? "?"} · peer ${r.peer ?? "?"} · ${esc(r.indexer)}` +
       `${r.data ? " · " + esc(r.data) : ""}</span></div>` +
-      `<div class="azioni"><button data-risultato="${esc(r.id)}">Scarica</button></div></li>`;
+      `<div class="azioni"><button class="secondario" data-risultato="${esc(r.id)}">Scarica</button></div></li>`;
   }
   return html + "</ul>";
 }
@@ -197,6 +225,10 @@ function cercatoreFilm(campo, bottone, contenitore, quandoScelto) {
 function avviaTorrent() {
   const form = document.getElementById("form-torrent");
   const tmdb = document.getElementById("tmdb_id");
+  const file = document.getElementById("file");
+  file.addEventListener("change", () => {
+    document.getElementById("nome-file").textContent = file.files.length ? file.files[0].name : "Nessun file scelto";
+  });
   cercatoreFilm(
     document.getElementById("cerca-film"),
     document.getElementById("bottone-cerca-film"),
@@ -219,11 +251,20 @@ function avviaTorrent() {
 }
 
 // --- elenco download (pagina Download e home) -----------------------------------------
-function htmlDownload(d) {
+function htmlDownload(d, compatto = false) {
   const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale" }[d.fonte] || d.fonte;
+  if (compatto) {
+    const riga = d.stato === "in_corso"
+      ? `${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}`
+      : esc(d.stato_testo);
+    return `<a class="download compatto stato-${d.stato}" href="${BASE}/download">` +
+      (d.poster ? `<img src="${esc(d.poster)}" alt="">` : htmlSenzaPoster(d.titolo, d.anno)) +
+      `<span class="descrizione"><strong>${esc(d.titolo)}${d.anno ? " (" + esc(d.anno) + ")" : ""}</strong>` +
+      `<span class="barra"><span style="width:${d.percentuale}%"></span></span><span class="sottotitolo">${riga}</span></span></a>`;
+  }
   const barra = d.stato === "in_corso"
-    ? `<div class="barra"><div style="width:${d.percentuale}%"></div></div>` +
-      `<span class="sottotitolo">${d.percentuale}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}` +
+    ? `<div class="barra"><span style="width:${d.percentuale}%"></span></div>` +
+      `<span class="sottotitolo">${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}` +
       `${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}</span>`
     : "";
   let azioni = "";
@@ -235,9 +276,9 @@ function htmlDownload(d) {
     azioni += `<button class="secondario" data-annulla="${d.id}" data-stato="${d.stato}">${etichetta}</button>`;
   }
   return `<div class="download stato-${d.stato}">` +
-    (d.poster ? `<img src="${esc(d.poster)}" alt="">` : '<div class="senza-poster">🎬</div>') +
+    (d.poster ? `<img src="${esc(d.poster)}" alt="">` : htmlSenzaPoster(d.titolo, d.anno)) +
     `<div class="descrizione"><strong>${esc(d.titolo)}${d.anno ? " (" + esc(d.anno) + ")" : ""}</strong>` +
-    `<span class="stato">${esc(d.stato_testo)}</span> <span class="sottotitolo">· ${esc(fonte)}</span>` +
+    `<span class="riga-stato"><span class="stato">${esc(d.stato_testo)}</span> <span class="sottotitolo">· ${esc(fonte)}</span></span>` +
     barra + (d.messaggio ? `<p class="messaggio">${esc(d.messaggio)}</p>` : "") +
     `</div><div class="azioni">${azioni}</div></div>`;
 }
@@ -252,7 +293,7 @@ function avviaDownload({ soloAttivi }) {
       let elenco = d.download;
       if (soloAttivi) elenco = elenco.filter((x) => ["in_corso", "completato", "importazione", "da_associare", "errore"].includes(x.stato));
       if (soloAttivi) sezione.hidden = !elenco.length;
-      contenitore.innerHTML = elenco.length ? elenco.map(htmlDownload).join("")
+      contenitore.innerHTML = elenco.length ? elenco.slice(0, soloAttivi ? 3 : 60).map((x) => htmlDownload(x, soloAttivi)).join("")
         : '<p class="vuoto">Nessun download. Cerca un film o aggiungi un torrent.</p>';
     } catch (e) {
       if (!soloAttivi) contenitore.innerHTML = htmlErrore(e);
@@ -310,32 +351,142 @@ function avviaDownload({ soloAttivi }) {
   }
 }
 
-// --- novità nella pagina iniziale -------------------------------------------------
+// --- novità nelle pagine iniziali dei mondi -------------------------------------------
 function htmlScheda(f) {
-  return `<a class="scheda" href="${BASE}/film/${f.id}">` +
-    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : '<div class="senza-poster">🎬</div>') +
-    `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${esc(f.anno)}</span></a>`;
+  let link = `${BASE}/film/${f.id}`;
+  let sotto = esc(f.anno || "");
+  if (f.serie) link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo)}`;
+  if (f.sottotitolo) {  // episodio da Sonarr
+    link = "/jellyfin/";
+    sotto = `${esc(f.sottotitolo)}${f.pronto ? ' · <span class="pronto">pronto</span>' : ""}`;
+  }
+  return `<a class="scheda" href="${link}">` +
+    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
+    `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${sotto}</span></a>`;
 }
 
-async function avviaNovita() {
+async function avviaNovita(mondo = "film") {
   const sezione = document.getElementById("novita");
   try {
-    const d = await chiama("/api/novita");
-    document.getElementById("tendenze").innerHTML = d.tendenze.map(htmlScheda).join("");
-    document.getElementById("cinema").innerHTML = d.cinema.map(htmlScheda).join("");
-    sezione.hidden = !(d.tendenze.length || d.cinema.length);
+    const d = await chiama(`/api/novita?mondo=${encodeURIComponent(mondo)}`);
+    const prima = document.getElementById("tendenze");
+    const seconda = document.getElementById("cinema");
+    prima.innerHTML = d.prima.map(htmlScheda).join("");
+    seconda.innerHTML = d.seconda.map(htmlScheda).join("");
+    prima.previousElementSibling.hidden = prima.hidden = !d.prima.length;
+    seconda.previousElementSibling.hidden = seconda.hidden = !d.seconda.length;
+    sezione.hidden = !(d.prima.length || d.seconda.length);
   } catch (e) {
     sezione.hidden = true;  // senza TMDB la pagina resta comunque usabile
   }
 }
 
+// --- home in stile Netflix --------------------------------------------------------------
+// Fila dei generi sotto la ricerca (in Kids solo generi adatti ai bambini)
+async function avviaGeneri() {
+  const nav = document.getElementById("generi");
+  if (!nav) return;
+  const mondo = nav.dataset.mondo;
+  try {
+    const d = await chiama(`/api/generi?mondo=${encodeURIComponent(mondo)}`);
+    nav.innerHTML = d.generi.map((g) =>
+      `<a class="genere" href="${BASE}/genere/${g.id}?mondo=${encodeURIComponent(d.mondo)}">${esc(g.nome)}</a>`).join("");
+    nav.hidden = !d.generi.length;
+  } catch (e) {
+    nav.hidden = true;
+  }
+}
+
+function htmlTop(f, i) {
+  const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo)}` : `${BASE}/film/${f.id}`;
+  return `<a class="scheda-top" href="${link}" aria-label="${i + 1}. ${esc(f.titolo)}">` +
+    `<span class="numero" aria-hidden="true">${i + 1}</span>` +
+    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) + "</a>";
+}
+
+// Jellyfin non ha l'immagine: al suo posto il segnaposto con il titolo
+function posterMancante(img) {
+  img.outerHTML = htmlSenzaPoster(img.dataset.titolo, img.dataset.anno);
+}
+
+function htmlContinua(e) {
+  const percentuale = Math.max(3, Math.min(100, e.percentuale || 0));
+  return `<a class="scheda scheda-continua" href="${esc(e.link)}">` +
+    `<img src="${esc(e.poster)}" alt="" loading="lazy" data-titolo="${esc(e.titolo)}" data-anno="${esc(e.anno)}" onerror="posterMancante(this)">` +
+    (e.percentuale ? `<span class="avanzamento" role="progressbar" aria-valuenow="${e.percentuale}" aria-valuemin="0" aria-valuemax="100" aria-label="Visto al ${e.percentuale}%"><span style="width:${percentuale}%"></span></span>` : "") +
+    `<span class="titolo">${esc(e.titolo)}</span><span class="anno">${esc(e.sottotitolo || (e.percentuale ? `visto al ${e.percentuale}%` : "da iniziare"))}</span></a>`;
+}
+
+function htmlRiga(r, mondo) {
+  let schede;
+  if (r.tipo === "top10") schede = r.elementi.map(htmlTop).join("");
+  else if (r.tipo === "continua") schede = r.elementi.map(htmlContinua).join("");
+  else schede = r.elementi.map(htmlScheda).join("");
+  const tutti = r.genere
+    ? `<a class="link-accento" href="${BASE}/genere/${r.genere}?mondo=${encodeURIComponent(mondo)}">Vedi tutti →</a>` : "";
+  const id = `riga-${r.tipo}-${r.genere || ""}`;
+  return `<section class="riga riga-${esc(r.tipo)}" aria-labelledby="${id}">` +
+    `<div class="riga-testa"><h2 id="${id}">${esc(r.titolo)}</h2>${tutti}</div>` +
+    `<div class="striscia${r.tipo === "top10" ? " striscia-top" : ""}">${schede}</div></section>`;
+}
+
+async function avviaHome(mondo = "film") {
+  const contenitore = document.getElementById("righe");
+  if (!contenitore) return;
+  contenitore.innerHTML = '<p class="caricamento">Carico i consigli…</p>';
+  try {
+    const d = await chiama(`/api/home?mondo=${encodeURIComponent(mondo)}`);
+    contenitore.innerHTML = d.righe.map((r) => htmlRiga(r, mondo)).join("") +
+      (d.errore && !d.righe.length ? htmlErrore(d.errore) : "");
+  } catch (e) {
+    contenitore.innerHTML = htmlErrore(e);
+  }
+  contenitore.removeAttribute("aria-busy");
+}
+
+// Pagina di un genere: griglia con "Mostra altri"
+function avviaGenere(genere, mondo, gratis) {
+  const griglia = document.getElementById("griglia-genere");
+  const altri = document.getElementById("altri");
+  let pagina = 0;
+  const visti = new Set();
+  async function carica() {
+    pagina += 1;
+    altri.disabled = true;
+    try {
+      const d = await chiama(`/api/genere/${genere}?mondo=${encodeURIComponent(mondo)}&gratis=${gratis ? 1 : 0}&pagina=${pagina}`);
+      if (pagina === 1) griglia.innerHTML = "";
+      const nuovi = d.elementi.filter((f) => !visti.has(f.id));
+      nuovi.forEach((f) => visti.add(f.id));
+      griglia.insertAdjacentHTML("beforeend", nuovi.map(htmlScheda).join(""));
+      if (pagina === 1 && !nuovi.length) {
+        griglia.innerHTML = `<p>${gratis ? "In questo momento non trovo titoli gratis di questo genere in Italia." : "Nessun titolo trovato."}</p>`;
+      }
+      altri.hidden = !d.altri;
+    } catch (e) {
+      griglia.insertAdjacentHTML("beforeend", htmlErrore(e));
+      altri.hidden = true;
+    }
+    altri.disabled = false;
+  }
+  altri.addEventListener("click", carica);
+  carica();
+}
+
 // --- pagina Musica --------------------------------------------------------------------
+function tintaDalNome(nome) {
+  let h = 0;
+  for (const c of nome) h = (h * 31 + c.codePointAt(0)) % 360;
+  return h;
+}
+
 function htmlArtista(a, dettaglio) {
-  const iniziale = esc((a.nome || "?").trim().charAt(0).toUpperCase());
+  const nome = (a.nome || "?").trim();
+  const iniziale = esc(nome.replace(/^the\s+/i, "").charAt(0).toUpperCase());
   const azione = a.in_libreria
     ? '<span class="sottotitolo">già in libreria</span>'
-    : (window.LIDARR ? `<button data-mbid="${esc(a.mbid)}">Aggiungi</button>` : "");
-  return `<div class="artista"><div class="iniziale">${iniziale}</div>` +
+    : (window.LIDARR ? `<button class="secondario" data-mbid="${esc(a.mbid)}">Aggiungi</button>` : "");
+  return `<div class="artista"><div class="iniziale" style="--h:${tintaDalNome(nome)}">${iniziale}</div>` +
     `<div class="descrizione"><strong>${esc(a.nome)}</strong>` +
     `<span class="sottotitolo">${esc(dettaglio)}</span>` +
     `<a class="sottotitolo" href="https://listenbrainz.org/artist/${esc(a.mbid)}" target="_blank" rel="noopener">anteprima ↗</a>` +
@@ -378,7 +529,7 @@ function avviaSpazio() {
   const bottone = document.getElementById("libera");
 
   function voce(testo, byte, dettaglio) {
-    return `<li><div class="descrizione"><strong>${esc(testo)}</strong><br>` +
+    return `<li><div class="descrizione"><strong>${esc(testo)}</strong>` +
       `<span class="sottotitolo">${esc(dettaglio)}</span></div><div class="azioni">${dimensione(byte)}</div></li>`;
   }
 
@@ -403,6 +554,7 @@ function avviaSpazio() {
       if (!d.abbandonati.length && !(d.pulizia_visti && d.visti.length)) html = "<p>Niente da togliere: tutto in ordine. 👍</p>" + html;
       html += `<p class="sottotitolo">Totale che si potrebbe liberare: <strong>${dimensione(d.totale)}</strong></p>`;
       anteprima.innerHTML = html;
+      bottone.disabled = !d.totale;
       registro.innerHTML = d.registro.length
         ? "<ul class=\"risultati\">" + d.registro.map((r) => voce(r.cosa, r.dimensione,
             new Date(r.quando * 1000).toLocaleString("it-IT") + " · " + (r.motivo || ""))).join("") + "</ul>"
@@ -415,7 +567,6 @@ function avviaSpazio() {
     bottone.disabled = true;
     try { avviso((await chiama("/api/pulizia", { method: "POST" })).messaggio); }
     catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
-    bottone.disabled = false;
     carica();
   });
   carica();

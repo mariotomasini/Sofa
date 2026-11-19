@@ -168,9 +168,28 @@ Se la TV non lo trova, usa l'IP: `http://192.168.1.50/jellyfin`. Molte TV non ri
 
 ## Come si usa Cerca
 
+In alto scegli il **mondo**: **Film**, **Serie TV**, **Kids** o **Musica**. Ogni mondo ha il suo colore, la sua ricerca e le sue novità:
+
+- **Film** e **Serie TV**: una pagina come quella di Netflix (vedi sotto). Nelle Serie TV c'è anche la riga dei nuovi episodi delle serie che segui in Sonarr; scegliendo una serie si apre Sonarr, dove decidi cosa scaricare;
+- **Kids**: solo cartoni e film per famiglie, con locandine più grandi e generi adatti ai bambini. In Kids non si scarica nulla e il menu sparisce: si esce solo con **"Esci da Kids"** in alto a destra. Il PC o la TV restano in Kids finché non premi quel pulsante;
+- **Musica**: suggerimenti di artisti e tendenze.
+
+Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Kids, mediabox). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
+
 ![Pagina iniziale di Cerca](docs/cerca-home.png)
 
-Nella pagina iniziale di Cerca trovi i film **di tendenza questa settimana** e quelli **usciti da poco al cinema in Italia**: cliccane uno per vedere dove guardarlo.
+### La pagina iniziale, come Netflix
+
+Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): toccane uno per vedere i titoli più visti di quel genere. Con l'interruttore **"Solo gratis in Italia"** restano solo quelli che puoi guardare gratis (RaiPlay, Pluto TV, Mediaset Infinity…).
+
+Poi, riga per riga:
+
+1. **Perché ti piace: …** — due righe di consigli scelti in base ai generi di quello che hai visto (o messo tra i preferiti) in Jellyfin. I titoli che hai già non te li ripropone. Finché non hai visto nulla trovi "Da non perdere: Commedia / Azione" (per le serie: Dramma / Crime);
+2. **Top 10 della settimana**, con i numeri grandi;
+3. **Appena usciti**: i 10 titoli più visti usciti negli ultimi due mesi (film nei cinema italiani, serie nuove);
+4. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
+
+I consigli e "Continua a guardare" usano l'utente amministratore di Jellyfin creato all'installazione: se in famiglia usate utenti diversi, i consigli seguono quello.
 
 ![Scheda di un film](docs/cerca-film.png)
 
@@ -181,6 +200,17 @@ Nella pagina iniziale di Cerca trovi i film **di tendenza questa settimana** e q
    - **Internet Archive**: le versioni trovate, con la **migliore** in cima. Viene scelta la risoluzione più alta e il file originale invece delle copie compresse. **Scarica** salva il file direttamente; **Via torrent** usa il torrent ufficiale di Archive. Molti film su Archive sono di pubblico dominio: controlla sempre la licenza nella pagina dell'item.
    - **Indexer (Prowlarr)**: i risultati dei tuoi indexer, con dimensione, seed e peer. **Scarica** manda il torrent a qBittorrent.
 4. Segui l'avanzamento nella pagina **Download**. A download finito mediabox passa il film a Radarr, che lo rinomina e lo mette nella libreria **Film** di Jellyfin con la locandina. Lo stato diventa **"Pronto in Jellyfin"**.
+
+### Cerca come app sul telefono
+
+Puoi mettere Cerca nella schermata Home del telefono: si apre a tutto schermo, con la sua icona, come un'app.
+
+- **iPhone (Safari)**: apri `http://mediabox.local/cerca`, premi **Condividi** (il quadrato con la freccia) e poi **Aggiungi alla schermata Home**.
+- **Android (Chrome)**: apri lo stesso indirizzo, premi **⋮** e poi **Aggiungi a schermata Home** (oppure **Installa app**).
+
+Se `mediabox.local` sul telefono non funziona, usa l'indirizzo IP (es. `http://192.168.1.50/cerca`), oppure quello di Tailscale per usarla anche fuori casa.
+
+Su Android, con un indirizzo `http://` la scorciatoia si apre nel browser. Si apre a tutto schermo solo con un indirizzo `https://`, per esempio quello HTTPS di Tailscale. Su iPhone si apre a tutto schermo in entrambi i casi.
 
 ### Avvisami se diventa gratis
 

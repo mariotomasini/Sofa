@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 {% block titolo %}Download{% endblock %}
 {% block contenuto %}
-<h1>Download</h1>
+<h1 class="titolo-pagina">Download</h1>
 <p class="sottotitolo">La pagina si aggiorna da sola. Quando un film è "Pronto in Jellyfin" lo trovi nella libreria Film.</p>
 <div id="elenco-download" class="elenco-download"><p class="caricamento">Carico…</p></div>
 
-<dialog id="dialogo-associa">
+<dialog id="dialogo-associa" aria-labelledby="titolo-associa">
   <form method="dialog" class="modulo">
-    <h2>Di che film si tratta?</h2>
+    <h2 id="titolo-associa">Di che film si tratta?</h2>
     <p id="associa-nome" class="sottotitolo"></p>
     <div class="cerca-film">
+      <label for="associa-cerca" class="nascosto">Titolo del film</label>
       <input id="associa-cerca" type="search" placeholder="Titolo del film…" autocomplete="off">
-      <button type="button" id="associa-bottone" class="secondario">Cerca</button>
+      <button type="button" id="associa-bottone">Cerca</button>
     </div>
     <div id="associa-scelte" class="scelte"></div>
     <button value="annulla" class="secondario">Chiudi</button>

@@ -29,9 +29,14 @@ class Limitatore:
     def __init__(self, per_secondo: float) -> None:
         self.intervallo = 1.0 / per_secondo
         self._prossima = 0.0
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
+        self._ciclo: asyncio.AbstractEventLoop | None = None
 
     async def attendi(self) -> None:
+        # Un lock vale per un solo ciclo di eventi (nei test ne nasce uno per prova)
+        ciclo = asyncio.get_running_loop()
+        if self._lock is None or self._ciclo is not ciclo:
+            self._lock, self._ciclo = asyncio.Lock(), ciclo
         async with self._lock:
             adesso = time.monotonic()
             if self._prossima > adesso:

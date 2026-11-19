@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_mondi.html" import selettore, ricerca %}
+{% block titolo %}{{ genere.nome if genere else "Generi" }}{% endblock %}
+{% block contenuto %}
+{{ selettore(mondo, base, mondi, kids) }}
+{{ ricerca(mondo, base, mondi, autofocus=false) }}
+
+{% if genere %}
+<nav class="generi" aria-label="Generi">
+  {% for g in generi %}
+  <a class="genere" href="{{ base }}/genere/{{ g.id }}?mondo={{ mondo }}{% if gratis %}&amp;gratis=1{% endif %}"{% if g.id == genere.id %} aria-current="page"{% endif %}>{{ g.nome }}</a>
+  {% endfor %}
+</nav>
+
+<div class="genere-testa">
+  <div>
+    <p class="etichetta-maiuscola">{{ mondi[mondo].nome }}</p>
+    <h1>{{ genere.nome }}</h1>
+    <p class="sottotitolo">{{ "Solo i titoli che in Italia puoi guardare gratis, dai più visti." if gratis else "I più visti di questo genere." }}</p>
+  </div>
+  <a class="interruttore{% if gratis %} acceso{% endif %}" role="switch" aria-checked="{{ 'true' if gratis else 'false' }}"
+     href="{{ base }}/genere/{{ genere.id }}?mondo={{ mondo }}{% if not gratis %}&amp;gratis=1{% endif %}">
+    <span class="levetta" aria-hidden="true"></span>Solo gratis in Italia
+  </a>
+</div>
+
+<div id="griglia-genere" class="griglia" aria-live="polite"><p class="caricamento">Carico…</p></div>
+<div class="centrato"><button id="altri" class="secondario" type="button" hidden>Mostra altri</button></div>
+{% endif %}
+{% endblock %}
+{% block script %}{% if genere %}<script>avviaGenere({{ genere.id }}, "{{ mondo }}", {{ 'true' if gratis else 'false' }});</script>{% endif %}{% endblock %}

@@ -1,0 +1,34 @@
+/* FILE GENERATO DA MEDIABOX — stile coordinato con Cerca (stessi colori e font). */
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-display: swap;
+  src: url("/cerca/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; font-display: swap;
+  src: url("/cerca/static/fonts/atkinson-hyperlegible-latin-700-normal.woff2") format("woff2"); }
+
+:root { --mb-sfondo: #17130f; --mb-pannello: #221d18; --mb-pannello-2: #2e2822; --mb-testo: #f3eee7; --mb-tenue: #b8ada0; --mb-accento: #f2b45a; }
+
+html, body, #page_wrapper, #page_container { background: var(--mb-sfondo) !important; }
+body, body * { font-family: "Atkinson Hyperlegible", system-ui, sans-serif !important; }
+body { color: var(--mb-testo); }
+
+/* titoli dei gruppi */
+.services-group h2, #services h2 { color: var(--mb-testo) !important; font-weight: 700 !important; font-size: 1.35rem !important; }
+
+/* tessere dei servizi */
+.service-card, li.service > div {
+  background: var(--mb-pannello) !important; border-radius: 16px !important;
+  box-shadow: none !important; transition: transform .15s ease;
+}
+.service-card:hover, li.service > div:hover { background: var(--mb-pannello-2) !important; }
+.service-name, .service-title { font-weight: 700 !important; font-size: 1.05rem !important; color: var(--mb-testo) !important; }
+.service-description { color: var(--mb-tenue) !important; font-size: .9rem !important; }
+
+/* la tessera "Cerca un film" in evidenza */
+li.service[data-name="Cerca un film"] > div, .service-card[data-name="Cerca un film"] {
+  background: var(--mb-accento) !important;
+}
+li.service[data-name="Cerca un film"] .service-name,
+li.service[data-name="Cerca un film"] .service-description { color: #1d1208 !important; }
+
+/* focus del telecomando */
+a:focus-visible, button:focus-visible { outline: 4px solid #fff !important; outline-offset: 4px; border-radius: 16px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
