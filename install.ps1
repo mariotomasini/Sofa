@@ -70,7 +70,7 @@ if ((Resolve-Path $PSScriptRoot).Path.TrimEnd("\") -ne $Cartella.TrimEnd("\")) {
 
 # --- 3. WSL2 e Docker Desktop ----------------------------------------------------------------
 Scrivi-Titolo "Installo quello che serve"
-& wsl.exe --status *> $null
+Senza-Stderr { & wsl.exe --status *> $null }
 if ($LASTEXITCODE -ne 0) {
     Scrivi-Info "Attivo WSL2 (il sottosistema Linux di Windows)…"
     & wsl.exe --install --no-distribution

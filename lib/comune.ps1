@@ -32,6 +32,16 @@ function Chiedi-SiNo([string]$Domanda, [bool]$Predefinito = $true) {
     }
 }
 
+# Esegue un comando esterno (docker, wsl…) scartandone i messaggi di errore.
+# Con $ErrorActionPreference = "Stop", Windows PowerShell 5.1 trasforma ogni riga
+# scritta su stderr e redirezionata in un errore che ferma tutto lo script:
+# qui dentro le preferenze tornano "Continue" solo per quel comando. $LASTEXITCODE resta valido.
+function Senza-Stderr([scriptblock]$Blocco) {
+    $prima = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $Blocco } finally { $ErrorActionPreference = $prima }
+}
+
 function Leggi-Env([string]$Chiave, [string]$File) {
     if (-not (Test-Path $File)) { return "" }
     $riga = Get-Content -LiteralPath $File -Encoding UTF8 | Where-Object { $_ -match "^$([regex]::Escape($Chiave))=" } | Select-Object -Last 1
@@ -68,17 +78,18 @@ function Aggiungi-DockerAlPath {
     if ((Test-Path $cartella) -and ($env:Path -notlike "*$cartella*")) { $env:Path = "$env:Path;$cartella" }
 }
 
-function Attendi-Docker([int]$Secondi = 300) {
+function Attendi-Docker([int]$Secondi = 600) {
     Aggiungi-DockerAlPath
     $exe = Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
-    & docker info *> $null
+    Senza-Stderr { & docker info *> $null }
     if ($LASTEXITCODE -eq 0) { return }
     if (Test-Path $exe) { Start-Process $exe | Out-Null }
     Scrivi-Info "Avvio Docker Desktop (la prima volta può chiederti di accettare le condizioni d'uso)…"
+    Scrivi-Info "Se si apre la sua finestra: Accept sulle condizioni, poi Skip. Aspetto fino a 10 minuti."
     $scadenza = (Get-Date).AddSeconds($Secondi)
     while ((Get-Date) -lt $scadenza) {
         Start-Sleep -Seconds 5
-        & docker info *> $null
+        Senza-Stderr { & docker info *> $null }
         if ($LASTEXITCODE -eq 0) { return }
     }
     Esci-ConErrore "Docker Desktop non risponde." `
@@ -121,19 +132,19 @@ function Riavvia-Segnati {
     if (-not (Test-Path $file)) { return }
     foreach ($servizio in (Get-Content $file | Where-Object { $_.Trim() })) {
         Scrivi-Info "Riavvio $servizio per applicare le modifiche…"
-        Invoca-Compose restart $servizio *> $null
+        Senza-Stderr { Invoca-Compose restart $servizio *> $null }
     }
     Remove-Item $file -Force
 }
 
 # Scarica le immagini una alla volta: la pagina nel browser mostra "3 di 12"
 function Scarica-Immagini {
-    $immagini = @(Invoca-Compose config --images 2>$null | Where-Object { $_ -and $_ -notlike "mediabox/*" } | Sort-Object -Unique)
+    $immagini = @(Senza-Stderr { Invoca-Compose config --images 2>$null } | Where-Object { $_ -and $_ -notlike "mediabox/*" } | Sort-Object -Unique)
     $i = 0
     foreach ($immagine in $immagini) {
         $i++
         Scrivi-Info "Scarico $(($immagine -split '/')[-1]) ($i di $($immagini.Count))"
-        & docker pull -q $immagine *> $null
+        Senza-Stderr { & docker pull -q $immagine *> $null }
         if ($LASTEXITCODE -ne 0) { Scrivi-Avviso "Non riesco a scaricare $(($immagine -split '/')[-1]): riprovo all'avvio." }
     }
 }
@@ -207,7 +218,7 @@ function Avvia-ProceduraWeb {
     if (-not $porta) { $porta = "80" }
     Ferma-ProceduraWeb
     # se c'è un mediabox vecchio acceso, la porta è sua: lo spengo
-    if (Test-Path (Join-Path $script:MediaboxDir "generato\docker-compose.yml")) { Invoca-Compose stop caddy *> $null }
+    if (Test-Path (Join-Path $script:MediaboxDir "generato\docker-compose.yml")) { Senza-Stderr { Invoca-Compose stop caddy *> $null } }
     & docker run -d --name $script:NomeProcedura -p "$($porta):8080" -v "$($script:MediaboxDir):/mediabox" `
         mediabox/configuratore:locale web | Out-Null
     if ($LASTEXITCODE -ne 0) {
@@ -217,7 +228,7 @@ function Avvia-ProceduraWeb {
 }
 
 function Ferma-ProceduraWeb {
-    & docker rm -f $script:NomeProcedura *> $null
+    Senza-Stderr { & docker rm -f $script:NomeProcedura *> $null }
 }
 
 # Aspetta che la configurazione nel browser sia finita

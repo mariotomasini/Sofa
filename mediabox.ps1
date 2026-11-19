@@ -50,7 +50,7 @@ function Aggiorna-Ip {
     if ($ip) { Scrivi-Env "HOST_IP" $ip $script:EnvFile }
     $ts = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
     if (Test-Path $ts) {
-        $tsIp = (& $ts ip -4 2>$null | Select-Object -First 1)
+        $tsIp = (Senza-Stderr { & $ts ip -4 2>$null } | Select-Object -First 1)
         if ($tsIp) { Scrivi-Env "TAILSCALE_IP" $tsIp $script:EnvFile }
     }
 }
@@ -75,10 +75,10 @@ function Mostra-Stato {
 function Esegui-Backup {
     Scrivi-Titolo "Backup"
     Scrivi-Info "Spengo i servizi per un minuto, così il backup è completo…"
-    Invoca-Compose stop *> $null
+    Senza-Stderr { Invoca-Compose stop *> $null }
     Invoca-Compose run --rm -T configuratore backup | Out-Host
     $esito = $LASTEXITCODE
-    Invoca-Compose start *> $null
+    Senza-Stderr { Invoca-Compose start *> $null }
     Scrivi-Ok "Servizi riaccesi"
     return ($esito -eq 0)
 }
@@ -92,7 +92,7 @@ function Esegui-Ripristino([string]$File) {
     New-Item -ItemType Directory -Force -Path $cartellaBackup | Out-Null
     if ((Split-Path $assoluto -Parent) -ne $cartellaBackup) { Copy-Item $assoluto (Join-Path $cartellaBackup $nome) -Force }
     if (-not (Chiedi-SiNo "Il ripristino sostituisce le configurazioni attuali (non i film). Continuo?" $false)) { return }
-    Invoca-Compose stop *> $null
+    Senza-Stderr { Invoca-Compose stop *> $null }
     Invoca-Compose run --rm -T configuratore ripristina "backup/$nome" | Out-Host
     Aggiorna-Ip
     [void](Applica-Configurazione)
@@ -106,7 +106,7 @@ function Attiva-Remoto {
         & winget install -e --id Tailscale.Tailscale --accept-package-agreements --accept-source-agreements --silent
         if (-not (Test-Path $ts)) { Esci-ConErrore "Non sono riuscito a installare Tailscale." "Scaricalo da tailscale.com e riprova." }
     }
-    & $ts ip -4 *> $null
+    Senza-Stderr { & $ts ip -4 *> $null }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  Si apre il browser: accedi (o crea un account gratuito) e torna qui."
         & $ts up
@@ -189,7 +189,7 @@ switch ($Comando.ToLower()) {
         $release = Trova-UltimaRelease
         if (-not $release -or -not (Test-PiuNuova $release.Tag (Leggi-VersioneInstallata))) { exit 0 }
         $registro = Join-Path $script:MediaboxDir "aggiornamenti.log"
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:MediaboxDir "mediabox.ps1") update *>> $registro
+        Senza-Stderr { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:MediaboxDir "mediabox.ps1") update *>> $registro }
         if ($LASTEXITCODE -eq 0) { Invia-Ntfy "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)." }
         else { Invia-Ntfy "L'aggiornamento di mediabox non è riuscito: scrivi 'mediabox update' sul PC per vedere perché." }
     }
