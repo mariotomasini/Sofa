@@ -5,12 +5,13 @@ $Utf8SenzaBom = New-Object System.Text.UTF8Encoding $false
 
 function Scrivi-Titolo([string]$Testo) { Write-Host ""; Write-Host "== $Testo ==" -ForegroundColor Cyan }
 function Scrivi-Info([string]$Testo)   { Write-Host "  · $Testo" }
-function Scrivi-Ok([string]$Testo)     { Write-Host "  ✔ $Testo" -ForegroundColor Green }
+# √ e × invece di ✔ e ✘: il carattere della console di Windows non ha questi ultimi (si vedrebbero quadratini)
+function Scrivi-Ok([string]$Testo)     { Write-Host "  √ $Testo" -ForegroundColor Green }
 function Scrivi-Avviso([string]$Testo) { Write-Host "  ! $Testo" -ForegroundColor Yellow }
 
 # Mostra un errore con "cosa fare" ed esce
 function Esci-ConErrore([string]$Cosa, [string]$CosaFare = "") {
-    Write-Host "  ✘ $Cosa" -ForegroundColor Red
+    Write-Host "  × $Cosa" -ForegroundColor Red
     if ($CosaFare) { Write-Host "    Cosa fare: $CosaFare" }
     Write-Host ""
     if ($script:InRegistro) { Scrivi-StatoInstallazione "errore" }
