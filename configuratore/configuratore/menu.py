@@ -133,7 +133,7 @@ def menu(cartella: Path, prima_volta: bool = False) -> int:
             nuovo = percorso_valido(input(f"  ? Nuova cartella (es. {esempio}): "), windows)
             if nuovo:
                 scelte["MEDIA_DIR"] = nuovo
-                if originali.get("MEDIA_DIR") and nuovo != originali.get("MEDIA_DIR"):
+                if not prima_volta and originali.get("MEDIA_DIR") and nuovo != originali.get("MEDIA_DIR"):
                     print("    Film, musica e download già presenti verranno spostati lì al salvataggio.")
             else:
                 print(f"    Scrivi il percorso completo della cartella, es. {esempio}")
