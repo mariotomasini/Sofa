@@ -109,7 +109,7 @@ function Sposta-Media([string]$Vecchia, [string]$Nuova) {
     $a = $Nuova -replace "/", "\"
     Scrivi-Titolo "Sposto film, musica e download"
     Scrivi-Info "Da $da a $a (con tanti film può richiedere molto tempo: non spegnere il PC)"
-    Invoca-Compose stop *> $null
+    Senza-Stderr { Invoca-Compose stop *> $null }
     New-Item -ItemType Directory -Force -Path $a | Out-Null
     if (Test-Path $da) {
         & robocopy $da $a /E /MOVE /NFL /NDL /NJH /NJS /NP | Out-Null
