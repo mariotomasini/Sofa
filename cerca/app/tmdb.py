@@ -45,6 +45,30 @@ def riassunto_film(f: dict) -> dict:
     }
 
 
+def riassunto_serie(f: dict) -> dict:
+    return {
+        "id": f["id"],
+        "titolo": f.get("name") or f.get("original_name") or "",
+        "titolo_originale": f.get("original_name") or "",
+        "anno": anno(f.get("first_air_date")),
+        "poster": url_immagine(f.get("poster_path")),
+        "trama": f.get("overview") or "",
+        "popolarita": f.get("popularity") or 0,
+        "serie": True,
+    }
+
+
+# Generi TMDB adatti ai bambini: animazione e famiglia
+GENERI_KIDS = {16, 10751}
+# Generi che non vanno mai in Kids, anche se animati (horror, thriller, crime, guerra)
+GENERI_NO_KIDS = {27, 53, 80, 10752}
+
+
+def adatto_ai_bambini(f: dict) -> bool:
+    generi = set(f.get("genre_ids") or [])
+    return not f.get("adult") and bool(generi & GENERI_KIDS) and not generi & GENERI_NO_KIDS
+
+
 def interpreta_provider(risposta: dict, paese: str) -> dict:
     """Trasforma la risposta di /watch/providers in gruppi leggibili."""
     dati = (risposta.get("results") or {}).get(paese) or {}
@@ -150,6 +174,50 @@ class TMDB:
         )
         film = [riassunto_film(f) for f in dati.get("results", []) if f.get("poster_path")]
         return sorted(film, key=lambda f: f["popolarita"], reverse=True)[:18]
+
+    # --- serie TV ------------------------------------------------------------------
+    async def tendenze_serie(self) -> list[dict]:
+        dati = await self._get("/trending/tv/week", {"language": self.config.lingua_tmdb}, 6 * 3600)
+        return [riassunto_serie(f) for f in dati.get("results", []) if f.get("poster_path")][:18]
+
+    async def cerca_serie(self, testo: str) -> list[dict]:
+        dati = await self._get(
+            "/search/tv", {"query": testo, "language": self.config.lingua_tmdb, "include_adult": "false"}, UN_GIORNO
+        )
+        return [riassunto_serie(f) for f in dati.get("results", [])][:20]
+
+    # --- Kids ------------------------------------------------------------------------
+    async def _scopri_kids(self, genere: int) -> list[dict]:
+        dati = await self._get(
+            "/discover/movie",
+            {
+                "language": self.config.lingua_tmdb,
+                "region": self.config.paese,
+                "with_genres": str(genere),
+                "without_genres": ",".join(str(g) for g in sorted(GENERI_NO_KIDS)),
+                "include_adult": "false",
+                # classificazione USA fino a PG: la più completa su TMDB
+                "certification_country": "US",
+                "certification.lte": "PG",
+                "sort_by": "popularity.desc",
+            },
+            12 * 3600,
+        )
+        return [riassunto_film(f) for f in dati.get("results", []) if f.get("poster_path") and adatto_ai_bambini(f)][:18]
+
+    async def kids_cartoni(self) -> list[dict]:
+        return await self._scopri_kids(16)
+
+    async def kids_famiglia(self) -> list[dict]:
+        return await self._scopri_kids(10751)
+
+    async def cerca_kids(self, testo: str) -> list[dict]:
+        dati = await self._get(
+            "/search/movie",
+            {"query": testo, "language": self.config.lingua_tmdb, "include_adult": "false", "region": self.config.paese},
+            UN_GIORNO,
+        )
+        return [riassunto_film(f) for f in dati.get("results", []) if adatto_ai_bambini(f)][:20]
 
     async def provider(self, tmdb_id: int, durata_cache: float = 12 * 3600) -> dict:
         dati = await self._get(f"/movie/{tmdb_id}/watch/providers", {}, durata_cache)

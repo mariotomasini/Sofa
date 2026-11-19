@@ -168,6 +168,15 @@ Se la TV non lo trova, usa l'IP: `http://192.168.1.50/jellyfin`. Molte TV non ri
 
 ## Come si usa Cerca
 
+In alto scegli il **mondo**: **Film**, **Serie TV**, **Kids** o **Musica**. Ogni mondo ha il suo colore, la sua ricerca e le sue novità:
+
+- **Film**: tendenze della settimana e uscite al cinema in Italia;
+- **Serie TV**: i nuovi episodi delle serie che segui in Sonarr e le serie di tendenza. Scegliendo una serie si apre Sonarr, dove decidi cosa scaricare;
+- **Kids**: solo cartoni e film per famiglie, con locandine più grandi. In Kids non si scarica nulla e il menu sparisce: si esce solo con **"Esci da Kids"** in alto a destra. Il PC o la TV restano in Kids finché non premi quel pulsante;
+- **Musica**: suggerimenti di artisti e tendenze.
+
+Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Kids, mediabox). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
+
 ![Pagina iniziale di Cerca](docs/cerca-home.png)
 
 Nella pagina iniziale di Cerca trovi i film **di tendenza questa settimana** e quelli **usciti da poco al cinema in Italia**: cliccane uno per vedere dove guardarlo.

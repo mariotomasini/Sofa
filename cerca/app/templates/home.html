@@ -1,72 +1,76 @@
 {% extends "base.html" %}
+{% from "_mondi.html" import selettore, ricerca %}
 {% block contenuto %}
-<form class="ricerca grande" action="{{ base }}/cerca" method="get">
-  <label for="q" class="nascosto">Titolo del film</label>
-  <input id="q" name="q" type="search" placeholder="Scrivi il titolo di un film…" autocomplete="off" autofocus required>
-  <button type="submit">Cerca</button>
-</form>
+{{ selettore(mondo, base, mondi, kids) }}
+{{ ricerca(mondo, base, mondi) }}
 
-{% if gratis %}
-<section class="evidenza">
-  <h2>🎉 Ora gratis</h2>
-  <p class="sottotitolo">Film della tua lista "avvisami" che adesso si possono vedere gratis.</p>
-  <div class="griglia">
-    {% for f in gratis %}
-    <a class="scheda" href="{{ base }}/film/{{ f.tmdb_id }}">
-      {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<div class="senza-poster">🎬</div>{% endif %}
-      <span class="titolo">{{ f.titolo }}</span>
-      <span class="anno">{{ f.provider | map(attribute='nome') | join(', ') }}</span>
+<div class="in-primo-piano{% if gratis %} con-gratis{% endif %}">
+  {% for f in gratis[:2] %}
+  {% set servizio = (f.provider | first).nome if f.provider else "un servizio gratuito" %}
+  <section class="evidenza" aria-labelledby="gratis-{{ f.tmdb_id }}">
+    <a class="evidenza-locandina" href="{{ base }}/film/{{ f.tmdb_id }}" tabindex="-1" aria-hidden="true">
+      {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
+    </a>
+    <div class="evidenza-testo">
+      <p class="etichetta-maiuscola verde">Ora gratis</p>
+      <h2 id="gratis-{{ f.tmdb_id }}">{{ f.titolo }}</h2>
+      <p class="evidenza-frase">Era nella tua lista "avvisami". Adesso è gratis su {{ f.provider | map(attribute='nome') | join(', ') or servizio }}.</p>
+      <div class="azioni-riga">
+        <a class="bottone verde" href="{{ base }}/film/{{ f.tmdb_id }}#provider">Guarda su {{ servizio }}</a>
+        <a class="bottone contorno" href="{{ base }}/film/{{ f.tmdb_id }}">Scheda film</a>
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+
+  <section id="attivi" class="riquadro-download" hidden aria-labelledby="titolo-attivi">
+    <div class="riquadro-testa">
+      <h2 id="titolo-attivi" class="etichetta-maiuscola">Download in corso</h2>
+      <a class="link-accento" href="{{ base }}/download">Vedi tutti →</a>
+    </div>
+    <div id="elenco-attivi" class="elenco-download compatto"></div>
+  </section>
+</div>
+
+<section id="novita" class="novita" hidden>
+  <h2>Di tendenza questa settimana</h2>
+  <div id="tendenze" class="striscia"></div>
+  <h2>Usciti da poco al cinema</h2>
+  <div id="cinema" class="striscia"></div>
+</section>
+
+{% if scaricati %}
+<section>
+  <h2>Pronti da guardare</h2>
+  <div class="striscia">
+    {% for d in scaricati %}
+    <a class="scheda" href="/jellyfin/">
+      {% if d.poster %}<img src="{{ d.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ d.titolo }}</span><span class="anno">{{ d.anno }}</span></span>{% endif %}
+      <span class="titolo">{{ d.titolo }}</span>
+      <span class="anno pronto">Pronto in Jellyfin</span>
     </a>
     {% endfor %}
   </div>
 </section>
 {% endif %}
 
-<section id="attivi" hidden>
-  <h2>Download in corso</h2>
-  <div id="elenco-attivi" class="elenco-download"></div>
-  <p><a href="{{ base }}/download">Vedi tutti i download →</a></p>
-</section>
-
-<section id="novita" hidden>
-  <h2>🔥 Di tendenza questa settimana</h2>
-  <div id="tendenze" class="striscia"></div>
-  <h2>🎬 Usciti da poco al cinema</h2>
-  <div id="cinema" class="striscia"></div>
-</section>
-
 {% if ricerche %}
 <section>
-  <h2>Ultime ricerche</h2>
+  <h2 class="h2-tenue">Ultime ricerche</h2>
   <div class="etichette">
     {% for r in ricerche %}<a class="etichetta" href="{{ base }}/cerca?q={{ r.testo | urlencode }}">{{ r.testo }}</a>{% endfor %}
   </div>
 </section>
 {% endif %}
 
-{% if scaricati %}
-<section>
-  <h2>Scaricati di recente</h2>
-  <div class="griglia piccola">
-    {% for d in scaricati %}
-    <a class="scheda" href="/jellyfin/">
-      {% if d.poster %}<img src="{{ d.poster }}" alt="" loading="lazy">{% else %}<div class="senza-poster">🎬</div>{% endif %}
-      <span class="titolo">{{ d.titolo }}</span>
-      <span class="anno">Pronto in Jellyfin</span>
-    </a>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
-
 {% if in_attesa %}
 <section>
-  <h2>Lista "avvisami"</h2>
+  <h2>La tua lista "avvisami"</h2>
   <p class="sottotitolo">Controllo ogni giorno se diventano gratis{% if ntfy %} e ti mando una notifica sul telefono{% endif %}.</p>
-  <div class="griglia piccola">
+  <div class="striscia">
     {% for f in in_attesa %}
     <a class="scheda" href="{{ base }}/film/{{ f.tmdb_id }}">
-      {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<div class="senza-poster">🎬</div>{% endif %}
+      {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
       <span class="titolo">{{ f.titolo }}</span>
       <span class="anno">{{ f.anno }}</span>
     </a>
@@ -75,4 +79,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block script %}<script>avviaDownload({ soloAttivi: true }); avviaNovita();</script>{% endblock %}
+{% block script %}<script>avviaDownload({ soloAttivi: true }); avviaNovita("film");</script>{% endblock %}

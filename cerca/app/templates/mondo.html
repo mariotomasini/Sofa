@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_mondi.html" import selettore, ricerca %}
+{% block titolo %}{{ mondi[mondo].nome }}{% endblock %}
+{% block contenuto %}
+{{ selettore(mondo, base, mondi, kids) }}
+{{ ricerca(mondo, base, mondi) }}
+
+{% if mondo == "kids" %}
+<p class="nota-mondo">Qui ci sono solo titoli adatti ai bambini.</p>
+{% elif mondo == "serie" and not sonarr %}
+<div class="nota">
+  <strong>Le serie TV non sono ancora attive.</strong>
+  <p>Attivale con <code>mediabox impostazioni</code> (voce "Serie TV"): qui compariranno i nuovi episodi delle serie che segui.</p>
+</div>
+{% endif %}
+
+<section id="novita" class="novita" hidden>
+  <h2 id="titolo-prima">{{ "Nuovi episodi delle tue serie" if mondo == "serie" else "Cartoni animati" }}</h2>
+  <div id="tendenze" class="striscia"></div>
+  <h2 id="titolo-seconda">{{ "Serie di tendenza" if mondo == "serie" else "Film per tutta la famiglia" }}</h2>
+  <div id="cinema" class="striscia"></div>
+</section>
+{% endblock %}
+{% block script %}<script>avviaNovita("{{ mondo }}");</script>{% endblock %}

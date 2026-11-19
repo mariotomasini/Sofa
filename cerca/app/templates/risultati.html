@@ -1,29 +1,34 @@
 {% extends "base.html" %}
+{% from "_mondi.html" import ricerca %}
 {% block titolo %}{{ q or "Cerca" }}{% endblock %}
 {% block contenuto %}
-<form class="ricerca" action="{{ base }}/cerca" method="get">
-  <label for="q" class="nascosto">Titolo del film</label>
-  <input id="q" name="q" type="search" value="{{ q }}" placeholder="Scrivi il titolo di un film…" autocomplete="off" required>
-  <button type="submit">Cerca</button>
-</form>
+{{ ricerca(mondo, base, mondi, valore=q, autofocus=not q) }}
 
 {% if q and not film and not errore %}
 <div class="vuoto">
-  <p>Nessun film trovato per "<strong>{{ q }}</strong>".</p>
-  <p>Prova a scrivere il titolo in un altro modo, o in inglese.</p>
+  <p>Nessun risultato per "<strong>{{ q }}</strong>".</p>
+  <p class="sottotitolo">Prova a scrivere il titolo in un altro modo, o in inglese.</p>
 </div>
 {% endif %}
 
 {% if film %}
-<h2>Quale film intendi?</h2>
+<h1 class="titolo-pagina">{{ "Quale serie intendi?" if mondo == "serie" else "Quale film intendi?" }}</h1>
 <div class="griglia">
   {% for f in film %}
-  <a class="scheda" href="{{ base }}/film/{{ f.id }}">
-    {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<div class="senza-poster">🎬</div>{% endif %}
+  {% if mondo == "serie" %}
+  {% set link = "/sonarr/add/new?term=" ~ (f.titolo | urlencode) if sonarr else "" %}
+  {% else %}
+  {% set link = base ~ "/film/" ~ f.id %}
+  {% endif %}
+  <{{ 'a' if link else 'div' }} class="scheda"{% if link %} href="{{ link }}"{% endif %}{% if not link %} tabindex="0"{% endif %}>
+    {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
     <span class="titolo">{{ f.titolo }}</span>
     <span class="anno">{{ f.anno or "anno sconosciuto" }}{% if f.titolo_originale and f.titolo_originale != f.titolo %} · {{ f.titolo_originale }}{% endif %}</span>
-  </a>
+  </{{ 'a' if link else 'div' }}>
   {% endfor %}
 </div>
+{% if mondo == "serie" %}
+<p class="sottotitolo">{% if sonarr %}Scegli una serie: si apre Sonarr, dove decidi se scaricarla tutta, una stagione o i singoli episodi.{% else %}Per scaricare le serie attiva Sonarr con <code>mediabox impostazioni</code>.{% endif %}</p>
+{% endif %}
 {% endif %}
 {% endblock %}
