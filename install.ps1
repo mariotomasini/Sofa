@@ -71,8 +71,9 @@ if ($LASTEXITCODE -ne 0) {
     if ($WithAnime) { $comando += " -WithAnime" }
     if ($WithLidarr) { $comando += " -WithLidarr" }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "mediabox" -Value $comando
-    Scrivi-Avviso "Serve un riavvio del PC. Dopo il riavvio e l'accesso, l'installazione continua da sola."
-    if (Chiedi-SiNo "Riavvio adesso?" $true) { Restart-Computer -Force }
+    Scrivi-Avviso "Serve un riavvio del PC: lo faccio tra 2 minuti. Dopo l'accesso l'installazione continua da sola."
+    Scrivi-Info "Per riavviare più tardi, scrivi: shutdown /a"
+    & shutdown.exe /r /t 120 /c "mediabox: riavvio per attivare WSL2. L'installazione continua dopo l'accesso."
     exit 0
 }
 Scrivi-Ok "WSL2 attivo"
@@ -104,102 +105,15 @@ foreach ($nome in @("settings-store.json", "settings.json")) {
     }
 }
 
-# --- 4. File .env e domande -----------------------------------------------------------------------
-Scrivi-Titolo "Configurazione"
-$nuovaInstallazione = -not (Test-Path $script:EnvFile)
-if ($nuovaInstallazione) { Copy-Item (Join-Path $Cartella ".env.example") $script:EnvFile }
-
-function Test-ChiaveTmdb([string]$Chiave) {
-    try {
-        if ($Chiave.Length -gt 40) {
-            Invoke-RestMethod -Uri "https://api.themoviedb.org/3/configuration" -Headers @{ Authorization = "Bearer $Chiave" } | Out-Null
-        } else {
-            Invoke-RestMethod -Uri "https://api.themoviedb.org/3/configuration?api_key=$Chiave" | Out-Null
-        }
-        return "ok"
-    } catch {
-        if ($_.Exception.Response) { return "rifiutata" }
-        return "sconosciuto"
-    }
-}
-
-if (-not (Leggi-Env "TMDB_API_KEY" $script:EnvFile)) {
-    Write-Host ""
-    Write-Host "  Serve una chiave gratuita di TMDB (il catalogo dei film)."
-    Write-Host "  La trovi su themoviedb.org → il tuo account → Impostazioni → API."
-    while ($true) {
-        $chiave = (Read-Host "  ? Incolla la chiave TMDB") -replace "\s", ""
-        if (-not $chiave) { Write-Host "    La chiave non può essere vuota."; continue }
-        $esito = Test-ChiaveTmdb $chiave
-        if ($esito -eq "ok") { Scrivi-Ok "Chiave TMDB valida"; break }
-        if ($esito -eq "sconosciuto") { Scrivi-Avviso "Non riesco a verificarla (manca Internet?). La salvo comunque."; break }
-        Write-Host "    TMDB non accetta questa chiave. Controlla di averla copiata tutta e riprova."
-    }
-    Scrivi-Env "TMDB_API_KEY" $chiave $script:EnvFile
-}
-
-if (-not (Leggi-Env "ADMIN_PASSWORD" $script:EnvFile)) {
-    Write-Host ""
-    Write-Host "  Scegli una password di amministrazione: vale per Jellyfin e per i pannelli."
-    Write-Host '  Almeno 8 caratteri, senza virgolette doppie (") e senza barra rovesciata (\).'
-    while ($true) {
-        $p1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host "  ? Password" -AsSecureString)))
-        $p2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host "  ? Scrivila di nuovo" -AsSecureString)))
-        if ($p1 -ne $p2) { Write-Host "    Le due password non coincidono, riprova."; continue }
-        if ($p1.Length -lt 8) { Write-Host "    Troppo corta: almeno 8 caratteri."; continue }
-        if ($p1.Contains('"') -or $p1.Contains('\')) { Write-Host "    Togli le virgolette doppie e la barra rovesciata."; continue }
-        if ([Text.Encoding]::UTF8.GetByteCount($p1) -gt 72) { Write-Host "    Troppo lunga: al massimo 72 caratteri."; continue }
-        break
-    }
-    Scrivi-Env "ADMIN_PASSWORD" $p1 $script:EnvFile
-    Remove-Variable p1, p2
-}
-
-if ($nuovaInstallazione) {
-    Write-Host ""
-    Write-Host "  (Facoltativo) Notifiche sul telefono con l'app gratuita ntfy: scegli un nome"
-    Write-Host "  difficile da indovinare, es. mediabox-rossi-4821. Lascia vuoto per saltare."
-    $ntfy = (Read-Host "  ? Argomento ntfy") -replace "[^A-Za-z0-9_-]", ""
-    Scrivi-Env "NTFY_TOPIC" $ntfy $script:EnvFile
-}
-
-foreach ($chiave in @("RADARR_API_KEY", "PROWLARR_API_KEY", "SONARR_API_KEY", "LIDARR_API_KEY")) {
+# --- 4. File .env ---------------------------------------------------------------------------
+Scrivi-Titolo "Preparo la configurazione"
+if (-not (Test-Path $script:EnvFile)) { Copy-Item (Join-Path $Cartella ".env.example") $script:EnvFile }
+foreach ($chiave in @("RADARR_API_KEY", "PROWLARR_API_KEY", "SONARR_API_KEY", "LIDARR_API_KEY", "IMPOSTAZIONI_SEGRETO")) {
     if (-not (Leggi-Env $chiave $script:EnvFile)) { Scrivi-Env $chiave (Nuova-ChiaveCasuale) $script:EnvFile }
 }
-
 if ($WithSonarr) { Scrivi-Env "WITH_SONARR" "si" $script:EnvFile }
 if ($WithAnime) { Scrivi-Env "WITH_ANIME" "si" $script:EnvFile }
 if ($WithLidarr) { Scrivi-Env "WITH_LIDARR" "si" $script:EnvFile }
-
-# Cosa guardi? (solo la prima volta; dopo si cambia con "mediabox impostazioni")
-Costruisci-Configuratore
-if ($nuovaInstallazione) { [void](Mostra-MenuImpostazioni -PrimaVolta) }
-
-# Cartella dei media: proponiamo il disco con più spazio libero; si può scriverne un'altra
-if ($nuovaInstallazione) {
-    $dischi = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Sort-Object FreeSpace -Descending
-    $proposta = "C:\Mediabox\dati"
-    $migliore = $dischi | Select-Object -First 1
-    if ($migliore -and $migliore.DeviceID -ne "C:") {
-        $proposta = "$($migliore.DeviceID)\Mediabox"
-        Scrivi-Info "Il disco con più spazio è $($migliore.DeviceID) ($([math]::Round($migliore.FreeSpace / 1GB)) GB liberi)."
-    }
-    Write-Host ""
-    Write-Host "  Dove salvo film, serie, musica e download?"
-    while ($true) {
-        $scelta = (Read-Host "  ? Premi Invio per usare $proposta, oppure scrivi un'altra cartella").Trim().Trim('"').TrimEnd("\")
-        if (-not $scelta) { $scelta = $proposta; break }
-        if ($scelta -match "^[A-Za-z]:\\.+") { break }
-        Write-Host "    Scrivi il percorso completo con la lettera del disco (es. E:\Film)."
-    }
-    Scrivi-Env "MEDIA_DIR" ($scelta -replace "\\", "/") $script:EnvFile
-}
-$mediaDir = Leggi-Env "MEDIA_DIR" $script:EnvFile
-New-Item -ItemType Directory -Force -Path ($mediaDir -replace "/", "\") | Out-Null
-Scrivi-Ok "Film, serie e download in: $($mediaDir -replace '/', '\')"
-
-# --- 5. Hardware e rete -----------------------------------------------------------------------
-Scrivi-Titolo "Rilevo l'hardware e la rete"
 Scrivi-Env "PIATTAFORMA" "windows" $script:EnvFile
 Scrivi-Env "PUID" "1000" $script:EnvFile
 Scrivi-Env "PGID" "1000" $script:EnvFile
@@ -207,36 +121,28 @@ Scrivi-Env "VAAPI" "no" $script:EnvFile
 Scrivi-Env "DVB" "no" $script:EnvFile
 $ip = Trova-IpLocale
 Scrivi-Env "HOST_IP" $ip $script:EnvFile
-Scrivi-Info "Su Windows la transcodifica usa il processore e i tuner USB non sono supportati (limiti di Docker Desktop)."
+Scrivi-Ok "File di configurazione pronto"
 
+# --- 5. Hardware e rete -----------------------------------------------------------------------
+Scrivi-Titolo "Rilevo l'hardware e la rete"
+Scrivi-Info "Su Windows la transcodifica usa il processore e i tuner USB non sono supportati (limiti di Docker Desktop)."
+Costruisci-Configuratore
 $hdhr = Trova-HDHomeRun
 if ($hdhr) { Scrivi-Env "HDHOMERUN_IP" $hdhr $script:EnvFile; Scrivi-Ok "HDHomeRun trovato in rete: $hdhr" }
 else { Scrivi-Info "Nessun HDHomeRun in rete" }
 
-# Porta 80 occupata da un altro programma (es. IIS)?
+# Porta 80 occupata da un altro programma (es. IIS)? Allora 8080, senza chiedere
 $porta = Leggi-Env "HTTP_PORT" $script:EnvFile
 if (-not $porta) { $porta = "80" }
 $occupata = Get-NetTCPConnection -LocalPort ([int]$porta) -State Listen -ErrorAction SilentlyContinue |
-    Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -notmatch "docker|wslrelay|vpnkit" }
+    Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -notmatch "docker|wslrelay|vpnkit|com.docker" }
 if ($occupata) {
-    Scrivi-Avviso "La porta $porta è già usata da un altro programma."
-    if (Chiedi-SiNo "Uso la porta 8080? (l'indirizzo avrà :8080 alla fine)" $true) { Scrivi-Env "HTTP_PORT" "8080" $script:EnvFile; $porta = "8080" }
+    Scrivi-Avviso "La porta $porta è già usata da un altro programma: uso la 8080."
+    Scrivi-Env "HTTP_PORT" "8080" $script:EnvFile
+    $porta = "8080"
 }
-
-# Nome mediabox.local: Windows annuncia da solo solo il proprio nome
-if ($env:COMPUTERNAME -ne "MEDIABOX") {
-    Write-Host ""
-    Write-Host "  Per usare l'indirizzo http://mediabox.local il PC deve chiamarsi MEDIABOX."
-    if (Chiedi-SiNo "Rinomino il PC in MEDIABOX? (serve un riavvio alla fine)" $true) {
-        Rename-Computer -NewName "MEDIABOX" -Force -WarningAction SilentlyContinue
-        $riavvioNecessario = $true
-        Scrivi-Env "NOME_HOST" "mediabox.local" $script:EnvFile
-    } else {
-        Scrivi-Env "NOME_HOST" "$($env:COMPUTERNAME.ToLower()).local" $script:EnvFile
-    }
-} else {
-    Scrivi-Env "NOME_HOST" "mediabox.local" $script:EnvFile
-}
+# Windows annuncia in rete solo il proprio nome: "nomedelpc.local" (mediabox.local se si chiama MEDIABOX)
+Scrivi-Env "NOME_HOST" "$($env:COMPUTERNAME.ToLower()).local" $script:EnvFile
 
 # Firewall: solo reti private (casa), mai reti pubbliche
 $regole = @(
@@ -249,21 +155,7 @@ foreach ($r in $regole) {
     New-NetFirewallRule -DisplayName $r.Nome -Direction Inbound -Action Allow -Protocol $r.Protocollo `
         -LocalPort $r.Porta -Profile Private, Domain | Out-Null
 }
-$pubbliche = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq "Public" }
-if ($pubbliche) {
-    Scrivi-Avviso "La rete '$($pubbliche[0].Name)' è impostata come 'Pubblica': gli altri dispositivi non vedranno mediabox."
-    if (Chiedi-SiNo "È la rete di casa? La imposto come 'Privata'?" $true) {
-        $pubbliche | Set-NetConnectionProfile -NetworkCategory Private
-    }
-}
 Scrivi-Ok "Firewall pronto (solo rete di casa)"
-
-# Il PC non deve andare in sospensione, altrimenti mediabox si spegne
-if (Chiedi-SiNo "Disattivo la sospensione automatica del PC (quando è collegato alla corrente)?" $true) {
-    & powercfg /change standby-timeout-ac 0
-    & powercfg /change hibernate-timeout-ac 0
-    Scrivi-Ok "Sospensione disattivata"
-}
 
 # Comando "mediabox" disponibile in qualsiasi finestra
 $percorsoMacchina = [Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -271,10 +163,60 @@ if ($percorsoMacchina -notlike "*$Cartella*") {
     [Environment]::SetEnvironmentVariable("Path", "$percorsoMacchina;$Cartella", "Machine")
 }
 Scrivi-Ok "Comando 'mediabox' installato (funziona nelle nuove finestre di PowerShell o Prompt)"
-Installa-AggiornamentiAutomatici
 
-# --- 6. Avvio e configurazione automatica ---------------------------------------------------
-$tuttoBene = Applica-Configurazione
+# --- 6. Configurazione dal browser --------------------------------------------------------------
+# (la password la scrive solo la procedura: se manca, la procedura non è stata fatta)
+if (-not (Leggi-Env "ADMIN_PASSWORD" $script:EnvFile)) {
+    $pubbliche = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq "Public" })
+    if ($pubbliche) {
+        # altrimenti il telefono non raggiunge la pagina di configurazione
+        Scrivi-Info "La rete '$($pubbliche[0].Name)' era 'Pubblica': la imposto come rete di casa ('Privata') per la configurazione."
+        $pubbliche | Set-NetConnectionProfile -NetworkCategory Private
+    }
+    Scrivi-Dischi
+    Avvia-ProceduraWeb
+    $suffisso = if ($porta -eq "80") { "" } else { ":$porta" }
+    Scrivi-Titolo "Continua dal browser"
+    Write-Host ""
+    Write-Host "  Apri questo indirizzo da questo PC o dal telefono collegato alla stessa rete:"
+    Write-Host ""
+    Write-Host "      http://$($ip)$suffisso" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Lì scegli la password, cosa guardare e dove salvare i film."
+    Write-Host "  Puoi seguire l'installazione dal browser: questa finestra puoi anche ignorarla."
+    Write-Host ""
+    Start-Process "http://localhost$suffisso/impostazioni/" -ErrorAction SilentlyContinue
+    Attendi-ProceduraWeb
+}
+
+# Le scelte di Windows fatte nella procedura
+$riavvioNecessario = $false
+if ((Leggi-Env "WIN_RINOMINA_PC" $script:EnvFile) -ne "no" -and $env:COMPUTERNAME -ne "MEDIABOX") {
+    Rename-Computer -NewName "MEDIABOX" -Force -WarningAction SilentlyContinue
+    Scrivi-Env "NOME_HOST" "mediabox.local" $script:EnvFile
+    $riavvioNecessario = $true
+    Scrivi-Ok "Il PC si chiamerà MEDIABOX dopo il riavvio"
+}
+if ((Leggi-Env "WIN_RETE_PRIVATA" $script:EnvFile) -eq "no") {
+    Scrivi-Info "Rete lasciata com'era"
+} else {
+    Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq "Public" } |
+        Set-NetConnectionProfile -NetworkCategory Private
+}
+if ((Leggi-Env "WIN_NO_SOSPENSIONE" $script:EnvFile) -ne "no") {
+    & powercfg /change standby-timeout-ac 0
+    & powercfg /change hibernate-timeout-ac 0
+    Scrivi-Ok "Sospensione disattivata (con la corrente)"
+}
+
+$mediaDir = Leggi-Env "MEDIA_DIR" $script:EnvFile
+New-Item -ItemType Directory -Force -Path ($mediaDir -replace "/", "\") | Out-Null
+Scrivi-Ok "Film, serie e download in: $($mediaDir -replace '/', '\')"
+Installa-AggiornamentiAutomatici
+Installa-ControlloImpostazioni
+
+# --- 7. Avvio e configurazione automatica ---------------------------------------------------
+$tuttoBene = Con-Registro { Applica-Configurazione }
 
 Scrivi-Titolo "Ultima cosa: accensione automatica"
 Write-Host "  Docker Desktop parte quando entri in Windows. Perché mediabox si accenda da solo"
@@ -283,11 +225,10 @@ Write-Host "  premi Win+R, scrivi netplwiz, togli la spunta 'Per utilizzare ques
 Write-Host "  necessario che l'utente immetta il nome utente e la password' (dettagli nel README)."
 
 if ($riavvioNecessario) {
-    Scrivi-Avviso "Il PC è stato rinominato in MEDIABOX: serve un riavvio perché mediabox.local funzioni."
-    if (Chiedi-SiNo "Riavvio adesso?" $false) { Restart-Computer -Force }
+    Scrivi-Avviso "Il PC è stato rinominato in MEDIABOX: riavvialo quando vuoi perché http://mediabox.local funzioni."
 }
 if (-not $tuttoBene) {
-    Scrivi-Avviso "Qualcosa non è andato: leggi 'Cosa non è andato' qui sopra. Spesso basta scrivere: mediabox configura"
+    Scrivi-Avviso "Qualcosa non è andato: leggi 'Cosa non è andato' qui sopra (o nel browser). Spesso basta scrivere: mediabox configura"
 }
 Write-Host ""
-Read-Host "  Premi Invio per chiudere" | Out-Null
+Write-Host "  Fatto. Puoi chiudere questa finestra."

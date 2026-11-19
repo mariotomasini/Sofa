@@ -7,6 +7,7 @@ Uso (dentro il container):
     python -m configuratore riepilogo   # stampa indirizzi e stato
     python -m configuratore backup
     python -m configuratore ripristina <file>
+    python -m configuratore web         # configurazione dal browser (porta 8080)
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ def _configura(imp: Impostazioni) -> int:
             exc.mostra()
             esito.fallito(nome, exc)
     stampa_riepilogo(imp, esito)
+    esito.salva(CARTELLA_MEDIABOX / "generato" / "esito.json")
     return 1 if esito.falliti else 0
 
 
@@ -64,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     sotto.add_parser("hdhomerun")
     imp_menu = sotto.add_parser("impostazioni")
     imp_menu.add_argument("--prima-volta", action="store_true")
+    web = sotto.add_parser("web")
+    web.add_argument("--porta", type=int, default=8080)
     rip = sotto.add_parser("ripristina")
     rip.add_argument("file")
     args = parser.parse_args(argv)
@@ -72,6 +76,14 @@ def main(argv: list[str] | None = None) -> int:
         from .menu import menu
 
         return menu(CARTELLA_MEDIABOX, prima_volta=args.prima_volta)
+
+    if args.comando == "web":
+        import uvicorn
+
+        from .web.app import crea_app
+
+        uvicorn.run(crea_app(CARTELLA_MEDIABOX), host="0.0.0.0", port=args.porta, log_level="warning")  # noqa: S104
+        return 0
 
     if args.comando == "hdhomerun":
         from .hdhomerun import main as cerca_hdhomerun

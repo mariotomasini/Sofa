@@ -117,7 +117,7 @@ class TMDB:
         if not chiave or chiave == "da-impostare":
             raise ErroreServizio(
                 "Manca la chiave di TMDB.",
-                "Mettila in TMDB_API_KEY nel file .env di mediabox e poi esegui \"mediabox configura\".",
+                "Aggiungila dalla pagina Impostazioni di mediabox (/impostazioni), voce \"La chiave di TMDB\".",
             )
         # Il "Read Access Token" (lungo) va nell'intestazione, la chiave corta nei parametri
         if len(chiave) > 40:
@@ -142,8 +142,8 @@ class TMDB:
         if r.status_code == 401:
             raise ErroreServizio(
                 "TMDB rifiuta la chiave API.",
-                "Controlla TMDB_API_KEY nel file .env (themoviedb.org → Impostazioni → API), "
-                "poi esegui \"mediabox configura\".",
+                "Controlla la chiave nella pagina Impostazioni di mediabox (/impostazioni): deve essere tutta, "
+                "senza spazi. Oppure cancellala: Cerca funziona anche senza, con meno informazioni.",
             )
         if r.status_code == 429:
             raise ErroreServizio("TMDB chiede di rallentare.", "Aspetta qualche secondo e riprova.")
@@ -247,9 +247,8 @@ class TMDB:
         nomi = {g["id"]: g["nome"] for g in await self.generi("movie")}
         return [{"id": g, "nome": nomi[g]} for g in GENERI_PER_KIDS if g in nomi]
 
-    async def scopri(self, tipo: str, genere: int, solo_gratis: bool = False, pagina: int = 1,
-                     kids: bool = False) -> list[dict]:
-        """I titoli più popolari di un genere; con solo_gratis quelli gratis in Italia."""
+    async def scopri(self, tipo: str, genere: int, pagina: int = 1, kids: bool = False) -> list[dict]:
+        """I titoli più popolari di un genere."""
         parametri = {
             "language": self.config.lingua_tmdb,
             "with_genres": str(genere),
@@ -259,9 +258,6 @@ class TMDB:
             # niente titoli sconosciuti con un voto a caso
             "vote_count.gte": "50",
         }
-        if solo_gratis:
-            parametri |= {"watch_region": self.config.paese, "with_watch_monetization_types": "free|ads"}
-            parametri.pop("vote_count.gte")
         if kids:
             parametri |= {
                 "without_genres": ",".join(str(g) for g in sorted(GENERI_NO_KIDS)),
@@ -292,6 +288,42 @@ class TMDB:
             6 * 3600,
         )
         return [riassunto(f, tipo) for f in dati.get("results", []) if f.get("poster_path")][:10]
+
+    # --- piattaforme (Netflix, Prime Video…) ------------------------------------------
+    async def piattaforme(self, tipo: str = "movie") -> list[dict]:
+        """Le piattaforme di streaming in Italia, dalla più diffusa: [{"id", "nome", "logo"}]."""
+        dati = await self._get(
+            f"/watch/providers/{tipo}",
+            {"language": self.config.lingua_tmdb, "watch_region": self.config.paese},
+            7 * UN_GIORNO,
+        )
+        paese = self.config.paese
+
+        def priorita(p: dict) -> int:
+            return (p.get("display_priorities") or {}).get(paese, p.get("display_priority", 999))
+
+        return [
+            {"id": p["provider_id"], "nome": p.get("provider_name", ""), "logo": url_immagine(p.get("logo_path"), "w92")}
+            for p in sorted(dati.get("results", []), key=priorita)
+            if p.get("provider_id") and p.get("provider_name")
+        ]
+
+    async def su_piattaforma(self, tipo: str, piattaforma: int, pagina: int = 1) -> list[dict]:
+        """I titoli più visti di una piattaforma, in Italia (abbonamento o gratis, non noleggio)."""
+        dati = await self._get(
+            f"/discover/{tipo}",
+            {
+                "language": self.config.lingua_tmdb,
+                "watch_region": self.config.paese,
+                "with_watch_providers": str(piattaforma),
+                "with_watch_monetization_types": "flatrate|free|ads",
+                "include_adult": "false",
+                "sort_by": "popularity.desc",
+                "page": str(max(1, min(pagina, 20))),
+            },
+            12 * 3600,
+        )
+        return [riassunto(f, tipo) for f in dati.get("results", []) if f.get("poster_path")]
 
     async def id_genere(self, tipo: str, nomi: list[str]) -> dict[str, int]:
         """Traduce i nomi dei generi di Jellyfin (italiano o inglese) negli id di TMDB."""

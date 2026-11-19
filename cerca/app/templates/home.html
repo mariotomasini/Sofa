@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_mondi.html" import selettore, ricerca, generi %}
+{% from "_mondi.html" import selettore, ricerca, generi, dialogo_piattaforme %}
 {% block contenuto %}
 {{ selettore(mondo, base, mondi, kids) }}
 {{ ricerca(mondo, base, mondi) }}
@@ -34,6 +34,7 @@
 </div>
 
 <div id="righe" class="righe" aria-busy="true"></div>
+{{ dialogo_piattaforme("film") }}
 
 {% if scaricati %}
 <section>

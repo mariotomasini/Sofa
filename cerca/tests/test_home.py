@@ -76,7 +76,7 @@ def test_nomi_dei_generi_di_jellyfin_in_italiano_e_inglese():
     assert serie == {"Azione": 10759, "Dramma": 18, "Fantascienza": 10765}
 
 
-def test_scopri_solo_gratis_e_kids():
+def test_scopri_e_kids():
     richieste = []
 
     def extra(percorso, parametri):
@@ -86,15 +86,14 @@ def test_scopri_solo_gratis_e_kids():
 
     async def prova():
         tmdb = crea_tmdb(extra, richieste)
-        normale = await tmdb.scopri("movie", 16, solo_gratis=True)
+        normale = await tmdb.scopri("movie", 16)
         kids = await tmdb.scopri("movie", 16, kids=True)
         return normale, kids
 
     normale, kids = asyncio.run(prova())
     assert [f["id"] for f in normale] == [1, 2, 4]  # senza locandina no
     assert [f["id"] for f in kids] == [1]  # niente horror e solo titoli per bambini
-    gratis = richieste[0][1]
-    assert gratis["watch_region"] == "IT" and gratis["with_watch_monetization_types"] == "free|ads"
+    assert "watch_region" not in richieste[0][1]
     assert richieste[1][1]["certification.lte"] == "PG"
 
 
@@ -223,3 +222,39 @@ def test_jellyfin_generi_continua_e_libreria():
     assert continua[0]["percentuale"] == 38
     assert continua[0]["poster"].startswith("/jellyfin/Items/s1/Images/Primary")
     assert continua[0]["link"] == "/jellyfin/web/#/details?id=e1"
+
+
+def test_righe_per_piattaforma():
+    richieste = []
+    fornitori = {"results": [
+        {"provider_id": 119, "provider_name": "Amazon Prime Video", "logo_path": "/prime.jpg",
+         "display_priorities": {"IT": 2}},
+        {"provider_id": 8, "provider_name": "Netflix", "logo_path": "/netflix.jpg", "display_priorities": {"IT": 1}},
+        {"provider_id": 283, "provider_name": "Crunchyroll", "logo_path": "/cr.jpg", "display_priorities": {"IT": 9}},
+    ]}
+
+    def extra(percorso, parametri):
+        if percorso == "/watch/providers/movie":
+            return httpx.Response(200, json=fornitori)
+        if percorso == "/discover/movie" and "with_watch_providers" in parametri:
+            base = int(parametri["with_watch_providers"]) * 1000
+            return httpx.Response(200, json={"results": [film(base + i) for i in range(1, 4)]})
+        if percorso.startswith("/discover/") or percorso.startswith("/trending/"):
+            return httpx.Response(200, json={"results": [film(i) for i in range(1, 4)]})
+        return httpx.Response(404)
+
+    async def prova(scelte):
+        tmdb = crea_tmdb(extra, richieste)
+        assert [x["nome"] for x in await tmdb.piattaforme("movie")] == ["Netflix", "Amazon Prime Video", "Crunchyroll"]
+        return await home.righe(tmdb, JellyfinFinto(rotto=True), "movie", scelte)
+
+    risposta = asyncio.run(prova([283, 8, 999]))  # 999 non esiste: si salta
+    righe = [r for r in risposta["righe"] if r["tipo"] == "piattaforma"]
+    assert [r["titolo"] for r in righe] == ["Su Crunchyroll", "Su Netflix"]
+    assert righe[1]["elementi"][0]["id"] == 8001 and righe[1]["logo"].endswith("/netflix.jpg")
+    filtro = next(q for p_, q in richieste if q.get("with_watch_providers") == "8")
+    assert filtro["watch_region"] == "IT" and filtro["with_watch_monetization_types"] == "flatrate|free|ads"
+    # senza scelte salvate: Netflix, Prime Video, Disney+ (che qui non c'è)
+    predefinite = asyncio.run(prova(None))
+    titoli = [r["titolo"] for r in predefinite["righe"] if r["tipo"] == "piattaforma"]
+    assert titoli == ["Su Netflix", "Su Amazon Prime Video"]

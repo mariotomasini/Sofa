@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_mondi.html" import selettore, ricerca, generi %}
+{% from "_mondi.html" import selettore, ricerca, generi, dialogo_piattaforme %}
 {% block titolo %}{{ mondi[mondo].nome }}{% endblock %}
 {% block contenuto %}
 {{ selettore(mondo, base, mondi, kids) }}
@@ -24,6 +24,7 @@
 </section>
 {% else %}
 <div id="righe" class="righe" aria-busy="true"></div>
+{{ dialogo_piattaforme(mondo) }}
 {% endif %}
 {% endblock %}
 {% block script %}<script>avviaGeneri(); {% if mondo == "kids" %}avviaNovita("kids");{% else %}avviaHome("{{ mondo }}");{% endif %}</script>{% endblock %}

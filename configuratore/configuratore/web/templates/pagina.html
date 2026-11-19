@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#17130f">
+  <title>{{ "Impostazioni" if stato.configurato else "Configura mediabox" }} · mediabox</title>
+  <link rel="stylesheet" href="{{ base }}/static/stile.css">
+  <link rel="icon" href="{{ base }}/static/logo.svg" type="image/svg+xml">
+</head>
+{% set s = stato.scelte or {} %}
+<body data-base="{{ base }}">
+  <header class="testata">
+    <a class="logo" href="/" aria-label="mediabox, pagina iniziale">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="currentColor"/><path d="M16 11.5 L28 20 L16 28.5 Z" fill="#1d1208"/></svg>
+      <span>mediabox</span>
+    </a>
+    <button id="esci" class="testo" type="button" hidden>Esci</button>
+  </header>
+
+  <main id="contenuto">
+    <!-- ======================= Procedura guidata ======================= -->
+    <form id="modulo" class="vista" data-vista="procedura" novalidate hidden>
+      <div class="passi-indicatore" aria-hidden="true"><span id="indicatore-testo"></span><div class="tacche" id="tacche"></div></div>
+
+      <section class="passo" data-passo="benvenuto" aria-labelledby="t-benvenuto">
+        <p class="etichetta">Benvenuto</p>
+        <h1 id="t-benvenuto">Configuriamo mediabox</h1>
+        <p class="grande">Bastano due minuti. Ti chiedo una password e cosa vuoi guardare: al resto penso io. Non serve registrarsi da nessuna parte.</p>
+        <ul class="elenco-semplice">
+          <li><span class="spunta" aria-hidden="true">1</span>Una password per te</li>
+          <li><span class="spunta" aria-hidden="true">2</span>Cosa guardi e dove salvarlo</li>
+          <li><span class="spunta" aria-hidden="true">3</span>Gli avvisi sul telefono, se li vuoi</li>
+        </ul>
+        {% if s.hardware %}
+        <div class="trovato">
+          <strong>Ho già controllato il PC</strong>
+          <span>{{ "✔ Scheda grafica: video fluidi anche sulla TV" if s.hardware.grafica else "· Nessuna scheda grafica: i video li converte il processore" }}</span>
+          <span>{{ "✔ Tuner TV collegato: avrai la TV in diretta" if s.hardware.tuner else ("✔ HDHomeRun in rete: avrai la TV in diretta" if s.hardware.hdhomerun else "· Nessun tuner TV: la TV in diretta resta spenta") }}</span>
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="passo" data-passo="password" aria-labelledby="t-password">
+        <p class="etichetta">Sicurezza</p>
+        <h1 id="t-password">Scegli una password</h1>
+        <p>Ti servirà per Jellyfin, per le impostazioni e per i pannelli. Il nome utente è <strong>admin</strong>.</p>
+        <label class="campo" for="password">Password</label>
+        <div class="con-occhio">
+          <input id="password" name="password" type="password" autocomplete="new-password">
+          <button type="button" class="occhio" data-mostra="password" aria-label="Mostra la password">Mostra</button>
+        </div>
+        <ul class="regole" id="regole">
+          <li data-regola="lunga">Almeno 8 caratteri</li>
+          <li data-regola="caratteri">Senza virgolette doppie (") e senza barra rovesciata (\)</li>
+        </ul>
+        <label class="campo" for="password2">Scrivila di nuovo</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password">
+        <p class="messaggio" id="msg-password" role="status"></p>
+      </section>
+
+      <section class="passo" data-passo="scelte" aria-labelledby="t-scelte">
+        <p class="etichetta">Cosa vuoi fare</p>
+        <h1 id="t-scelte">Cosa guardi?</h1>
+        <p>I film ci sono sempre. Accendi il resto: puoi cambiare idea quando vuoi.</p>
+        <div class="schede-scelta">
+          <div class="scelta fissa"><span class="interruttore acceso" aria-hidden="true"></span><span><strong>Film</strong><small>Cerca, scarica e guarda in Jellyfin. Sempre attivo.</small></span></div>
+          {% for v in s.voci or [] if v.gruppo == "guardi" %}
+          <label class="scelta" for="voce-{{ v.chiave }}">
+            <input type="checkbox" id="voce-{{ v.chiave }}" data-voce="{{ v.chiave }}"{% if v.attivo %} checked{% endif %}>
+            <span class="interruttore" aria-hidden="true"></span>
+            <span><strong>{{ v.titolo }}</strong><small>{{ v.descrizione }}</small></span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="lingue" id="blocco-lingue">
+          <label class="campo" for="lingue">Lingue dei sottotitoli, in ordine di preferenza</label>
+          <input id="lingue" name="lingue" type="text" value="{{ s.lingue or 'it,en' }}" autocomplete="off" spellcheck="false">
+          <p class="aiuto">Codici di due lettere: it italiano, en inglese, ja giapponese, es spagnolo, fr francese.</p>
+        </div>
+        <h2>Manutenzione</h2>
+        <div class="schede-scelta">
+          {% for v in s.voci or [] if v.gruppo == "pc" %}
+          <label class="scelta" for="voce-{{ v.chiave }}">
+            <input type="checkbox" id="voce-{{ v.chiave }}" data-voce="{{ v.chiave }}"{% if v.attivo %} checked{% endif %}>
+            <span class="interruttore" aria-hidden="true"></span>
+            <span><strong>{{ v.titolo }}</strong><small>{{ v.descrizione }}</small></span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="messaggio" id="msg-scelte" role="status"></p>
+      </section>
+
+      <section class="passo" data-passo="cartella" aria-labelledby="t-cartella">
+        <p class="etichetta">Spazio</p>
+        <h1 id="t-cartella">Dove salvo film e musica?</h1>
+        <p class="solo-procedura">Ti consiglio il disco con più spazio libero.</p>
+        <p class="solo-impostazioni">Se scegli un'altra cartella, sposto lì tutto quello che c'è già. Con tanti film può volerci molto.</p>
+        <div class="dischi" role="radiogroup" aria-labelledby="t-cartella">
+          {% for d in stato.dischi or [] %}
+          {% set scelto = (d.percorso == s.cartella) if stato.configurato else d.consigliato %}
+          <label class="disco" for="disco-{{ loop.index }}">
+            <input type="radio" name="disco" id="disco-{{ loop.index }}" value="{{ d.percorso }}"{% if scelto %} checked{% endif %}>
+            <span class="disco-testo">
+              <strong>{{ d.nome }}{% if d.consigliato and not stato.configurato %} <em class="consigliato">consigliato</em>{% endif %}</strong>
+              <code>{{ d.percorso }}</code>
+              {% if d.totale_gb %}
+              <span class="barra-disco" aria-hidden="true"><span style="width: {{ ((1 - d.libero_gb / d.totale_gb) * 100) | round | int }}%"></span></span>
+              <small>{{ d.libero_gb }} GB liberi su {{ d.totale_gb }} GB</small>
+              {% endif %}
+            </span>
+          </label>
+          {% endfor %}
+          <label class="disco" for="disco-altro">
+            <input type="radio" name="disco" id="disco-altro" value="altro"{% if stato.configurato and s.cartella not in (stato.dischi or [])|map(attribute='percorso')|list %} checked{% endif %}>
+            <span class="disco-testo"><strong>Un'altra cartella</strong>
+              <input id="cartella-altra" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="{{ 'D:\\Mediabox' if stato.windows else '/mnt/disco/mediabox' }}"
+                     value="{{ s.cartella if stato.configurato and s.cartella not in (stato.dischi or [])|map(attribute='percorso')|list else '' }}">
+            </span>
+          </label>
+        </div>
+        <p class="messaggio" id="msg-cartella" role="status"></p>
+      </section>
+
+      <section class="passo" data-passo="telefono" aria-labelledby="t-telefono">
+        <p class="etichetta">Facoltativo</p>
+        <h1 id="t-telefono">Avvisi sul telefono</h1>
+        <p>Con l'app gratuita <strong>ntfy</strong> ti avviso quando un film è pronto da guardare, quando uno della tua lista diventa gratis e se il disco si riempie.</p>
+        <label class="scelta" for="usa-ntfy">
+          <input type="checkbox" id="usa-ntfy"{% if s.ntfy or not stato.configurato %} checked{% endif %}>
+          <span class="interruttore" aria-hidden="true"></span>
+          <span><strong>Voglio gli avvisi</strong><small>Puoi spegnerli quando vuoi.</small></span>
+        </label>
+        <div id="blocco-ntfy">
+          <ol class="istruzioni">
+            <li>Installa <strong>ntfy</strong> dal Play Store o dall'App Store.</li>
+            <li>Nell'app tocca <strong>+</strong> e scrivi questo nome:</li>
+          </ol>
+          <label class="campo" for="ntfy">Nome degli avvisi</label>
+          <div class="con-occhio">
+            <input id="ntfy" name="ntfy" type="text" value="{{ s.ntfy or stato.ntfy_suggerito or '' }}" autocomplete="off" spellcheck="false">
+            <button type="button" class="secondario" id="prova-ntfy">Manda una prova</button>
+          </div>
+          <p class="aiuto">Chi conosce il nome può leggere gli avvisi: per questo ha delle lettere a caso in fondo.</p>
+          <p class="messaggio" id="msg-ntfy" role="status"></p>
+        </div>
+      </section>
+
+      {% if stato.windows %}
+      <section class="passo" data-passo="pc" aria-labelledby="t-pc">
+        <p class="etichetta">Windows</p>
+        <h1 id="t-pc">Il PC</h1>
+        <p>Tre impostazioni di Windows perché mediabox resti sempre raggiungibile. Te le consiglio tutte.</p>
+        <div class="schede-scelta">
+          {% for v in s.voci_windows or [] %}
+          <label class="scelta" for="win-{{ v.chiave }}">
+            <input type="checkbox" id="win-{{ v.chiave }}" data-windows="{{ v.chiave }}"{% if v.attivo %} checked{% endif %}>
+            <span class="interruttore" aria-hidden="true"></span>
+            <span><strong>{{ v.titolo }}</strong><small>{{ v.descrizione }}</small></span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      <section class="passo" data-passo="tmdb" aria-labelledby="t-tmdb">
+        <p class="etichetta">Facoltativo</p>
+        <h1 id="t-tmdb">Chiave TMDB</h1>
+        {% if s.tmdb_impostata %}
+        <p>Usi una chiave TMDB: Cerca mostra anche dove vedere ogni film in Italia e ti avvisa quando diventa gratis. Incollane una nuova solo se vuoi cambiarla.</p>
+        {% else %}
+        <p>Cerca funziona già senza: film e trame in italiano arrivano da Radarr, generi e piattaforme da Wikidata, le serie da TVmaze.</p>
+        <p>Con una chiave gratuita di TMDB in più vedi <strong>dove guardare ogni film in Italia</strong> (Netflix, Prime Video, RaiPlay…), le righe "Su Netflix" con il catalogo vero e l'avviso quando un film diventa gratis.</p>
+        <ol class="istruzioni">
+          <li>Crea un account gratuito su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org ↗</a>.</li>
+          <li>Apri <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Impostazioni → API ↗</a> e chiedi una chiave per uso personale.</li>
+          <li>Copia il <strong>Token di accesso in lettura</strong> (quello lungo) e incollalo qui sotto.</li>
+        </ol>
+        {% endif %}
+        <label class="campo" for="tmdb">Chiave TMDB</label>
+        <input id="tmdb" name="tmdb" type="text" autocomplete="off" spellcheck="false" placeholder="{{ 'Lascia vuoto per tenere la chiave attuale' if s.tmdb_impostata else 'Vuoto = senza chiave' }}">
+        {% if s.tmdb_impostata %}
+        <label class="scelta togli" for="tmdb-togli">
+          <input type="checkbox" id="tmdb-togli">
+          <span class="interruttore" aria-hidden="true"></span>
+          <span><strong>Togli la chiave</strong><small>Cerca continua a funzionare con le fonti senza chiave.</small></span>
+        </label>
+        {% endif %}
+        <p class="messaggio" id="msg-tmdb" role="status"></p>
+      </section>
+
+      <section class="passo" data-passo="riepilogo" aria-labelledby="t-riepilogo">
+        <p class="etichetta">Ultimo controllo</p>
+        <h1 id="t-riepilogo">Tutto pronto</h1>
+        <dl class="riepilogo" id="riepilogo"></dl>
+        <p>Premi <strong>Installa</strong>: scarico i programmi e li configuro. Ci vogliono dai 5 ai 15 minuti, a seconda della connessione.</p>
+      </section>
+
+      <div class="comandi">
+        <button type="button" class="contorno" id="indietro">Indietro</button>
+        <button type="submit" id="avanti">Inizia</button>
+      </div>
+      <div class="comandi solo-impostazioni-flex">
+        <button type="submit" id="salva">Salva e applica</button>
+      </div>
+    </form>
+
+    <!-- ======================= Avanzamento ======================= -->
+    <section class="vista" data-vista="avanzamento" aria-live="polite" hidden>
+      <p class="etichetta" id="av-etichetta">Installazione</p>
+      <h1 id="av-titolo">Sto installando mediabox</h1>
+      <p class="grande" id="av-frase">Puoi lasciare aperta questa pagina, ma non serve: continua anche se la chiudi.</p>
+      <div id="av-scarico" class="scarico" hidden>
+        <div class="barra"><span id="av-barra"></span></div>
+        <small id="av-scarico-testo"></small>
+      </div>
+      <ol class="avanzamento" id="av-passi"></ol>
+      <p class="aiuto" id="av-ultima"></p>
+      <div id="av-fine" hidden></div>
+    </section>
+
+    <!-- ======================= Accesso ======================= -->
+    <form class="vista stretta" data-vista="accesso" id="modulo-accesso" hidden>
+      <p class="etichetta">Impostazioni</p>
+      <h1>Accedi</h1>
+      <p>Scrivi la password di amministrazione, quella scelta durante l'installazione.</p>
+      <label class="campo" for="password-accesso">Password</label>
+      <input id="password-accesso" type="password" autocomplete="current-password">
+      <p class="messaggio" id="msg-accesso" role="status"></p>
+      <div class="comandi"><button type="submit">Accedi</button></div>
+    </form>
+  </main>
+
+  <div id="avviso" class="avviso" role="status" hidden></div>
+  <script type="application/json" id="stato">{{ stato | tojson }}</script>
+  <script src="{{ base }}/static/procedura.js"></script>
+</body>
+</html>

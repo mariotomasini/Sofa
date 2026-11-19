@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .impostazioni import Impostazioni
 from .messaggi import ErroreMediabox, titolo
@@ -28,6 +30,22 @@ class Esito:
     def nota(self, testo: str) -> None:
         if testo not in self.note:
             self.note.append(testo)
+
+    def salva(self, file: Path) -> None:
+        """Per la pagina di configurazione nel browser."""
+        dati = {
+            "riusciti": self.riusciti,
+            "falliti": [{"nome": n, "cosa": e.cosa, "cosa_fare": e.cosa_fare} for n, e in self.falliti],
+            "da_fare": self.cose_da_fare + ([] if any("indexer" in d for d in self.cose_da_fare) else [
+                "Aggiungi i tuoi indexer in Prowlarr (pagina /prowlarr → Indexer): "
+                "servono per trovare i film da scaricare."]),
+            "note": self.note,
+        }
+        try:
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(json.dumps(dati, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError:
+            pass
 
 
 def indirizzi_base(imp: Impostazioni) -> list[str]:

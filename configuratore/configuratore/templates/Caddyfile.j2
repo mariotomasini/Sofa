@@ -27,6 +27,12 @@
 		reverse_proxy cerca:8000
 	}
 
+	# --- Impostazioni (con il suo accesso: serve anche durante l'installazione)
+	redir /impostazioni /impostazioni/
+	handle /impostazioni/* {
+		reverse_proxy impostazioni:8080
+	}
+
 	# --- Jellyfin (base URL /jellyfin impostato dentro Jellyfin) ---------
 	redir /jellyfin /jellyfin/
 	handle /jellyfin/* {

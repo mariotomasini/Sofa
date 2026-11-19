@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_mondi.html" import selettore, ricerca %}
+{% block titolo %}{{ piattaforma.nome if piattaforma else "Piattaforme" }}{% endblock %}
+{% block contenuto %}
+{{ selettore(mondo, base, mondi, kids) }}
+{{ ricerca(mondo, base, mondi, autofocus=false) }}
+
+{% if piattaforma %}
+<div class="genere-testa">
+  <div class="piattaforma-testa">
+    {% if piattaforma.logo %}<img class="logo-piattaforma grande" src="{{ piattaforma.logo }}" alt="" width="64" height="64">{% endif %}
+    <div>
+      <p class="etichetta-maiuscola">{{ mondi[mondo].nome }}</p>
+      <h1>Su {{ piattaforma.nome }}</h1>
+      <p class="sottotitolo">I più visti in Italia, inclusi nell'abbonamento o gratis.</p>
+    </div>
+  </div>
+</div>
+
+<div id="griglia-genere" class="griglia" aria-live="polite"><p class="caricamento">Carico…</p></div>
+<div class="centrato"><button id="altri" class="secondario" type="button" hidden>Mostra altri</button></div>
+{% endif %}
+{% endblock %}
+{% block script %}{% if piattaforma %}<script>avviaGriglia(`/api/piattaforma/{{ piattaforma.id }}?mondo={{ mondo }}`);</script>{% endif %}{% endblock %}

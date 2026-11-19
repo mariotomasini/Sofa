@@ -17,9 +17,11 @@
         {% if film.voto %}<li><span aria-hidden="true">★</span> {{ ("%.1f" % film.voto) | replace(".", ",") }}</li>{% endif %}
       </ul>
       <p class="trama">{{ film.trama or "Trama non disponibile in italiano." }}</p>
+      {% if con_tmdb %}
       <button id="avvisami" class="{{ 'attivo' if avvisami else 'secondario' }}" data-attivo="{{ 'si' if avvisami else 'no' }}">
         {{ "✓ Ti avviserò se diventa gratis" if avvisami else "🔔 Avvisami se diventa disponibile gratis" }}
       </button>
+      {% endif %}
     </div>
   </header>
 
@@ -27,8 +29,10 @@
     <section class="blocco dove-vederlo" id="provider" aria-labelledby="titolo-provider">
       <h2 id="titolo-provider">Dove vederlo legalmente in Italia</h2>
       <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+      {% if con_tmdb %}
       <p class="attribuzione">Dati sulla disponibilità forniti da
         <a href="https://www.justwatch.com/it" target="_blank" rel="noopener"><strong>JustWatch</strong></a>.</p>
+      {% endif %}
     </section>
 
     {% if not kids %}

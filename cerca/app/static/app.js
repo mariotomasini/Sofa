@@ -111,7 +111,7 @@ function avviaFilm(tmdbId) {
   }
 
   const avvisami = document.getElementById("avvisami");
-  avvisami.addEventListener("click", async () => {
+  if (avvisami) avvisami.addEventListener("click", async () => {
     avvisami.disabled = true;
     try {
       const r = await chiama(`/api/avvisami/${tmdbId}`, { method: "POST" });
@@ -135,6 +135,14 @@ function htmlLogo(p) {
 const BREVE_OFFERTA = { ads: "gratis", free: "gratis", flatrate: "abbonamento", rent: "noleggio", buy: "acquisto" };
 
 function htmlProvider(d) {
+  if (d.senza_chiave) {
+    // senza chiave TMDB non sappiamo dove si guarda: rimandiamo a JustWatch
+    return "<p>Per sapere su quali servizi si guarda in Italia, cercalo su JustWatch.</p>" +
+      `<a class="servizio" href="${esc(d.link)}" target="_blank" rel="noopener">` +
+      '<span class="logo-iniziale" aria-hidden="true">J</span><span class="nome-servizio">Cerca su JustWatch</span>' +
+      '<span class="freccia" aria-hidden="true">↗</span></a>' +
+      '<p class="sottotitolo">Con la chiave TMDB facoltativa (Impostazioni di mediabox) lo vedi direttamente qui.</p>';
+  }
   if (!d.gruppi.length) {
     return "<p>Al momento non risulta disponibile su nessun servizio in Italia.</p>" +
       "<p class=\"sottotitolo\">Puoi usare il pulsante \"Avvisami\" qui sopra.</p>";
@@ -422,11 +430,14 @@ function htmlRiga(r, mondo) {
   if (r.tipo === "top10") schede = r.elementi.map(htmlTop).join("");
   else if (r.tipo === "continua") schede = r.elementi.map(htmlContinua).join("");
   else schede = r.elementi.map(htmlScheda).join("");
-  const tutti = r.genere
-    ? `<a class="link-accento" href="${BASE}/genere/${r.genere}?mondo=${encodeURIComponent(mondo)}">Vedi tutti →</a>` : "";
-  const id = `riga-${r.tipo}-${r.genere || ""}`;
+  let tutti = "";
+  if (r.genere) tutti = `${BASE}/genere/${r.genere}?mondo=${encodeURIComponent(mondo)}`;
+  if (r.piattaforma) tutti = `${BASE}/piattaforma/${r.piattaforma}?mondo=${encodeURIComponent(mondo)}`;
+  const link = tutti ? `<a class="link-accento" href="${tutti}">Vedi tutti →</a>` : "";
+  const id = `riga-${r.tipo}-${r.genere || r.piattaforma || ""}`;
+  const logo = r.logo ? `<img class="logo-piattaforma" src="${esc(r.logo)}" alt="" width="36" height="36" onerror="this.remove()">` : "";
   return `<section class="riga riga-${esc(r.tipo)}" aria-labelledby="${id}">` +
-    `<div class="riga-testa"><h2 id="${id}">${esc(r.titolo)}</h2>${tutti}</div>` +
+    `<div class="riga-testa"><h2 id="${id}">${logo}${esc(r.titolo)}</h2>${link}</div>` +
     `<div class="striscia${r.tipo === "top10" ? " striscia-top" : ""}">${schede}</div></section>`;
 }
 
@@ -437,15 +448,17 @@ async function avviaHome(mondo = "film") {
   try {
     const d = await chiama(`/api/home?mondo=${encodeURIComponent(mondo)}`);
     contenitore.innerHTML = d.righe.map((r) => htmlRiga(r, mondo)).join("") +
-      (d.errore && !d.righe.length ? htmlErrore(d.errore) : "");
+      (d.errore && !d.righe.length ? htmlErrore(d.errore) : "") +
+      `<div class="centrato"><button type="button" class="secondario" id="scegli-piattaforme">Scegli le tue piattaforme</button></div>`;
+    document.getElementById("scegli-piattaforme").addEventListener("click", () => apriScegliPiattaforme(mondo));
   } catch (e) {
     contenitore.innerHTML = htmlErrore(e);
   }
   contenitore.removeAttribute("aria-busy");
 }
 
-// Pagina di un genere: griglia con "Mostra altri"
-function avviaGenere(genere, mondo, gratis) {
+// Pagine di un genere o di una piattaforma: griglia con "Mostra altri"
+function avviaGriglia(percorso) {
   const griglia = document.getElementById("griglia-genere");
   const altri = document.getElementById("altri");
   let pagina = 0;
@@ -454,14 +467,12 @@ function avviaGenere(genere, mondo, gratis) {
     pagina += 1;
     altri.disabled = true;
     try {
-      const d = await chiama(`/api/genere/${genere}?mondo=${encodeURIComponent(mondo)}&gratis=${gratis ? 1 : 0}&pagina=${pagina}`);
+      const d = await chiama(`${percorso}&pagina=${pagina}`);
       if (pagina === 1) griglia.innerHTML = "";
       const nuovi = d.elementi.filter((f) => !visti.has(f.id));
       nuovi.forEach((f) => visti.add(f.id));
       griglia.insertAdjacentHTML("beforeend", nuovi.map(htmlScheda).join(""));
-      if (pagina === 1 && !nuovi.length) {
-        griglia.innerHTML = `<p>${gratis ? "In questo momento non trovo titoli gratis di questo genere in Italia." : "Nessun titolo trovato."}</p>`;
-      }
+      if (pagina === 1 && !nuovi.length) griglia.innerHTML = "<p>Nessun titolo trovato.</p>";
       altri.hidden = !d.altri;
     } catch (e) {
       griglia.insertAdjacentHTML("beforeend", htmlErrore(e));
@@ -471,6 +482,41 @@ function avviaGenere(genere, mondo, gratis) {
   }
   altri.addEventListener("click", carica);
   carica();
+}
+
+function avviaGenere(genere, mondo) {
+  avviaGriglia(`/api/genere/${genere}?mondo=${encodeURIComponent(mondo)}`);
+}
+
+// Scelta delle piattaforme che hai (Netflix, Prime Video…): una riga ciascuna nella home
+async function apriScegliPiattaforme(mondo) {
+  const dialogo = document.getElementById("dialogo-piattaforme");
+  const elenco = document.getElementById("elenco-piattaforme");
+  elenco.innerHTML = '<p class="caricamento">Carico…</p>';
+  dialogo.showModal();
+  try {
+    const d = await chiama(`/api/piattaforme?mondo=${encodeURIComponent(mondo)}`);
+    const scelte = new Set(d.scelte);
+    elenco.innerHTML = d.tutte.map((p) =>
+      `<label class="piattaforma-scelta"><input type="checkbox" value="${p.id}"${scelte.has(p.id) ? " checked" : ""}>` +
+      htmlLogo(p) + `<span>${esc(p.nome)}</span></label>`).join("");
+    document.getElementById("massimo-piattaforme").textContent = `Al massimo ${d.massimo}.`;
+    elenco.onchange = () => {
+      const attive = elenco.querySelectorAll("input:checked");
+      elenco.querySelectorAll("input:not(:checked)").forEach((c) => { c.disabled = attive.length >= d.massimo; });
+    };
+    elenco.onchange();
+  } catch (e) { elenco.innerHTML = htmlErrore(e); }
+}
+
+async function salvaPiattaforme(mondo) {
+  const scelte = [...document.querySelectorAll("#elenco-piattaforme input:checked")].map((c) => Number(c.value));
+  try {
+    const r = await inviaJSON("/api/piattaforme", { scelte });
+    document.getElementById("dialogo-piattaforme").close();
+    avviso(r.messaggio);
+    avviaHome(mondo);
+  } catch (e) { avviso(e.errore || "Non riesco a salvare."); }
 }
 
 // --- pagina Musica --------------------------------------------------------------------

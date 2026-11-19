@@ -48,19 +48,21 @@ Con mediabox puoi:
 - Un PC sempre acceso, collegato alla rete di casa (meglio con il cavo).
   - **Linux** (consigliato): Debian 12 o Ubuntu Server 24.04, 64 bit. Un processore Intel con grafica integrata permette la transcodifica hardware, cioè meno fatica per il PC.
   - **Windows**: Windows 10 (versione 22H2) o Windows 11, 64 bit, con la virtualizzazione attiva nel BIOS. Ci sono alcuni limiti, elencati in [Differenze su Windows](#differenze-su-windows).
-- Una **chiave gratuita di TMDB**, il catalogo dei film:
-  1. crea un account su [themoviedb.org](https://www.themoviedb.org/signup);
-  2. vai su *Impostazioni → API* e chiedi una chiave per uso personale;
-  3. copia la **API Key** (corta) oppure il **Read Access Token** (lungo): vanno bene tutti e due.
 - Facoltativi:
   - l'app **ntfy** sul telefono, per le notifiche;
   - un **tuner TV**: HDHomeRun di rete oppure chiavetta USB DVB-T2.
 
-Durante l'installazione ti verranno chieste solo tre cose:
+**Non serve nessuna chiave né registrazione.** Senza chiavi Cerca usa fonti gratuite:
 
-1. la chiave TMDB;
-2. una password di amministrazione;
-3. facoltativo, il nome per le notifiche ntfy.
+| Cosa | Da dove arriva |
+|---|---|
+| Ricerca e schede dei film, in italiano, con locandine e voti | Radarr (già installato) |
+| Film di tendenza e appena usciti | la pagina *Scopri* di Radarr |
+| Film per genere, cartoni per Kids, *Originali Netflix / Prime Video / Disney+* | [Wikidata](https://www.wikidata.org) |
+| Serie: ricerca, serie del momento, serie per genere e per piattaforma | [TVmaze](https://www.tvmaze.com) (titoli e trame in inglese) |
+| Dove vederlo in Italia | un link alla ricerca di [JustWatch](https://www.justwatch.com/it) |
+
+**Chiave TMDB facoltativa.** Se la metti nelle impostazioni (`/impostazioni`, in fondo alla pagina), Cerca usa TMDB: ogni scheda mostra direttamente su quali servizi si guarda il film in Italia, le righe "Su Netflix" mostrano il catalogo italiano vero, le serie hanno titoli e trame in italiano e torna il pulsante "Avvisami se diventa gratis". La chiave è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*: vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se la togli, Cerca torna alle fonti gratuite.
 
 ---
 
@@ -74,19 +76,24 @@ cd mediabox
 ./install.sh
 ```
 
-L'installer:
+L'installer non fa domande nel terminale (a parte la password del tuo utente, per `sudo`):
 
 1. controlla il sistema e installa Docker se manca;
 2. riconosce la scheda grafica Intel, i tuner USB e un eventuale HDHomeRun in rete;
-3. ti fa le tre domande, poi ti chiede **cosa guardi**: serie TV, anime, musica, sottotitoli. Basta scrivere i numeri da attivare e poi `s`. Puoi cambiare idea quando vuoi con `mediabox impostazioni`;
-4. scarica e avvia i servizi, poi li configura da solo;
-5. alla fine stampa un **riepilogo** con gli indirizzi e le poche cose da fare a mano.
+3. ti scrive l'indirizzo da aprire nel browser, ad esempio **`http://mediabox.local`**. Va bene anche il telefono, se è sulla stessa rete;
+4. nel browser una **procedura guidata** ti chiede, un passo alla volta:
+   - la **password** di amministrazione;
+   - **cosa guardi**: serie TV, anime, musica, sottotitoli, pulizia, aggiornamenti…;
+   - **dove salvare** film e musica, con lo spazio libero di ogni disco e quello consigliato;
+   - gli **avvisi sul telefono**, con un pulsante per mandare una notifica di prova;
+5. premi **Installa** e segui l'avanzamento: i passi si spuntano uno alla volta e vedi quale programma sta scaricando;
+6. alla fine la pagina mostra gli indirizzi, il server da scrivere nell'app Jellyfin della TV e le poche cose da fare a mano.
+
+![Procedura guidata nel browser](docs/configurazione.png)
 
 La prima volta ci vogliono **10-20 minuti**, a seconda della connessione.
 
-Puoi rilanciare `./install.sh` quando vuoi: non cancella nulla e sistema quello che manca. mediabox viene installato in `/opt/mediabox`.
-
-L'installer ti chiede anche **dove salvare film, serie, musica e download**. Propone `/srv/mediabox/dati`, oppure un disco più grande se ne trova uno: premi Invio per accettare o scrivi un'altra cartella (es. `/mnt/disco/mediabox`). Puoi cambiarla anche dopo, con `mediabox impostazioni` (voce `c`): i file già presenti vengono spostati da soli.
+Puoi rilanciare `./install.sh` quando vuoi: non cancella nulla e sistema quello che manca. Se è già configurato, la procedura nel browser non si riapre. mediabox viene installato in `/opt/mediabox`.
 
 ---
 
@@ -96,11 +103,7 @@ L'installer ti chiede anche **dove salvare film, serie, musica e download**. Pro
 2. Fai **doppio clic su `installa.cmd`** e accetta la richiesta di permessi.
 3. Se WSL2 non è ancora attivo, l'installer lo attiva e chiede di **riavviare**. Dopo il riavvio e l'accesso, l'installazione riparte da sola.
 4. Docker Desktop viene installato da solo. Al primo avvio potrebbe chiederti di accettare le condizioni d'uso: accettale (per uso personale è gratuito).
-5. Rispondi alle domande:
-   - le tre domande di base;
-   - se rinominare il PC in **MEDIABOX**: dì di sì, serve per l'indirizzo `mediabox.local`;
-   - su quale disco mettere i film;
-   - se disattivare la sospensione.
+5. Si apre da solo il browser con la **procedura guidata**, la stessa di Linux. In più c'è il passo **Il PC**, con tre scelte consigliate: chiamare il PC **MEDIABOX** (per l'indirizzo `mediabox.local`, con un riavvio alla fine), impostare la rete di casa come *Privata* e togliere la sospensione quando è collegato alla corrente.
 
 mediabox viene installato in `C:\Mediabox`. I film vanno nel disco con più spazio, ad esempio `D:\Mediabox`, e li vedi anche da Esplora file.
 
@@ -180,14 +183,15 @@ Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torre
 
 ### La pagina iniziale, come Netflix
 
-Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): toccane uno per vedere i titoli più visti di quel genere. Con l'interruttore **"Solo gratis in Italia"** restano solo quelli che puoi guardare gratis (RaiPlay, Pluto TV, Mediaset Infinity…).
+Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): toccane uno per vedere i titoli più visti di quel genere.
 
 Poi, riga per riga:
 
 1. **Perché ti piace: …** — due righe di consigli scelti in base ai generi di quello che hai visto (o messo tra i preferiti) in Jellyfin. I titoli che hai già non te li ripropone. Finché non hai visto nulla trovi "Da non perdere: Commedia / Azione" (per le serie: Dramma / Crime);
 2. **Top 10 della settimana**, con i numeri grandi;
 3. **Appena usciti**: i 10 titoli più visti usciti negli ultimi due mesi (film nei cinema italiani, serie nuove);
-4. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
+4. **Su Netflix, Su Prime Video, Su Disney+…**: una riga per ogni piattaforma che hai, con i titoli più visti in Italia inclusi nell'abbonamento (o gratis). Le scegli con il pulsante **Scegli le tue piattaforme** in fondo alla home, fino a 6: Netflix, Prime Video, Disney+, NOW, Apple TV+, Crunchyroll, RaiPlay e le altre disponibili in Italia. *Vedi tutti* apre la pagina della piattaforma. Sono titoli da guardare nell'app della piattaforma: mediabox non li scarica. Senza chiave TMDB le righe dei film diventano *Originali Netflix*, *Originali Prime Video*… (i film prodotti o distribuiti dalla piattaforma negli ultimi 3 anni) e quelle delle serie mostrano le serie con episodi usciti in questi giorni;
+5. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
 
 I consigli e "Continua a guardare" usano l'utente amministratore di Jellyfin creato all'installazione: se in famiglia usate utenti diversi, i consigli seguono quello.
 
@@ -213,6 +217,8 @@ Se `mediabox.local` sul telefono non funziona, usa l'indirizzo IP (es. `http://1
 Su Android, con un indirizzo `http://` la scorciatoia si apre nel browser. Si apre a tutto schermo solo con un indirizzo `https://`, per esempio quello HTTPS di Tailscale. Su iPhone si apre a tutto schermo in entrambi i casi.
 
 ### Avvisami se diventa gratis
+
+Serve la chiave TMDB facoltativa: senza, il pulsante non compare.
 
 Nella scheda di un film premi **"Avvisami se diventa disponibile gratis"**. Ogni giorno mediabox controlla se il film è comparso tra i servizi gratuiti con pubblicità, come Pluto TV o Rakuten TV:
 
@@ -247,7 +253,7 @@ qBittorrent è impostato in modo fisso così:
 
 ### Serie TV
 
-Attivale con `mediabox impostazioni` (voce 1): viene installato **Sonarr**.
+Attivale dalle **impostazioni** (`/impostazioni`, voce *Serie TV*): viene installato **Sonarr**.
 
 - In Sonarr cerchi una serie e la aggiungi. Sonarr scarica gli episodi (anche quelli nuovi, appena escono) e li ordina in `Serie/Nome serie (Anno)/Stagione 01/`.
 - In Jellyfin ogni serie è **una sola scheda**, divisa in **stagioni** ed **episodi**.
@@ -258,7 +264,7 @@ Cerca per ora è pensato solo per i film: le serie aggiungile da Sonarr.
 
 ### Anime
 
-Attivali con `mediabox impostazioni` (voce 2). In Jellyfin compare la libreria **Anime**, separata dalle serie, e Sonarr ottiene la cartella `anime`. Quando aggiungi un anime in Sonarr:
+Attivali dalle **impostazioni** (voce *Anime*). In Jellyfin compare la libreria **Anime**, separata dalle serie, e Sonarr ottiene la cartella `anime`. Quando aggiungi un anime in Sonarr:
 
 1. come *Cartella principale* scegli **/data/media/anime**;
 2. come *Tipo di serie* scegli **Anime**: così Sonarr usa anche la numerazione assoluta degli episodi (es. "One Piece 1071"), che è quella usata da molti rilasci.
@@ -303,11 +309,15 @@ Alcuni siti mostrano un controllo "Sei un robot?" che blocca Prowlarr. mediabox 
 
 ## Cambiare le scelte dopo l'installazione
 
+Apri **`http://mediabox.local/impostazioni`**: la trovi anche nella pagina iniziale, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Premi **Salva e applica**: mediabox installa, configura o spegne quello che serve, e la pagina mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.
+
+Le modifiche le applica un servizio di sistema (su Linux `mediabox-impostazioni.path`, su Windows l'attività pianificata *mediabox - impostazioni dal browser*). Su un sistema senza systemd scrivi `mediabox applica-impostazioni` dopo aver salvato.
+
+Se preferisci il terminale, c'è ancora il menu di una volta:
+
 ```bash
 mediabox impostazioni
 ```
-
-Si apre lo stesso menu dell'installazione:
 
 ```
    [✔] 1. Serie TV (Sonarr le scarica e le ordina per stagioni)
@@ -343,7 +353,7 @@ In alto trovi sempre processore, memoria, temperatura e **spazio libero sul disc
 Quando lo spazio libero scende sotto il **10%** (si cambia con `SOGLIA_DISCO_LIBERO` nel file `.env`), mediabox fa pulizia da solo:
 
 1. **sempre**: toglie i **download abbandonati**, cioè download falliti o annullati che nessuno usa più da almeno 14 giorni;
-2. **solo se la attivi** (`mediabox impostazioni`, voce "Pulizia automatica"): toglie anche **film ed episodi già visti da più di 30 giorni**, partendo dai più vecchi, finché lo spazio torna sufficiente.
+2. **solo se la attivi** (impostazioni, voce *Pulizia quando il disco è pieno*): toglie anche **film ed episodi già visti da più di 30 giorni**, partendo dai più vecchi, finché lo spazio torna sufficiente.
 
 La pulizia non tocca mai:
 
@@ -362,7 +372,7 @@ Nella pagina **Spazio** di Cerca vedi cosa si potrebbe liberare, puoi lanciare l
 
 ### Beszel: grafici e avvisi del PC
 
-Attivalo con `mediabox impostazioni` (voce Beszel). All'indirizzo `/beszel` trovi i grafici di processore, memoria, dischi, rete e temperatura delle ultime ore e degli ultimi giorni.
+Attivalo dalle impostazioni (voce *Grafici del PC*). All'indirizzo `/beszel` trovi i grafici di processore, memoria, dischi, rete e temperatura delle ultime ore e degli ultimi giorni.
 
 Ricevi un avviso sul telefono, se hai impostato ntfy, quando:
 
@@ -383,7 +393,7 @@ Su Windows Beszel misura la macchina virtuale di Docker e non tutto il PC: i val
 
 mediabox può mandarti notifiche con l'app gratuita **ntfy**, senza account:
 
-1. scegli un **argomento**, cioè un nome difficile da indovinare, es. `mediabox-rossi-4821`. Lo chiede l'installer, oppure lo imposti con `mediabox impostazioni`, voce `n`;
+1. scegli un **argomento**, cioè un nome difficile da indovinare, es. `mediabox-rossi-4821`. La procedura guidata te ne propone uno, e lo cambi quando vuoi dalle impostazioni (*Avvisi sul telefono*);
 2. sul telefono installa **ntfy** (Play Store, F-Droid o App Store), premi **+** e scrivi lo stesso argomento.
 
 Riceverai un avviso quando:
@@ -411,7 +421,7 @@ Il file `.env` e le tue scelte restano come sono. Le versioni dei servizi che ha
 
 - Per aggiornare subito: `mediabox update`.
 - Per vedere la versione installata e l'ultima disponibile: `mediabox versione`.
-- Per spegnere gli aggiornamenti automatici: `mediabox impostazioni`, voce "Aggiornamenti automatici".
+- Per spegnere gli aggiornamenti automatici: impostazioni, voce *Aggiornamenti automatici*.
 
 Su Linux l'aggiornamento automatico lo fa un timer di systemd (`mediabox-aggiorna.timer`), su Windows un'attività pianificata ("mediabox - aggiornamento automatico").
 
@@ -475,7 +485,7 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox up` / `mediabox down` | accende / spegne tutto |
 | `mediabox restart [servizio]` | riavvia tutto o un servizio (es. `mediabox restart jellyfin`) |
 | `mediabox logs [servizio]` | mostra i messaggi di un servizio (Ctrl+C per uscire) |
-| `mediabox impostazioni` | cambia cosa usi: serie, anime, musica, sottotitoli, notifiche |
+| `mediabox impostazioni` | cambia cosa usi dal terminale (più comodo dal browser: `/impostazioni`) |
 | `mediabox configura` | riapplica la configurazione dopo una modifica al file `.env` |
 | `mediabox update` | aggiorna mediabox e i servizi (fa prima un backup) |
 | `mediabox versione` | mostra la versione installata e l'ultima disponibile |
@@ -581,11 +591,19 @@ La password di **Jellyfin** si cambia da Jellyfin stesso (*Impostazioni → Prof
 
 ### "La porta 80 è già usata"
 
-Un altro programma usa già la porta del sito, ad esempio IIS su Windows o un altro web server. L'installer propone di usare la 8080: l'indirizzo diventa `http://mediabox.local:8080`.
+Un altro programma usa già la porta del sito, ad esempio IIS su Windows o un altro web server. L'installer passa da solo alla 8080: l'indirizzo diventa `http://mediabox.local:8080`.
+
+### La procedura nel browser non si apre
+
+Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Usa l'indirizzo con il numero (es. `http://192.168.1.20`), che l'installer scrive nel terminale: `mediabox.local` a volte non funziona sui telefoni Android. Su Windows controlla che la rete sia *Privata*. Se hai chiuso il terminale, rilancia l'installer: la procedura riparte da dove eri.
 
 ### Cerca dice "TMDB rifiuta la chiave API"
 
-Controlla `TMDB_API_KEY` nel file `.env`: deve essere tutta, senza spazi. Poi esegui `mediabox configura`.
+Controlla la chiave nelle impostazioni (`/impostazioni`): deve essere tutta, senza spazi. Oppure toglila: Cerca funziona anche senza.
+
+### Senza chiave alcune righe sono vuote
+
+Le righe per genere e "Originali Netflix" vengono da Wikidata, le serie da TVmaze. Se uno dei due non risponde (capita di rado, ad esempio quando chiede di rallentare), la riga sparisce o mostra meno titoli: riprova più tardi. I risultati restano in memoria per giorni, quindi succede soprattutto la prima volta.
 
 ---
 
@@ -605,7 +623,7 @@ cerca/                        il servizio Cerca (FastAPI) + test
 .env.example                  tutte le impostazioni, con spiegazioni
 ```
 
-- Gli script bash e PowerShell fanno solo le cose che dipendono dal sistema: prerequisiti, hardware, domande.
+- Gli script bash e PowerShell fanno solo le cose che dipendono dal sistema: prerequisiti, hardware, avvio della procedura nel browser.
 - Tutto il resto lo fa il **configuratore**, uguale su Linux e Windows: genera i file in `generato/`, prepara i volumi, configura i servizi via API e stampa il riepilogo.
 - Ogni impostazione si cambia **solo dal file `.env`**. I file in `generato/` vengono riscritti a ogni `mediabox configura`.
 - I dati dei servizi stanno in volumi Docker (`mediabox_*`), separati dai file generati.

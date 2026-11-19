@@ -27,7 +27,7 @@ for argomento in "$@"; do
       echo "  --with-sonarr   installa anche Sonarr per organizzare le serie TV"
       echo "  --with-anime    aggiunge la libreria Anime (usa Sonarr)"
       echo "  --with-lidarr   installa Lidarr per scaricare e ordinare la musica"
-      echo "Le scelte si cambiano anche dopo, con: mediabox impostazioni"
+      echo "Tutte le scelte si fanno poi nel browser, e si cambiano da http://mediabox.local/impostazioni"
       exit 0 ;;
     *) errore "Opzione sconosciuta: $argomento" "Usa ./install.sh --aiuto per vedere le opzioni." ;;
   esac
@@ -49,8 +49,7 @@ source /etc/os-release
 case "${ID:-}-${VERSION_ID:-}" in
   debian-12|ubuntu-24.04) ok "Sistema supportato: ${PRETTY_NAME}" ;;
   debian-*|ubuntu-*)
-    avviso "Questo sistema (${PRETTY_NAME:-sconosciuto}) non è tra quelli provati (Debian 12, Ubuntu 24.04)."
-    chiedi_si_no "Vuoi provare lo stesso?" n || exit 1 ;;
+    avviso "Questo sistema (${PRETTY_NAME:-sconosciuto}) non è tra quelli provati (Debian 12, Ubuntu 24.04): provo lo stesso." ;;
   *) errore "Sistema non supportato: ${PRETTY_NAME:-sconosciuto}." "mediabox funziona su Debian 12 o Ubuntu Server 24.04." ;;
 esac
 [[ "$(uname -m)" == "x86_64" ]] || avviso "Processore $(uname -m): mediabox è provato solo su x86_64."
@@ -111,114 +110,19 @@ fi
 prepara_docker
 ok "Docker pronto ($("${DOCKER[@]}" --version | cut -d, -f1))"
 
-# --- 4. File .env e domande ---------------------------------------------------------
-titolo "Configurazione"
-NUOVA_INSTALLAZIONE=""
+# --- 4. File .env ----------------------------------------------------------------------
+titolo "Preparo la configurazione"
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "$MEDIABOX_DIR/.env.example" "$ENV_FILE"
-  NUOVA_INSTALLAZIONE="si"
 fi
+# la pagina delle impostazioni gira con il tuo utente: il file deve essere tuo
+sudo chown "$(id -u):$(id -g)" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
-valida_tmdb() {
-  local chiave="$1" codice
-  if ((${#chiave} > 40)); then
-    codice="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $chiave" https://api.themoviedb.org/3/configuration || true)"
-  else
-    codice="$(curl -s -o /dev/null -w '%{http_code}' "https://api.themoviedb.org/3/configuration?api_key=$chiave" || true)"
-  fi
-  [[ "$codice" == "200" ]] && return 0
-  [[ "$codice" == "000" ]] && return 2  # niente Internet: non possiamo verificarla
-  return 1
-}
-
-if [[ -z "$(leggi_env TMDB_API_KEY "$ENV_FILE")" ]]; then
-  echo
-  echo "  Serve una chiave gratuita di TMDB (il catalogo dei film)."
-  echo "  La trovi su themoviedb.org → il tuo account → Impostazioni → API."
-  while true; do
-    read -r -p "  ? Incolla la chiave TMDB: " chiave_tmdb
-    chiave_tmdb="$(echo "$chiave_tmdb" | tr -d '[:space:]')"
-    [[ -n "$chiave_tmdb" ]] || { echo "    La chiave non può essere vuota."; continue; }
-    if valida_tmdb "$chiave_tmdb"; then
-      ok "Chiave TMDB valida"
-      break
-    elif [[ $? -eq 2 ]]; then
-      avviso "Non riesco a verificare la chiave (manca Internet?). La salvo comunque."
-      break
-    else
-      echo "    TMDB non accetta questa chiave. Controlla di averla copiata tutta e riprova."
-    fi
-  done
-  scrivi_env TMDB_API_KEY "$chiave_tmdb" "$ENV_FILE"
-fi
-
-if [[ -z "$(leggi_env ADMIN_PASSWORD "$ENV_FILE")" ]]; then
-  echo
-  echo "  Scegli una password di amministrazione: vale per Jellyfin e per i pannelli."
-  echo "  Almeno 8 caratteri, senza virgolette doppie (\") e senza barra rovesciata (\\)."
-  while true; do
-    read -r -s -p "  ? Password: " pw1; echo
-    read -r -s -p "  ? Scrivila di nuovo: " pw2; echo
-    if [[ "$pw1" != "$pw2" ]]; then echo "    Le due password non coincidono, riprova."; continue; fi
-    if ((${#pw1} < 8)); then echo "    Troppo corta: almeno 8 caratteri."; continue; fi
-    if [[ "$pw1" == *'"'* || "$pw1" == *\\* ]]; then echo "    Togli le virgolette doppie e la barra rovesciata."; continue; fi
-    if (($(printf '%s' "$pw1" | wc -c) > 72)); then echo "    Troppo lunga: al massimo 72 caratteri."; continue; fi
-    break
-  done
-  scrivi_env ADMIN_PASSWORD "$pw1" "$ENV_FILE"
-  unset pw1 pw2
-fi
-
-if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
-  echo
-  echo "  (Facoltativo) Notifiche sul telefono con l'app gratuita ntfy: scegli un nome"
-  echo "  difficile da indovinare, es. mediabox-rossi-4821. Lascia vuoto per saltare."
-  read -r -p "  ? Argomento ntfy: " ntfy
-  scrivi_env NTFY_TOPIC "$(echo "$ntfy" | tr -cd '[:alnum:]_-')" "$ENV_FILE"
-fi
-
 # Chiavi interne dei servizi
-for chiave in RADARR_API_KEY PROWLARR_API_KEY SONARR_API_KEY LIDARR_API_KEY; do
+for chiave in RADARR_API_KEY PROWLARR_API_KEY SONARR_API_KEY LIDARR_API_KEY IMPOSTAZIONI_SEGRETO; do
   [[ -n "$(leggi_env "$chiave" "$ENV_FILE")" ]] || scrivi_env "$chiave" "$(chiave_casuale)" "$ENV_FILE"
 done
-
-# Cosa guardi? (solo la prima volta; dopo si cambia con "mediabox impostazioni")
-configuratore_costruisci
-if [[ -n "$NUOVA_INSTALLAZIONE" && -t 0 ]]; then
-  menu_impostazioni --prima-volta || true
-fi
-
-# Cartella dei media: proponiamo un disco molto più capiente, se c'è; si può scriverne un'altra
-if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
-  cartella_dati="/srv/mediabox/dati"
-  libero_root="$(df -P -B1 / | awk 'NR==2 {print $4}')"
-  migliore="$(df -P -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null \
-    | awk -v root="$libero_root" 'NR>1 && $6 != "/" && $6 !~ "^/(boot|snap|run|dev|sys|proc)" && $4 > 2*root && $4 > 100*1024^3 {print $4, $6}' \
-    | sort -nr | head -n1)"
-  if [[ -n "$migliore" ]]; then
-    spazio="$(( ${migliore%% *} / 1024 / 1024 / 1024 ))"
-    cartella_dati="${migliore#* }/mediabox"
-    info "Ho trovato un disco più capiente: ${migliore#* } ($spazio GB liberi)."
-  fi
-  echo
-  echo "  Dove salvo film, serie, musica e download?"
-  while true; do
-    read -r -p "  ? Premi Invio per usare $cartella_dati, oppure scrivi un'altra cartella: " scelta || scelta=""
-    scelta="${scelta%/}"
-    if [[ -z "$scelta" ]]; then break; fi
-    if [[ "$scelta" == /* ]]; then cartella_dati="$scelta"; break; fi
-    echo "    Scrivi il percorso completo, che inizia con / (es. /mnt/disco/mediabox)."
-  done
-  scrivi_env MEDIA_DIR "$cartella_dati" "$ENV_FILE"
-fi
-MEDIA_DIR="$(leggi_env MEDIA_DIR "$ENV_FILE")"
-sudo mkdir -p "$MEDIA_DIR"
-sudo chown "$(id -u):$(id -g)" "$MEDIA_DIR"
-ok "Film, serie e download in: $MEDIA_DIR"
-
-# --- 5. Hardware --------------------------------------------------------------------
-titolo "Rilevo l'hardware"
 scrivi_env PIATTAFORMA linux "$ENV_FILE"
 scrivi_env PUID "$(id -u)" "$ENV_FILE"
 scrivi_env PGID "$(id -g)" "$ENV_FILE"
@@ -226,7 +130,10 @@ scrivi_env HOST_IP "$(ip_locale)" "$ENV_FILE"
 [[ -n "$CON_SONARR" ]] && scrivi_env WITH_SONARR si "$ENV_FILE"
 [[ -n "$CON_LIDARR" ]] && scrivi_env WITH_LIDARR si "$ENV_FILE"
 [[ -n "$CON_ANIME" ]] && scrivi_env WITH_ANIME si "$ENV_FILE"
+ok "File di configurazione pronto"
 
+# --- 5. Hardware --------------------------------------------------------------------
+titolo "Rilevo l'hardware"
 if [[ -e /dev/dri/renderD128 ]]; then
   scrivi_env VAAPI si "$ENV_FILE"
   scrivi_env RENDER_GID "$(stat -c %g /dev/dri/renderD128)" "$ENV_FILE"
@@ -244,6 +151,7 @@ else
   info "Nessun tuner USB (/dev/dvb)"
 fi
 
+configuratore_costruisci
 hdhomerun="$(cerca_hdhomerun)"
 if [[ -n "$hdhomerun" ]]; then
   scrivi_env HDHOMERUN_IP "$hdhomerun" "$ENV_FILE"
@@ -254,13 +162,11 @@ else
   info "Nessun HDHomeRun in rete"
 fi
 
-# Porta 80 occupata da qualcos'altro?
+# Porta 80 occupata da qualcos'altro? Allora 8080, senza chiedere
 porta="$(leggi_env HTTP_PORT "$ENV_FILE")"
 if sudo ss -ltnp "sport = :${porta:-80}" 2>/dev/null | grep -v -q -e docker-proxy -e '^State' ; then
-  avviso "La porta ${porta:-80} è già usata da un altro programma."
-  if chiedi_si_no "Uso la porta 8080? (l'indirizzo diventerà http://mediabox.local:8080)" s; then
-    scrivi_env HTTP_PORT 8080 "$ENV_FILE"
-  fi
+  avviso "La porta ${porta:-80} è già usata da un altro programma: uso la 8080."
+  scrivi_env HTTP_PORT 8080 "$ENV_FILE"
 fi
 
 # --- 6. mediabox.local e comando mediabox ------------------------------------------
@@ -277,17 +183,43 @@ else
   ok "mediabox.local annunciato nella rete di casa"
 fi
 sudo ln -sf "$MEDIABOX_DIR/mediabox" /usr/local/bin/mediabox
-installa_aggiornamenti_automatici
 chmod +x "$MEDIABOX_DIR/mediabox" "$MEDIABOX_DIR/install.sh" "$MEDIABOX_DIR/lib/avahi-alias.sh"
 ok "Comando \"mediabox\" installato"
 
-# --- 7. Avvio e configurazione automatica ------------------------------------------
-if applica; then
+# --- 7. Configurazione dal browser -------------------------------------------------------
+# (la password la scrive solo la procedura: se manca, la procedura non è stata fatta)
+if [[ -z "$(leggi_env ADMIN_PASSWORD "$ENV_FILE")" ]]; then
+  scrivi_dischi
+  avvia_procedura_web
+  porta="$(leggi_env HTTP_PORT "$ENV_FILE")"
+  [[ "${porta:-80}" == "80" ]] && porta="" || porta=":$porta"
+  titolo "Continua dal browser"
+  echo
+  echo "  Apri questo indirizzo da un PC o dal telefono collegato alla stessa rete:"
+  echo
+  printf '      %shttp://mediabox.local%s%s\n' "$C_OK" "$porta" "$C_FINE"
+  printf '      oppure  http://%s%s\n' "$(leggi_env HOST_IP "$ENV_FILE")" "$porta"
+  echo
+  echo "  Lì scegli la password, cosa guardare e dove salvare i film."
+  echo "  Puoi seguire l'installazione dal browser: questa finestra puoi anche ignorarla."
+  echo
+  attendi_procedura_web
+fi
+
+MEDIA_DIR="$(leggi_env MEDIA_DIR "$ENV_FILE")"
+assicura_cartella "$MEDIA_DIR"
+ok "Film, serie e download in: $MEDIA_DIR"
+installa_aggiornamenti_automatici
+installa_controllo_impostazioni
+
+# --- 8. Avvio e configurazione automatica ------------------------------------------
+if con_registro applica; then
   titolo "Fatto!"
-  echo "  mediabox è pronto. Questo riepilogo lo rivedi quando vuoi con: mediabox indirizzi"
+  echo "  mediabox è pronto: $(indirizzo_principale)"
+  echo "  Gli indirizzi li rivedi quando vuoi con: mediabox indirizzi"
 else
   titolo "Installazione completata con qualche problema"
-  echo "  Leggi la sezione \"Cosa non è andato\" qui sopra. Spesso basta aspettare un minuto e"
-  echo "  scrivere: mediabox configura"
+  echo "  Leggi la sezione \"Cosa non è andato\" qui sopra (o nel browser). Spesso basta aspettare"
+  echo "  un minuto e scrivere: mediabox configura"
   exit 1
 fi

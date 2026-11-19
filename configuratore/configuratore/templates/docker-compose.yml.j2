@@ -268,6 +268,18 @@ services:
 
   # Strumento interno: configura i servizi, backup e ripristino.
   # Non resta acceso: si avvia solo con "docker compose run".
+  # Configurazione dal browser (/impostazioni). È lo stesso programma del configuratore.
+  impostazioni:
+    image: mediabox/configuratore:locale
+    pull_policy: never
+    restart: unless-stopped
+    user: "{{ PUID }}:{{ PGID }}"
+    command: ["web"]
+    environment:
+      TZ: "{{ TZ }}"
+    volumes:
+      - ..:/mediabox
+
   configuratore:
     build:
       context: ../configuratore

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import mimetypes
 import time
@@ -20,6 +21,7 @@ from pydantic import BaseModel
 from . import home as home_netflix
 from .archive import InternetArchive
 from .avvisami import Avvisami
+from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
@@ -57,7 +59,8 @@ class Servizi:
         self.config = config
         self.client = client
         self.archivio = Archivio(config.cartella_dati / "cerca.db")
-        self.tmdb = TMDB(config, self.archivio, client)
+        # con la chiave TMDB il catalogo completo, senza le fonti gratuite (Radarr, Wikidata, TVmaze)
+        self.tmdb = TMDB(config, self.archivio, client) if config.con_tmdb else CatalogoLibero(config, self.archivio, client)
         self.archive = InternetArchive(self.archivio, client)
         self.prowlarr = Prowlarr(config, self.archivio, client)
         self.qbit = QBittorrent(config, client)
@@ -143,7 +146,7 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
         nome,
         {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), "disco": s.disco.stato(),
          "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
-         "kids": in_kids(request), "download_attivi": len(attivi), **contesto},
+         "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
     )
 
 
@@ -233,7 +236,7 @@ async def scheda_film(request: Request, tmdb_id: int):
 
 
 @app.get("/genere/{genere}", response_class=HTMLResponse)
-async def pagina_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0):
+async def pagina_genere(request: Request, genere: int, mondo: str = "film"):
     s = servizi(request)
     if in_kids(request):
         mondo = "kids"
@@ -242,11 +245,26 @@ async def pagina_genere(request: Request, genere: int, mondo: str = "film", grat
     try:
         elenco = await (s.tmdb.generi_kids() if mondo == "kids" else s.tmdb.generi(tipo_tmdb(mondo)))
     except ErroreServizio as exc:
-        return pagina(request, "genere.html", mondo=mondo, genere=None, generi=[], gratis=False, errore=exc)
+        return pagina(request, "genere.html", mondo=mondo, genere=None, generi=[], errore=exc)
     trovato = next((g for g in elenco if g["id"] == genere), None)
     if trovato is None:
         return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
-    return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco, gratis=bool(gratis))
+    return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco)
+
+
+@app.get("/piattaforma/{piattaforma}", response_class=HTMLResponse)
+async def pagina_piattaforma(request: Request, piattaforma: int, mondo: str = "film"):
+    s = servizi(request)
+    if (via := solo_adulti(request)) is not None:
+        return via
+    mondo = "serie" if mondo == "serie" else "film"
+    try:
+        trovata = next((p for p in await s.tmdb.piattaforme(tipo_tmdb(mondo)) if p["id"] == piattaforma), None)
+    except ErroreServizio as exc:
+        return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=None, errore=exc)
+    if trovata is None:
+        return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
+    return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=trovata)
 
 
 @app.get("/torrent", response_class=HTMLResponse)
@@ -308,7 +326,7 @@ async def api_home(request: Request, mondo: str = "film"):
     s = servizi(request)
     if in_kids(request) or mondo not in ("film", "serie"):
         return {"righe": []}
-    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo))
+    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo), piattaforme_scelte(s))
     if mondo == "serie" and s.config.sonarr_url:
         try:
             episodi = await s.serie.nuovi_episodi()
@@ -317,6 +335,46 @@ async def api_home(request: Request, mondo: str = "film"):
         if episodi:
             risposta["righe"].append({"tipo": "episodi", "titolo": "Nuovi episodi delle tue serie", "elementi": episodi})
     return risposta
+
+
+def piattaforme_scelte(s: Servizi) -> list[int] | None:
+    """Le piattaforme scelte nella home (None = quelle di partenza)."""
+    try:
+        valore = json.loads(s.archivio.stato_leggi("piattaforme") or "null")
+    except ValueError:
+        return None
+    return [int(x) for x in valore if str(x).isdigit()] if isinstance(valore, list) else None
+
+
+@app.get("/api/piattaforme")
+async def api_piattaforme(request: Request, mondo: str = "film"):
+    s = servizi(request)
+    tutte = await s.tmdb.piattaforme(tipo_tmdb(mondo))
+    scelte = piattaforme_scelte(s)
+    if scelte is None:
+        scelte = list(home_netflix.PIATTAFORME_INIZIALI)
+    return {"tutte": tutte[:40], "scelte": scelte, "massimo": home_netflix.MASSIMO_PIATTAFORME}
+
+
+class SceltaPiattaforme(BaseModel):
+    scelte: list[int]
+
+
+@app.post("/api/piattaforme")
+async def api_piattaforme_salva(request: Request, dati: SceltaPiattaforme):
+    s = servizi(request)
+    if in_kids(request):
+        return JSONResponse({"errore": "In Kids non si cambiano le piattaforme."}, status_code=403)
+    scelte = list(dict.fromkeys(dati.scelte))[: home_netflix.MASSIMO_PIATTAFORME]
+    s.archivio.stato_scrivi("piattaforme", json.dumps(scelte))
+    return {"scelte": scelte, "messaggio": "Fatto: la home mostra le tue piattaforme."}
+
+
+@app.get("/api/piattaforma/{piattaforma}")
+async def api_piattaforma(request: Request, piattaforma: int, mondo: str = "film", pagina: int = 1):
+    s = servizi(request)
+    elementi = await s.tmdb.su_piattaforma(tipo_tmdb(mondo), piattaforma, pagina=pagina)
+    return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
 
 
 @app.get("/api/generi")
@@ -329,11 +387,11 @@ async def api_generi(request: Request, mondo: str = "film"):
 
 
 @app.get("/api/genere/{genere}")
-async def api_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0, pagina: int = 1):
+async def api_genere(request: Request, genere: int, mondo: str = "film", pagina: int = 1):
     s = servizi(request)
     kids = in_kids(request) or mondo == "kids"
     tipo = "movie" if kids else tipo_tmdb(mondo)
-    elementi = await s.tmdb.scopri(tipo, genere, solo_gratis=bool(gratis), pagina=pagina, kids=kids)
+    elementi = await s.tmdb.scopri(tipo, genere, pagina=pagina, kids=kids)
     return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
 
 
