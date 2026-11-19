@@ -224,25 +224,6 @@ def test_jellyfin_generi_continua_e_libreria():
     assert continua[0]["link"] == "/jellyfin/web/#/details?id=e1"
 
 
-def test_chiave_inclusa_rifiutata_spiega_cosa_fare():
-    import pytest
-
-    def rifiuta(r: httpx.Request) -> httpx.Response:
-        return httpx.Response(401)
-
-    async def prova(pubblica):
-        async with httpx.AsyncClient(transport=httpx.MockTransport(rifiuta)) as client:
-            config = Config(tmdb_chiave="x", tmdb_api="https://api.themoviedb.org/3", tmdb_chiave_pubblica=pubblica)
-            await TMDB(config, ArchivioFinto(), client).tendenze()
-
-    with pytest.raises(ErroreServizio) as exc:
-        asyncio.run(prova(True))
-    assert "inclusa in mediabox" in exc.value.cosa and "mediabox update" in exc.value.cosa_fare
-    with pytest.raises(ErroreServizio) as exc:
-        asyncio.run(prova(False))
-    assert "Impostazioni" in exc.value.cosa_fare
-
-
 def test_righe_per_piattaforma():
     richieste = []
     fornitori = {"results": [

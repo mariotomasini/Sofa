@@ -59,7 +59,8 @@ def normalizza_percorso(percorso: str) -> str:
 
 def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
     valori = dict(imp.valori)
-    for chiave in ("ADMIN_PASSWORD", "TMDB_API_KEY", "RADARR_API_KEY", "PROWLARR_API_KEY"):
+    # la chiave TMDB è facoltativa: senza, Cerca usa fonti gratuite
+    for chiave in ("ADMIN_PASSWORD", "RADARR_API_KEY", "PROWLARR_API_KEY"):
         imp.obbligatorio(chiave)
     if imp.sonarr:
         imp.obbligatorio("SONARR_API_KEY")

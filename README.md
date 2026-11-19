@@ -52,7 +52,17 @@ Con mediabox puoi:
   - l'app **ntfy** sul telefono, per le notifiche;
   - un **tuner TV**: HDHomeRun di rete oppure chiavetta USB DVB-T2.
 
-Il catalogo dei film viene da **TMDB**. mediabox ha già una chiave TMDB inclusa (file `tmdb-chiave-pubblica.txt`), quindi non devi registrarti da nessuna parte. Se preferisci usare una chiave tua, la metti quando vuoi nelle impostazioni: è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*, e vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se il file della chiave inclusa è vuoto, la procedura guidata te la chiede.
+**Non serve nessuna chiave né registrazione.** Senza chiavi Cerca usa fonti gratuite:
+
+| Cosa | Da dove arriva |
+|---|---|
+| Ricerca e schede dei film, in italiano, con locandine e voti | Radarr (già installato) |
+| Film di tendenza e appena usciti | la pagina *Scopri* di Radarr |
+| Film per genere, cartoni per Kids, *Originali Netflix / Prime Video / Disney+* | [Wikidata](https://www.wikidata.org) |
+| Serie: ricerca, serie del momento, serie per genere e per piattaforma | [TVmaze](https://www.tvmaze.com) (titoli e trame in inglese) |
+| Dove vederlo in Italia | un link alla ricerca di [JustWatch](https://www.justwatch.com/it) |
+
+**Chiave TMDB facoltativa.** Se la metti nelle impostazioni (`/impostazioni`, in fondo alla pagina), Cerca usa TMDB: ogni scheda mostra direttamente su quali servizi si guarda il film in Italia, le righe "Su Netflix" mostrano il catalogo italiano vero, le serie hanno titoli e trame in italiano e torna il pulsante "Avvisami se diventa gratis". La chiave è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*: vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se la togli, Cerca torna alle fonti gratuite.
 
 ---
 
@@ -72,7 +82,6 @@ L'installer non fa domande nel terminale (a parte la password del tuo utente, pe
 2. riconosce la scheda grafica Intel, i tuner USB e un eventuale HDHomeRun in rete;
 3. ti scrive l'indirizzo da aprire nel browser, ad esempio **`http://mediabox.local`**. Va bene anche il telefono, se è sulla stessa rete;
 4. nel browser una **procedura guidata** ti chiede, un passo alla volta:
-   - solo se manca la chiave inclusa, quella di **TMDB**: con le istruzioni per averla, e la controlla subito;
    - la **password** di amministrazione;
    - **cosa guardi**: serie TV, anime, musica, sottotitoli, pulizia, aggiornamenti…;
    - **dove salvare** film e musica, con lo spazio libero di ogni disco e quello consigliato;
@@ -181,7 +190,7 @@ Poi, riga per riga:
 1. **Perché ti piace: …** — due righe di consigli scelti in base ai generi di quello che hai visto (o messo tra i preferiti) in Jellyfin. I titoli che hai già non te li ripropone. Finché non hai visto nulla trovi "Da non perdere: Commedia / Azione" (per le serie: Dramma / Crime);
 2. **Top 10 della settimana**, con i numeri grandi;
 3. **Appena usciti**: i 10 titoli più visti usciti negli ultimi due mesi (film nei cinema italiani, serie nuove);
-4. **Su Netflix, Su Prime Video, Su Disney+…**: una riga per ogni piattaforma che hai, con i titoli più visti in Italia inclusi nell'abbonamento (o gratis). Le scegli con il pulsante **Scegli le tue piattaforme** in fondo alla home, fino a 6: Netflix, Prime Video, Disney+, NOW, Apple TV+, Crunchyroll, RaiPlay e le altre disponibili in Italia. *Vedi tutti* apre la pagina della piattaforma. Sono titoli da guardare nell'app della piattaforma: mediabox non li scarica;
+4. **Su Netflix, Su Prime Video, Su Disney+…**: una riga per ogni piattaforma che hai, con i titoli più visti in Italia inclusi nell'abbonamento (o gratis). Le scegli con il pulsante **Scegli le tue piattaforme** in fondo alla home, fino a 6: Netflix, Prime Video, Disney+, NOW, Apple TV+, Crunchyroll, RaiPlay e le altre disponibili in Italia. *Vedi tutti* apre la pagina della piattaforma. Sono titoli da guardare nell'app della piattaforma: mediabox non li scarica. Senza chiave TMDB le righe dei film diventano *Originali Netflix*, *Originali Prime Video*… (i film prodotti o distribuiti dalla piattaforma negli ultimi 3 anni) e quelle delle serie mostrano le serie con episodi usciti in questi giorni;
 5. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
 
 I consigli e "Continua a guardare" usano l'utente amministratore di Jellyfin creato all'installazione: se in famiglia usate utenti diversi, i consigli seguono quello.
@@ -208,6 +217,8 @@ Se `mediabox.local` sul telefono non funziona, usa l'indirizzo IP (es. `http://1
 Su Android, con un indirizzo `http://` la scorciatoia si apre nel browser. Si apre a tutto schermo solo con un indirizzo `https://`, per esempio quello HTTPS di Tailscale. Su iPhone si apre a tutto schermo in entrambi i casi.
 
 ### Avvisami se diventa gratis
+
+Serve la chiave TMDB facoltativa: senza, il pulsante non compare.
 
 Nella scheda di un film premi **"Avvisami se diventa disponibile gratis"**. Ogni giorno mediabox controlla se il film è comparso tra i servizi gratuiti con pubblicità, come Pluto TV o Rakuten TV:
 
@@ -588,13 +599,11 @@ Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Us
 
 ### Cerca dice "TMDB rifiuta la chiave API"
 
-Se usi una chiave tua, controllala nelle impostazioni (`/impostazioni`): deve essere tutta, senza spazi.
+Controlla la chiave nelle impostazioni (`/impostazioni`): deve essere tutta, senza spazi. Oppure toglila: Cerca funziona anche senza.
 
-Se usi quella inclusa in mediabox e Cerca dice che *non funziona più*, scrivi `mediabox update`: la chiave inclusa arriva con gli aggiornamenti. Nel frattempo puoi mettere una chiave tua dalle impostazioni.
+### Senza chiave alcune righe sono vuote
 
-### Per chi pubblica mediabox: la chiave inclusa
-
-La chiave inclusa va messa una volta sola nel file `tmdb-chiave-pubblica.txt`, su una riga, senza spazi. Crea un account TMDB per il progetto, poi da *Impostazioni → API* chiedi una chiave per un'applicazione open source e copia il **Read Access Token**. È una chiave di sola lettura ed è pubblica di proposito, come quelle incluse in Jellyfin, Radarr e Kodi. Il limite di TMDB è di circa 50 richieste al secondo per ogni indirizzo IP, quindi le installazioni non si rubano capacità a vicenda. Se TMDB la revoca, basta sostituirla e pubblicare una nuova versione.
+Le righe per genere e "Originali Netflix" vengono da Wikidata, le serie da TVmaze. Se uno dei due non risponde (capita di rado, ad esempio quando chiede di rallentare), la riga sparisce o mostra meno titoli: riprova più tardi. I risultati restano in memoria per giorni, quindi succede soprattutto la prima volta.
 
 ---
 

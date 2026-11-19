@@ -27,11 +27,11 @@
       <section class="passo" data-passo="benvenuto" aria-labelledby="t-benvenuto">
         <p class="etichetta">Benvenuto</p>
         <h1 id="t-benvenuto">Configuriamo mediabox</h1>
-        <p class="grande">Bastano {{ "due minuti. Ti chiedo una password" if stato.tmdb_pubblica else "cinque minuti. Ti chiedo una chiave gratuita, una password" }} e cosa vuoi guardare: al resto penso io.</p>
+        <p class="grande">Bastano due minuti. Ti chiedo una password e cosa vuoi guardare: al resto penso io. Non serve registrarsi da nessuna parte.</p>
         <ul class="elenco-semplice">
-          {% if not stato.tmdb_pubblica %}<li><span class="spunta" aria-hidden="true">1</span>Il catalogo dei film (chiave gratuita di TMDB)</li>{% endif %}
-          <li><span class="spunta" aria-hidden="true">{{ 1 if stato.tmdb_pubblica else 2 }}</span>Una password per te</li>
-          <li><span class="spunta" aria-hidden="true">{{ 2 if stato.tmdb_pubblica else 3 }}</span>Cosa guardi e dove salvarlo</li>
+          <li><span class="spunta" aria-hidden="true">1</span>Una password per te</li>
+          <li><span class="spunta" aria-hidden="true">2</span>Cosa guardi e dove salvarlo</li>
+          <li><span class="spunta" aria-hidden="true">3</span>Gli avvisi sul telefono, se li vuoi</li>
         </ul>
         {% if s.hardware %}
         <div class="trovato">
@@ -40,24 +40,6 @@
           <span>{{ "✔ Tuner TV collegato: avrai la TV in diretta" if s.hardware.tuner else ("✔ HDHomeRun in rete: avrai la TV in diretta" if s.hardware.hdhomerun else "· Nessun tuner TV: la TV in diretta resta spenta") }}</span>
         </div>
         {% endif %}
-      </section>
-
-      <section class="passo" data-passo="tmdb" aria-labelledby="t-tmdb">
-        <p class="etichetta">Il catalogo dei film</p>
-        <h1 id="t-tmdb">La chiave di TMDB</h1>
-        {% if s.tmdb_impostata %}
-        <p class="solo-impostazioni">Usi una chiave tua, già salvata. Incollane una nuova solo se vuoi cambiarla.</p>
-        {% elif stato.tmdb_pubblica %}
-        <p class="solo-impostazioni">Uso la chiave inclusa in mediabox: non devi fare niente. Se preferisci usarne una tua, incollala qui.</p>
-        {% endif %}
-        <ol class="istruzioni solo-procedura">
-          <li>Crea un account gratuito su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org ↗</a>.</li>
-          <li>Apri <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Impostazioni → API ↗</a> e chiedi una chiave per uso personale.</li>
-          <li>Copia il <strong>Token di accesso in lettura</strong> (quello lungo) e incollalo qui sotto.</li>
-        </ol>
-        <label class="campo" for="tmdb">Chiave TMDB</label>
-        <input id="tmdb" name="tmdb" type="text" autocomplete="off" spellcheck="false" placeholder="eyJhbGciOi…">
-        <p class="messaggio" id="msg-tmdb" role="status"></p>
       </section>
 
       <section class="passo" data-passo="password" aria-labelledby="t-password">
@@ -182,6 +164,32 @@
         </div>
       </section>
       {% endif %}
+
+      <section class="passo" data-passo="tmdb" aria-labelledby="t-tmdb">
+        <p class="etichetta">Facoltativo</p>
+        <h1 id="t-tmdb">Chiave TMDB</h1>
+        {% if s.tmdb_impostata %}
+        <p>Usi una chiave TMDB: Cerca mostra anche dove vedere ogni film in Italia e ti avvisa quando diventa gratis. Incollane una nuova solo se vuoi cambiarla.</p>
+        {% else %}
+        <p>Cerca funziona già senza: film e trame in italiano arrivano da Radarr, generi e piattaforme da Wikidata, le serie da TVmaze.</p>
+        <p>Con una chiave gratuita di TMDB in più vedi <strong>dove guardare ogni film in Italia</strong> (Netflix, Prime Video, RaiPlay…), le righe "Su Netflix" con il catalogo vero e l'avviso quando un film diventa gratis.</p>
+        <ol class="istruzioni">
+          <li>Crea un account gratuito su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org ↗</a>.</li>
+          <li>Apri <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Impostazioni → API ↗</a> e chiedi una chiave per uso personale.</li>
+          <li>Copia il <strong>Token di accesso in lettura</strong> (quello lungo) e incollalo qui sotto.</li>
+        </ol>
+        {% endif %}
+        <label class="campo" for="tmdb">Chiave TMDB</label>
+        <input id="tmdb" name="tmdb" type="text" autocomplete="off" spellcheck="false" placeholder="{{ 'Lascia vuoto per tenere la chiave attuale' if s.tmdb_impostata else 'Vuoto = senza chiave' }}">
+        {% if s.tmdb_impostata %}
+        <label class="scelta togli" for="tmdb-togli">
+          <input type="checkbox" id="tmdb-togli">
+          <span class="interruttore" aria-hidden="true"></span>
+          <span><strong>Togli la chiave</strong><small>Cerca continua a funzionare con le fonti senza chiave.</small></span>
+        </label>
+        {% endif %}
+        <p class="messaggio" id="msg-tmdb" role="status"></p>
+      </section>
 
       <section class="passo" data-passo="riepilogo" aria-labelledby="t-riepilogo">
         <p class="etichetta">Ultimo controllo</p>

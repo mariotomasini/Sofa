@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from . import home as home_netflix
 from .archive import InternetArchive
 from .avvisami import Avvisami
+from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
@@ -58,7 +59,8 @@ class Servizi:
         self.config = config
         self.client = client
         self.archivio = Archivio(config.cartella_dati / "cerca.db")
-        self.tmdb = TMDB(config, self.archivio, client)
+        # con la chiave TMDB il catalogo completo, senza le fonti gratuite (Radarr, Wikidata, TVmaze)
+        self.tmdb = TMDB(config, self.archivio, client) if config.con_tmdb else CatalogoLibero(config, self.archivio, client)
         self.archive = InternetArchive(self.archivio, client)
         self.prowlarr = Prowlarr(config, self.archivio, client)
         self.qbit = QBittorrent(config, client)
@@ -144,7 +146,7 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
         nome,
         {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), "disco": s.disco.stato(),
          "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
-         "kids": in_kids(request), "download_attivi": len(attivi), **contesto},
+         "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
     )
 
 

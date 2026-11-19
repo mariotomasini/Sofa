@@ -58,7 +58,6 @@ def crea_app(cartella: Path = CARTELLA_MEDIABOX) -> FastAPI:
             "applicazione": a.__dict__,
             "indirizzi": p.indirizzi(v),
             "windows": p.windows(v),
-            "tmdb_pubblica": p.tmdb_pubblica(cartella),
         }
         if not stato["configurato"]:
             stato["scelte"] = p.scelte_attuali(v)

@@ -66,6 +66,7 @@ function datiModulo() {
   document.querySelectorAll("[data-windows]").forEach((c) => { vociWindows[c.dataset.windows] = c.checked; });
   return {
     tmdb: $("tmdb") ? $("tmdb").value.trim() : "",
+    tmdb_togli: Boolean($("tmdb-togli") && $("tmdb-togli").checked),
     password: $("password").value,
     password2: $("password2").value,
     voci, voci_windows: vociWindows,
@@ -92,8 +93,8 @@ function aggiornaDipendenze() {
 }
 
 // --- procedura a passi --------------------------------------------------------------------
-// con la chiave TMDB inclusa in mediabox il passo della chiave non serve
-if (STATO.tmdb_pubblica && !STATO.configurato) document.querySelector('[data-passo="tmdb"]').remove();
+// la chiave TMDB è facoltativa: nella procedura non la chiediamo, si mette dalle impostazioni
+if (!STATO.configurato) document.querySelector('[data-passo="tmdb"]').remove();
 const passi = [...document.querySelectorAll("#modulo .passo")].map((s) => s.dataset.passo);
 let attuale = 0;
 let tmdbVerificata = "";
@@ -153,8 +154,6 @@ function riempiRiepilogo() {
   const voci = [...document.querySelectorAll("[data-voce]")].filter((c) => c.checked)
     .map((c) => c.closest(".scelta").querySelector("strong").textContent);
   const righe = [
-    ["Catalogo", d.tmdb ? (tmdbVerificata ? "Chiave TMDB verificata" : "Chiave TMDB (non verificata)")
-      : (STATO.tmdb_pubblica ? "TMDB, con la chiave inclusa in mediabox" : "—")],
     ["Utente", "admin, con la password che hai scelto"],
     ["Attivi", ["Film", ...voci].join(", ")],
     ["Film e musica in", d.cartella],
@@ -290,6 +289,20 @@ async function avviaAvanzamento() {
 // --- impostazioni dopo l'installazione ---------------------------------------------------------
 async function salvaImpostazioni() {
   $("salva").disabled = true;
+  const chiave = $("tmdb").value.trim();
+  if (chiave && chiave !== tmdbVerificata) {
+    // una chiave nuova si controlla prima di salvarla
+    try {
+      const r = await api("/api/verifica-tmdb", { chiave });
+      if (!r.ok && !r.sconosciuto) {
+        messaggio("msg-tmdb", r.messaggio);
+        $("tmdb").scrollIntoView({ block: "center" });
+        $("salva").disabled = false;
+        return;
+      }
+      tmdbVerificata = chiave;
+    } catch (e) { /* se non si può controllare, la salviamo lo stesso */ }
+  }
   try {
     const r = await api("/api/impostazioni", datiModulo());
     if (!r.cambiato) { avviso(r.messaggio); return; }
@@ -328,7 +341,6 @@ $("esci").addEventListener("click", async () => { await api("/api/esci", {}); lo
       s.hidden = ["benvenuto", "password", "riepilogo"].includes(s.dataset.passo);
     });
     mostraVista("impostazioni");
-    $("tmdb").placeholder = "Lascia vuoto per tenere la chiave attuale";
   } else {
     mostraVista("accesso");
   }

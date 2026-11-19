@@ -111,7 +111,7 @@ function avviaFilm(tmdbId) {
   }
 
   const avvisami = document.getElementById("avvisami");
-  avvisami.addEventListener("click", async () => {
+  if (avvisami) avvisami.addEventListener("click", async () => {
     avvisami.disabled = true;
     try {
       const r = await chiama(`/api/avvisami/${tmdbId}`, { method: "POST" });
@@ -135,6 +135,14 @@ function htmlLogo(p) {
 const BREVE_OFFERTA = { ads: "gratis", free: "gratis", flatrate: "abbonamento", rent: "noleggio", buy: "acquisto" };
 
 function htmlProvider(d) {
+  if (d.senza_chiave) {
+    // senza chiave TMDB non sappiamo dove si guarda: rimandiamo a JustWatch
+    return "<p>Per sapere su quali servizi si guarda in Italia, cercalo su JustWatch.</p>" +
+      `<a class="servizio" href="${esc(d.link)}" target="_blank" rel="noopener">` +
+      '<span class="logo-iniziale" aria-hidden="true">J</span><span class="nome-servizio">Cerca su JustWatch</span>' +
+      '<span class="freccia" aria-hidden="true">↗</span></a>' +
+      '<p class="sottotitolo">Con la chiave TMDB facoltativa (Impostazioni di mediabox) lo vedi direttamente qui.</p>';
+  }
   if (!d.gruppi.length) {
     return "<p>Al momento non risulta disponibile su nessun servizio in Italia.</p>" +
       "<p class=\"sottotitolo\">Puoi usare il pulsante \"Avvisami\" qui sopra.</p>";

@@ -133,7 +133,8 @@ async def righe(tmdb, jellyfin, tipo: str, piattaforme: list[int] | None = None)
             risposta.setdefault("errore", _errore(elementi))
             continue
         risposta["righe"].append({
-            "tipo": "piattaforma", "titolo": f"Su {piattaforma['nome']}", "piattaforma": piattaforma["id"],
+            "tipo": "piattaforma", "titolo": piattaforma.get("titolo_riga") or f"Su {piattaforma['nome']}",
+            "piattaforma": piattaforma["id"],
             "logo": piattaforma["logo"], "elementi": elementi[:MASSIMO_PER_RIGA],
         })
     if isinstance(continua, list):

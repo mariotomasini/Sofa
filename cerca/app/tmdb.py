@@ -140,16 +140,10 @@ class TMDB:
                 "Controlla che il PC di mediabox sia collegato a Internet e riprova tra poco.",
             ) from exc
         if r.status_code == 401:
-            if self.config.tmdb_chiave_pubblica:
-                raise ErroreServizio(
-                    "La chiave TMDB inclusa in mediabox non funziona più.",
-                    "Aggiorna mediabox (mediabox update) oppure metti una chiave tua dalla pagina Impostazioni "
-                    "(/impostazioni): è gratuita su themoviedb.org → Impostazioni → API.",
-                )
             raise ErroreServizio(
                 "TMDB rifiuta la chiave API.",
-                "Controlla la chiave nella pagina Impostazioni di mediabox (/impostazioni): "
-                "deve essere tutta, senza spazi (themoviedb.org → Impostazioni → API).",
+                "Controlla la chiave nella pagina Impostazioni di mediabox (/impostazioni): deve essere tutta, "
+                "senza spazi. Oppure cancellala: Cerca funziona anche senza, con meno informazioni.",
             )
         if r.status_code == 429:
             raise ErroreServizio("TMDB chiede di rallentare.", "Aspetta qualche secondo e riprova.")

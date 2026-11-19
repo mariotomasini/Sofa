@@ -53,6 +53,8 @@ class Avvisami:
     async def controlla(self) -> int:
         """Controlla tutti i film della lista. Restituisce quanti sono diventati gratis."""
         nuovi = 0
+        if not self.config.con_tmdb:
+            return 0  # senza chiave TMDB non sappiamo dove si guarda un film
         for voce in self.archivio.avvisami_elenco():
             try:
                 provider = await self.tmdb.provider(voce["tmdb_id"], durata_cache=3600)
