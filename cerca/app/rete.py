@@ -7,7 +7,8 @@ import time
 
 import httpx
 
-AGENTE = "mediabox-cerca/1.0 (media server domestico)"
+# MusicBrainz e Internet Archive chiedono un User-Agent con un indirizzo di contatto
+AGENTE = "mediabox-cerca/1.2 ( https://github.com/mariotomasini/Sofa )"
 
 
 class ErroreServizio(Exception):

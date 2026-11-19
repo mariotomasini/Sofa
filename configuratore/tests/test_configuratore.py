@@ -157,3 +157,96 @@ def test_pacchetto_hdhomerun():
     risposta = corpo + zlib.crc32(corpo).to_bytes(4, "little")
     assert e_risposta(risposta)
     assert not e_risposta(risposta[:-1] + b"\x00")
+
+
+def test_genera_musica_anime_sottotitoli(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_ANIME=si\nWITH_LIDARR=si\nLIDARR_API_KEY=l\nWITH_FLARESOLVERR=no\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    # gli anime accendono Sonarr anche senza WITH_SONARR
+    assert "  sonarr:" in compose and "  lidarr:" in compose and "  bazarr:" in compose
+    assert "flaresolverr:" not in compose
+    caddy = (cartella / "generato" / "Caddyfile").read_text()
+    assert "handle /lidarr*" in caddy and "handle /bazarr*" in caddy
+    servizi = (cartella / "generato" / "homepage" / "services.yaml").read_text()
+    assert "Lidarr" in servizi and "Bazarr" in servizi and "anime" in servizi
+
+
+def test_lidarr_senza_chiave_da_errore(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_LIDARR=si\n")
+    with pytest.raises(ErroreMediabox):
+        genera(Impostazioni.carica(cartella), cartella)
+
+
+def test_librerie_jellyfin():
+    from configuratore.servizi.jellyfin import librerie
+
+    class Finta:
+        anime = False
+
+    nomi = [n for n, _, _ in librerie(Finta())]
+    assert nomi == ["Film", "Serie", "Musica", "Registrazioni"]
+    Finta.anime = True
+    assert ("Anime", "tvshows", "/data/anime") in librerie(Finta())
+
+
+def test_chiave_bazarr():
+    from configuratore.servizi.bazarr import leggi_chiave, profilo_lingue
+
+    testo = (
+        "general:\n  apikey: ''\nauth:\n  type: null\n"
+        "  apikey: 0123456789abcdef0123456789abcdef\nsonarr:\n  apikey: ''\n"
+    )
+    assert leggi_chiave(testo) == "0123456789abcdef0123456789abcdef"
+    assert leggi_chiave("auth:\n  apikey: ''\n") == ""
+    voci = profilo_lingue(["it", "en"])[0]["items"]
+    assert [v["language"] for v in voci] == ["it", "en"]
+    assert all("audio_only_include" in v for v in voci)  # senza, Bazarr va in errore
+
+
+def test_menu_impostazioni(cartella, monkeypatch, capsys):
+    from configuratore.menu import menu
+
+    risposte = iter(["2", "l", "it,en,ja", "n", "casa rossi!", "c", "/mnt/grande/mediabox/", "s"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(risposte))
+    assert menu(cartella) == 0
+    valori = leggi_env(cartella / ".env")
+    assert valori["WITH_ANIME"] == "si"
+    assert valori["LINGUE_SOTTOTITOLI"] == "it,en,ja"
+    assert valori["NTFY_TOPIC"] == "casarossi"
+    assert valori["MEDIA_DIR"] == "/mnt/grande/mediabox"
+    assert valori["SONARR_API_KEY"] == "s"  # chiave già presente: non cambia
+    # le altre righe del file restano com'erano
+    assert valori["TMDB_API_KEY"] == "abc"
+
+
+def test_menu_esci_senza_modifiche(cartella, monkeypatch):
+    from configuratore.menu import NESSUNA_MODIFICA, menu
+
+    prima = (cartella / ".env").read_text()
+    monkeypatch.setattr("builtins.input", lambda *_: "q")
+    assert menu(cartella) == NESSUNA_MODIFICA
+    assert (cartella / ".env").read_text() == prima
+
+
+def test_menu_crea_chiave_lidarr(cartella, monkeypatch):
+    from configuratore.menu import menu
+
+    risposte = iter(["3", "s"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(risposte))
+    menu(cartella)
+    valori = leggi_env(cartella / ".env")
+    assert valori["WITH_LIDARR"] == "si" and len(valori["LIDARR_API_KEY"]) == 32
+
+
+def test_percorso_valido():
+    from configuratore.menu import percorso_valido
+
+    assert percorso_valido("/mnt/disco/", False) == "/mnt/disco"
+    assert percorso_valido("relativo/x", False) is None
+    assert percorso_valido("D:\\Mediabox\\", True) == "D:/Mediabox"
+    assert percorso_valido('"E:\\Film"', True) == "E:/Film"
+    assert percorso_valido("D:", True) is None
+    assert percorso_valido("/linux", True) is None

@@ -20,7 +20,7 @@ from .messaggi import ErroreMediabox, avviso, titolo
 
 def _configura(imp: Impostazioni) -> int:
     from .riepilogo import Esito, stampa_riepilogo
-    from .servizi import jellyfin, prowlarr, qbittorrent, radarr, sonarr, tvheadend
+    from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tvheadend
 
     esito = Esito()
     passi = [
@@ -29,9 +29,15 @@ def _configura(imp: Impostazioni) -> int:
     ]
     if imp.sonarr:
         passi.append(("Sonarr", sonarr.configura))
+    if imp.lidarr:
+        passi.append(("Lidarr", lidarr.configura))
     passi.append(("Prowlarr", prowlarr.configura))
+    if imp.bazarr:
+        passi.append(("Bazarr", bazarr.configura))
     if imp.dvb:
         passi.append(("TVHeadend", tvheadend.configura))
+    if imp.beszel:
+        passi.append(("Beszel", beszel.configura))
     passi.append(("Jellyfin", jellyfin.configura))
 
     for nome, funzione in passi:
@@ -56,9 +62,16 @@ def main(argv: list[str] | None = None) -> int:
     sotto.add_parser("indirizzi")
     sotto.add_parser("backup")
     sotto.add_parser("hdhomerun")
+    imp_menu = sotto.add_parser("impostazioni")
+    imp_menu.add_argument("--prima-volta", action="store_true")
     rip = sotto.add_parser("ripristina")
     rip.add_argument("file")
     args = parser.parse_args(argv)
+
+    if args.comando == "impostazioni":
+        from .menu import menu
+
+        return menu(CARTELLA_MEDIABOX, prima_volta=args.prima_volta)
 
     if args.comando == "hdhomerun":
         from .hdhomerun import main as cerca_hdhomerun

@@ -7,7 +7,7 @@
     - Jellyfin:
         href: /jellyfin/
         icon: jellyfin.png
-        description: Guarda film, serie{% if tv %} e TV in diretta{% endif %}
+        description: Guarda film, serie{% if anime %}, anime{% endif %}{% if tv %}, TV in diretta{% endif %} e ascolta musica
 
 - Amministrazione:
     - qBittorrent:
@@ -27,6 +27,24 @@
         href: /sonarr/
         icon: sonarr.png
         description: Archivio delle serie
+{%- endif %}
+{%- if lidarr %}
+    - Lidarr:
+        href: /lidarr/
+        icon: lidarr.png
+        description: Archivio della musica
+{%- endif %}
+{%- if bazarr %}
+    - Bazarr:
+        href: /bazarr/
+        icon: bazarr.png
+        description: Sottotitoli
+{%- endif %}
+{%- if beszel %}
+    - Beszel:
+        href: /beszel/
+        icon: beszel.png
+        description: Grafici e avvisi del PC
 {%- endif %}
 {%- if dvb %}
     - TVHeadend:

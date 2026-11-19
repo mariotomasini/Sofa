@@ -8,6 +8,8 @@
 [CmdletBinding()]
 param(
     [switch]$WithSonarr,
+    [switch]$WithAnime,
+    [switch]$WithLidarr,
     [string]$Cartella = "C:\Mediabox"
 )
 
@@ -16,12 +18,15 @@ Set-StrictMode -Version 2.0
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 . (Join-Path $PSScriptRoot "lib\comune.ps1")
+. (Join-Path $PSScriptRoot "lib\aggiorna.ps1")
 
 # --- Permessi di amministratore --------------------------------------------------------
 $identita = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $identita.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $argomenti = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"", "-Cartella", "`"$Cartella`"")
     if ($WithSonarr) { $argomenti += "-WithSonarr" }
+    if ($WithAnime) { $argomenti += "-WithAnime" }
+    if ($WithLidarr) { $argomenti += "-WithLidarr" }
     Start-Process powershell.exe -Verb RunAs -ArgumentList $argomenti
     exit 0
 }
@@ -63,6 +68,8 @@ if ($LASTEXITCODE -ne 0) {
     # Dopo il riavvio l'installazione riparte da sola
     $comando = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Cartella 'install.ps1')`" -Cartella `"$Cartella`""
     if ($WithSonarr) { $comando += " -WithSonarr" }
+    if ($WithAnime) { $comando += " -WithAnime" }
+    if ($WithLidarr) { $comando += " -WithLidarr" }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "mediabox" -Value $comando
     Scrivi-Avviso "Serve un riavvio del PC. Dopo il riavvio e l'accesso, l'installazione continua da sola."
     if (Chiedi-SiNo "Riavvio adesso?" $true) { Restart-Computer -Force }
@@ -156,22 +163,36 @@ if ($nuovaInstallazione) {
     Scrivi-Env "NTFY_TOPIC" $ntfy $script:EnvFile
 }
 
-foreach ($chiave in @("RADARR_API_KEY", "PROWLARR_API_KEY", "SONARR_API_KEY")) {
+foreach ($chiave in @("RADARR_API_KEY", "PROWLARR_API_KEY", "SONARR_API_KEY", "LIDARR_API_KEY")) {
     if (-not (Leggi-Env $chiave $script:EnvFile)) { Scrivi-Env $chiave (Nuova-ChiaveCasuale) $script:EnvFile }
 }
 
-# Cartella dei film: il disco con più spazio libero
+if ($WithSonarr) { Scrivi-Env "WITH_SONARR" "si" $script:EnvFile }
+if ($WithAnime) { Scrivi-Env "WITH_ANIME" "si" $script:EnvFile }
+if ($WithLidarr) { Scrivi-Env "WITH_LIDARR" "si" $script:EnvFile }
+
+# Cosa guardi? (solo la prima volta; dopo si cambia con "mediabox impostazioni")
+Costruisci-Configuratore
+if ($nuovaInstallazione) { [void](Mostra-MenuImpostazioni -PrimaVolta) }
+
+# Cartella dei media: proponiamo il disco con più spazio libero; si può scriverne un'altra
 if ($nuovaInstallazione) {
     $dischi = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Sort-Object FreeSpace -Descending
-    $cartellaDati = "C:/Mediabox/dati"
+    $proposta = "C:\Mediabox\dati"
     $migliore = $dischi | Select-Object -First 1
     if ($migliore -and $migliore.DeviceID -ne "C:") {
-        $gb = [math]::Round($migliore.FreeSpace / 1GB)
-        if (Chiedi-SiNo "Metto film e download su $($migliore.DeviceID)\Mediabox ($gb GB liberi)?" $true) {
-            $cartellaDati = "$($migliore.DeviceID)/Mediabox"
-        }
+        $proposta = "$($migliore.DeviceID)\Mediabox"
+        Scrivi-Info "Il disco con più spazio è $($migliore.DeviceID) ($([math]::Round($migliore.FreeSpace / 1GB)) GB liberi)."
     }
-    Scrivi-Env "MEDIA_DIR" $cartellaDati $script:EnvFile
+    Write-Host ""
+    Write-Host "  Dove salvo film, serie, musica e download?"
+    while ($true) {
+        $scelta = (Read-Host "  ? Premi Invio per usare $proposta, oppure scrivi un'altra cartella").Trim().Trim('"').TrimEnd("\")
+        if (-not $scelta) { $scelta = $proposta; break }
+        if ($scelta -match "^[A-Za-z]:\\.+") { break }
+        Write-Host "    Scrivi il percorso completo con la lettera del disco (es. E:\Film)."
+    }
+    Scrivi-Env "MEDIA_DIR" ($scelta -replace "\\", "/") $script:EnvFile
 }
 $mediaDir = Leggi-Env "MEDIA_DIR" $script:EnvFile
 New-Item -ItemType Directory -Force -Path ($mediaDir -replace "/", "\") | Out-Null
@@ -184,7 +205,6 @@ Scrivi-Env "PUID" "1000" $script:EnvFile
 Scrivi-Env "PGID" "1000" $script:EnvFile
 Scrivi-Env "VAAPI" "no" $script:EnvFile
 Scrivi-Env "DVB" "no" $script:EnvFile
-if ($WithSonarr) { Scrivi-Env "WITH_SONARR" "si" $script:EnvFile }
 $ip = Trova-IpLocale
 Scrivi-Env "HOST_IP" $ip $script:EnvFile
 Scrivi-Info "Su Windows la transcodifica usa il processore e i tuner USB non sono supportati (limiti di Docker Desktop)."
@@ -251,6 +271,7 @@ if ($percorsoMacchina -notlike "*$Cartella*") {
     [Environment]::SetEnvironmentVariable("Path", "$percorsoMacchina;$Cartella", "Machine")
 }
 Scrivi-Ok "Comando 'mediabox' installato (funziona nelle nuove finestre di PowerShell o Prompt)"
+Installa-AggiornamentiAutomatici
 
 # --- 6. Avvio e configurazione automatica ---------------------------------------------------
 $tuttoBene = Applica-Configurazione

@@ -15,6 +15,7 @@ Set-StrictMode -Version 2.0
 $script:MediaboxDir = $PSScriptRoot
 $script:EnvFile = Join-Path $PSScriptRoot ".env"
 . (Join-Path $PSScriptRoot "lib\comune.ps1")
+. (Join-Path $PSScriptRoot "lib\aggiorna.ps1")
 
 function Mostra-Aiuto {
     @"
@@ -25,8 +26,10 @@ Uso: mediabox <comando>
   restart [servizio] riavvia tutto (o un solo servizio, es. "mediabox restart jellyfin")
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
+  impostazioni       cambia cosa usi: serie, anime, musica, sottotitoli, notifiche
   configura          rigenera la configurazione dal file .env e la riapplica
-  update             aggiorna i servizi all'ultima versione (fa prima un backup)
+  update             aggiorna mediabox e i servizi all'ultima versione (fa prima un backup)
+  versione           mostra la versione installata e l'ultima disponibile
   backup             salva configurazioni e impostazioni nella cartella backup
   restore <file>     ripristina un backup
   remote             installa Tailscale per usare mediabox da fuori casa
@@ -124,13 +127,53 @@ switch ($Comando.ToLower()) {
     "status" { Controlla-Installazione; Mostra-Stato }
     "logs" { Controlla-Installazione; Invoca-Compose logs -f --tail 200 @Altri }
     "configura" { Controlla-Installazione; Aggiorna-Ip; [void](Applica-Configurazione) }
+    "impostazioni" {
+        Controlla-Installazione; Costruisci-Configuratore
+        $cartellaPrima = Leggi-Env "MEDIA_DIR" $script:EnvFile
+        $esito = Mostra-MenuImpostazioni
+        if ($esito -eq 0) {
+            Sposta-Media $cartellaPrima (Leggi-Env "MEDIA_DIR" $script:EnvFile)
+            Installa-AggiornamentiAutomatici
+            Aggiorna-Ip; [void](Applica-Configurazione)
+        }
+        elseif ($esito -ne 3) { exit $esito }
+    }
     "update" {
         Controlla-Installazione
         [void](Esegui-Backup)
-        Scrivi-Titolo "Aggiornamento"
-        Invoca-Compose pull -q --ignore-buildable
-        Invoca-Compose build -q --pull cerca
-        if (Applica-Configurazione) { Scrivi-Ok "mediabox aggiornato" }
+        if (Aggiorna-Codice) {
+            # il nuovo codice va eseguito dal nuovo script
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:MediaboxDir "mediabox.ps1") aggiorna-servizi
+            exit $LASTEXITCODE
+        }
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:MediaboxDir "mediabox.ps1") aggiorna-servizi
+    }
+    "aggiorna-servizi" {
+        Controlla-Installazione
+        Scrivi-Titolo "Aggiorno i servizi"
+        Genera-File
+        Invoca-Compose pull -q --ignore-buildable | Out-Host
+        Invoca-Compose build -q --pull cerca | Out-Host
+        if (Applica-Configurazione) { Scrivi-Ok "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)" } else { exit 1 }
+    }
+    "aggiorna-automatico" {
+        # avviato ogni notte dall'attività pianificata
+        Controlla-Installazione
+        if ((Leggi-Env "AGGIORNAMENTI_AUTOMATICI" $script:EnvFile) -eq "no") { exit 0 }
+        $release = Trova-UltimaRelease
+        if (-not $release -or -not (Test-PiuNuova $release.Tag (Leggi-VersioneInstallata))) { exit 0 }
+        $registro = Join-Path $script:MediaboxDir "aggiornamenti.log"
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:MediaboxDir "mediabox.ps1") update *>> $registro
+        if ($LASTEXITCODE -eq 0) { Invia-Ntfy "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)." }
+        else { Invia-Ntfy "L'aggiornamento di mediabox non è riuscito: scrivi 'mediabox update' sul PC per vedere perché." }
+    }
+    "versione" {
+        Write-Host "  Versione installata: $(Leggi-VersioneInstallata)"
+        $release = Trova-UltimaRelease
+        if ($release) {
+            Write-Host "  Ultima su GitHub:    $($release.Tag)"
+            if (Test-PiuNuova $release.Tag (Leggi-VersioneInstallata)) { Write-Host "  Per aggiornare: mediabox update" }
+        }
     }
     "backup" { Controlla-Installazione; [void](Esegui-Backup) }
     "restore" { Controlla-Installazione; Esegui-Ripristino ($Altri | Select-Object -First 1) }

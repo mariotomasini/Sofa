@@ -26,6 +26,16 @@ volumes:
 {%- if dvb %}
   tvheadend_config:
 {%- endif %}
+{%- if lidarr %}
+  lidarr_config:
+{%- endif %}
+{%- if bazarr %}
+  bazarr_config:
+{%- endif %}
+{%- if beszel %}
+  beszel_data:
+  beszel_chiave:
+{%- endif %}
 
 x-utente: &utente
   PUID: "{{ PUID }}"
@@ -53,6 +63,8 @@ services:
       HOMEPAGE_ALLOWED_HOSTS: "localhost:3000"
     volumes:
       - ./homepage:/app/config
+      # solo per mostrare lo spazio libero nella pagina iniziale
+      - "{{ MEDIA_DIR }}:/dati-media:ro"
 
   jellyfin:
     image: "{{ IMG_JELLYFIN }}"
@@ -142,6 +154,76 @@ services:
       - tvheadend_config:/config
       - "{{ MEDIA_DIR }}/media/registrazioni/tvheadend:/recordings"
 {%- endif %}
+{%- if lidarr %}
+
+  # Musica: cerca, scarica e ordina per artista e album
+  lidarr:
+    image: "{{ IMG_LIDARR }}"
+    restart: unless-stopped
+    environment:
+      <<: *utente
+      LIDARR__SERVER__URLBASE: /lidarr
+      LIDARR__AUTH__APIKEY: "{{ LIDARR_API_KEY }}"
+      LIDARR__AUTH__METHOD: External
+      LIDARR__AUTH__REQUIRED: DisabledForLocalAddresses
+      LIDARR__LOG__ANALYTICSENABLED: "False"
+    volumes:
+      - lidarr_config:/config
+      - "{{ MEDIA_DIR }}:/data"
+{%- endif %}
+{%- if bazarr %}
+
+  # Sottotitoli automatici per film{% if sonarr %} e serie{% endif %}
+  bazarr:
+    image: "{{ IMG_BAZARR }}"
+    restart: unless-stopped
+    environment:
+      <<: *utente
+    volumes:
+      - bazarr_config:/config
+      - "{{ MEDIA_DIR }}:/data"
+{%- endif %}
+{%- if flaresolverr %}
+
+  # Aiuta Prowlarr con gli indexer protetti da Cloudflare (nessuna interfaccia)
+  flaresolverr:
+    image: "{{ IMG_FLARESOLVERR }}"
+    restart: unless-stopped
+    environment:
+      TZ: "{{ TZ }}"
+      LOG_LEVEL: info
+{%- endif %}
+{%- if beszel %}
+
+  # Monitoraggio: grafici e avvisi per processore, memoria, dischi e temperatura
+  beszel:
+    image: "{{ IMG_BESZEL }}"
+    restart: unless-stopped
+    environment:
+      APP_URL: "http://{{ NOME_HOST }}/beszel"
+      # Beszel ha il suo accesso: email {{ ADMIN_USER }}@mediabox.local e la password di mediabox
+      # (non può stare dietro la password di Caddy: usano la stessa intestazione del browser)
+      DISABLE_PASSWORD_AUTH: "false"
+    volumes:
+      - beszel_data:/beszel_data
+
+  beszel-agent:
+    image: "{{ IMG_BESZEL_AGENT }}"
+    restart: unless-stopped
+{%- if PIATTAFORMA == "windows" %}
+    # Docker Desktop: l'agente vede la macchina virtuale di Docker, non tutto Windows
+{%- else %}
+    # Rete dell'host: così misura la rete e i dischi veri del PC
+    network_mode: host
+{%- endif %}
+    environment:
+      LISTEN: "45876"
+      KEY_FILE: /chiave/beszel.pub
+      EXTRA_FILESYSTEMS: /extra-filesystems/media
+    volumes:
+      - beszel_chiave:/chiave:ro
+      - "{{ MEDIA_DIR }}:/extra-filesystems/media:ro"
+{%- endif %}
 
   # Ricerca unificata dei film (TMDB + Internet Archive + Prowlarr)
   cerca:
@@ -168,6 +250,13 @@ services:
       ADMIN_USER: "{{ ADMIN_USER }}"
       ADMIN_PASSWORD: "{{ ADMIN_PASSWORD }}"
       INDIRIZZO_PUBBLICO: "http://{{ NOME_HOST }}"
+      SOGLIA_DISCO_LIBERO: "{{ SOGLIA_DISCO_LIBERO }}"
+      PULIZIA_VISTI: "{{ PULIZIA_VISTI }}"
+      PULIZIA_GIORNI: "{{ PULIZIA_GIORNI }}"
+      SONARR_URL: "{{ 'http://sonarr:8989/sonarr' if sonarr else '' }}"
+      SONARR_API_KEY: "{{ SONARR_API_KEY if sonarr else '' }}"
+      LIDARR_URL: "{{ 'http://lidarr:8686/lidarr' if lidarr else '' }}"
+      LIDARR_API_KEY: "{{ LIDARR_API_KEY if lidarr else '' }}"
     volumes:
       - cerca_dati:/dati
       - "{{ MEDIA_DIR }}:/data"
@@ -200,4 +289,14 @@ services:
 {%- endif %}
 {%- if dvb %}
       - tvheadend_config:/volumi/tvheadend_config
+{%- endif %}
+{%- if lidarr %}
+      - lidarr_config:/volumi/lidarr_config
+{%- endif %}
+{%- if bazarr %}
+      - bazarr_config:/volumi/bazarr_config
+{%- endif %}
+{%- if beszel %}
+      - beszel_data:/volumi/beszel_data
+      - beszel_chiave:/volumi/beszel_chiave
 {%- endif %}

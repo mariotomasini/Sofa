@@ -5,10 +5,10 @@
 # PowerShell (pwsh) con PSScriptAnalyzer è facoltativo: se manca, quel controllo viene saltato.
 
 PYTHON ?= python3
-SCRIPT_BASH := install.sh mediabox $(wildcard lib/*.sh)
-SCRIPT_PS := install.ps1 mediabox.ps1 lib/comune.ps1
+SCRIPT_BASH := install.sh mediabox $(wildcard lib/*.sh) $(wildcard tests/*.sh)
+SCRIPT_PS := install.ps1 mediabox.ps1 lib/comune.ps1 lib/aggiorna.ps1
 
-.PHONY: check sintassi lint lint-bash lint-python lint-powershell test test-cerca test-configuratore dipendenze
+.PHONY: check sintassi lint lint-bash lint-python lint-powershell test test-cerca test-configuratore test-bash dipendenze
 
 check: sintassi lint test
 	@echo "✔ Tutti i controlli sono passati"
@@ -41,10 +41,13 @@ lint-powershell:
 		&& echo "✔ PSScriptAnalyzer"; \
 	else echo "· PSScriptAnalyzer non disponibile: salto il lint PowerShell"; fi
 
-test: test-cerca test-configuratore
+test: test-cerca test-configuratore test-bash
 
 test-cerca:
 	cd cerca && $(PYTHON) -m pytest -q
 
 test-configuratore:
 	cd configuratore && $(PYTHON) -m pytest -q
+
+test-bash:
+	bash tests/test_aggiorna.sh

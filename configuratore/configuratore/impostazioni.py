@@ -84,8 +84,34 @@ class Impostazioni:
         return _si(self.get("DVB", "no"))
 
     @property
+    def anime(self) -> bool:
+        return _si(self.get("WITH_ANIME", "no"))
+
+    @property
     def sonarr(self) -> bool:
-        return _si(self.get("WITH_SONARR", "no"))
+        """Sonarr serve sia per le serie sia per gli anime."""
+        return _si(self.get("WITH_SONARR", "no")) or self.anime
+
+    @property
+    def lidarr(self) -> bool:
+        return _si(self.get("WITH_LIDARR", "no"))
+
+    @property
+    def bazarr(self) -> bool:
+        return _si(self.get("WITH_BAZARR", "si"))
+
+    @property
+    def flaresolverr(self) -> bool:
+        return _si(self.get("WITH_FLARESOLVERR", "si"))
+
+    @property
+    def beszel(self) -> bool:
+        return _si(self.get("WITH_BESZEL", "no"))
+
+    @property
+    def lingue_sottotitoli(self) -> list[str]:
+        lingue = [x.strip().lower() for x in self.get("LINGUE_SOTTOTITOLI", "it,en").split(",") if x.strip()]
+        return list(dict.fromkeys(lingue)) or ["it", "en"]
 
     @property
     def hdhomerun(self) -> str:

@@ -76,6 +76,12 @@ class QBittorrent:
         elenco = r.json() if r.is_success else []
         return elenco[0] if elenco else None
 
+    async def tutti(self) -> list[dict]:
+        r = await self._richiesta("GET", "torrents/info")
+        if not r.is_success:
+            raise ErroreServizio("qBittorrent non risponde.", "Controlla con \"mediabox status\".")
+        return r.json()
+
     async def per_categoria(self, categoria: str) -> list[dict]:
         r = await self._richiesta("GET", "torrents/info", params={"category": categoria})
         return r.json() if r.is_success else []

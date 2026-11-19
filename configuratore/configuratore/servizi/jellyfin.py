@@ -23,8 +23,17 @@ LIBRERIE = [
     # nome, tipo di raccolta (None = contenuti misti), cartella dentro Jellyfin
     ("Film", "movies", "/data/film"),
     ("Serie", "tvshows", "/data/serie"),
+    ("Musica", "music", "/data/musica"),
     ("Registrazioni", None, "/data/registrazioni"),
 ]
+LIBRERIA_ANIME = ("Anime", "tvshows", "/data/anime")
+
+
+def librerie(imp: Impostazioni) -> list[tuple[str, str | None, str]]:
+    elenco = list(LIBRERIE)
+    if imp.anime:
+        elenco.insert(2, LIBRERIA_ANIME)
+    return elenco
 
 CODEC_HW = ["h264", "hevc", "mpeg2video", "vc1", "vp8", "vp9", "av1"]
 
@@ -201,9 +210,11 @@ def crea_librerie(jf: Jellyfin, imp: Impostazioni) -> None:
     esistenti = {
         lib["Name"]: lib for lib in jf.get("/Library/VirtualFolders", "leggere le librerie").json()
     }
-    for nome, tipo, cartella in LIBRERIE:
+    for nome, tipo, cartella in librerie(imp):
         if nome in esistenti:
             info(f"Libreria \"{nome}\" già presente")
+            if nome == "Film":
+                attiva_saghe(jf, esistenti[nome])
             continue
         parametri = {"name": nome, "refreshLibrary": "false"}
         if tipo:
@@ -215,6 +226,8 @@ def crea_librerie(jf: Jellyfin, imp: Impostazioni) -> None:
                 "EnableRealtimeMonitor": True,
                 "EnableChapterImageExtraction": False,
                 "SaveLocalMetadata": False,
+                # Film della stessa saga (es. tutti i "Rocky") raggruppati da soli
+                "AutomaticallyAddToCollection": tipo == "movies",
                 "PathInfos": [{"Path": cartella}],
             }
         }
@@ -224,6 +237,20 @@ def crea_librerie(jf: Jellyfin, imp: Impostazioni) -> None:
         jf.post("/Library/Refresh", "aggiornare le librerie")
     except ErroreMediabox:
         pass
+
+
+def attiva_saghe(jf: Jellyfin, libreria: dict) -> None:
+    """Per le installazioni già fatte: attiva le saghe automatiche nella libreria Film."""
+    opzioni = libreria.get("LibraryOptions") or {}
+    if opzioni.get("AutomaticallyAddToCollection"):
+        return
+    opzioni["AutomaticallyAddToCollection"] = True
+    jf.post(
+        "/Library/VirtualFolders/LibraryOptions",
+        "attivare le saghe automatiche",
+        json={"Id": libreria["ItemId"], "LibraryOptions": opzioni},
+    )
+    ok("Saghe automatiche attive nella libreria Film")
 
 
 def imposta_transcodifica(jf: Jellyfin, imp: Impostazioni) -> None:
@@ -374,12 +401,13 @@ def collega_radarr(imp: Impostazioni, chiave: str, nome_servizio: str = "radarr"
     """Fa sì che Radarr/Sonarr avvisino Jellyfin quando arriva un file nuovo."""
     from .arr import Arr
 
+    dentro = "/data/media/"
     if nome_servizio == "radarr":
         arr = Arr("Radarr", "http://radarr:7878/radarr", imp.obbligatorio("RADARR_API_KEY"))
-        dentro = "/data/media/"
-    else:
+    elif nome_servizio == "sonarr":
         arr = Arr("Sonarr", "http://sonarr:8989/sonarr", imp.obbligatorio("SONARR_API_KEY"))
-        dentro = "/data/media/"
+    else:
+        arr = Arr("Lidarr", "http://lidarr:8686/lidarr", imp.obbligatorio("LIDARR_API_KEY"), versione="v1")
     arr.assicura_da_schema(
         "notification",
         "MediaBrowser",
@@ -404,6 +432,8 @@ def collega_radarr(imp: Impostazioni, chiave: str, nome_servizio: str = "radarr"
             "onMovieFileDelete": True,
             "onSeriesDelete": True,
             "onEpisodeFileDelete": True,
+            "onReleaseImport": True,
+            "onTrackRetag": True,
         },
     )
     ok(f"{arr.nome} avvisa Jellyfin quando arriva qualcosa di nuovo")
@@ -434,6 +464,8 @@ def configura(imp: Impostazioni, esito) -> None:
     collega_radarr(imp, chiave, "radarr")
     if imp.sonarr:
         collega_radarr(imp, chiave, "sonarr")
+    if imp.lidarr:
+        collega_radarr(imp, chiave, "lidarr")
     try:
         if installa_intro_skipper(jf, imp):
             jf.riavvia()

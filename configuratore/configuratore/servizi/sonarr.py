@@ -7,11 +7,14 @@ from ..messaggi import ok
 from .arr import Arr, campi_qbittorrent
 
 CARTELLA_SERIE = "/data/media/serie"
+CARTELLA_ANIME = "/data/media/anime"
 
 NOMI = {
     "renameEpisodes": True,
     "replaceIllegalCharacters": True,
     "standardEpisodeFormat": "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+    # Anime: anche il numero assoluto dell'episodio (es. One Piece 1071)
+    "animeEpisodeFormat": "{Series Title} - S{season:00}E{episode:00} - {absolute:000} - {Episode Title} {Quality Full}",
     "seriesFolderFormat": "{Series Title} ({Series Year}) [tvdbid-{TvdbId}]",
     "seasonFolderFormat": "Stagione {season:00}",
     "specialsFolderFormat": "Speciali",
@@ -27,6 +30,9 @@ def configura(imp: Impostazioni, esito) -> None:
     arr.attendi()
     arr.assicura_root_folder(CARTELLA_SERIE)
     ok(f"Cartella delle serie: {CARTELLA_SERIE}")
+    if imp.anime:
+        arr.assicura_root_folder(CARTELLA_ANIME)
+        ok(f"Cartella degli anime: {CARTELLA_ANIME} (quando aggiungi un anime scegli questa cartella e tipo \"Anime\")")
     arr.aggiorna_config("naming", NOMI)
     arr.aggiorna_config("mediamanagement", {"copyUsingHardlinks": True, "deleteEmptyFolders": True})
     ok("Rinomina attiva, nomi compatibili con Jellyfin")

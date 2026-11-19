@@ -13,6 +13,21 @@ def prowlarr(imp: Impostazioni) -> Arr:
     return Arr("Prowlarr", INDIRIZZO, imp.obbligatorio("PROWLARR_API_KEY"), versione="v1")
 
 
+def collega_flaresolverr(arr: Arr) -> None:
+    """FlareSolverr si usa solo per gli indexer con l'etichetta "flaresolverr"."""
+    etichette = {t["label"]: t["id"] for t in arr.get("tag")}
+    if "flaresolverr" not in etichette:
+        etichette["flaresolverr"] = arr.post("tag", {"label": "flaresolverr"}, "creare l'etichetta flaresolverr")["id"]
+    arr.assicura_da_schema(
+        "indexerProxy",
+        "FlareSolverr",
+        "FlareSolverr",
+        {"host": "http://flaresolverr:8191/", "requestTimeout": 60},
+        extra={"tags": [etichette["flaresolverr"]]},
+    )
+    ok("FlareSolverr pronto: usalo con l'etichetta \"flaresolverr\" sugli indexer protetti da Cloudflare")
+
+
 def configura(imp: Impostazioni, esito) -> None:
     arr = prowlarr(imp)
     arr.attendi()
@@ -21,6 +36,8 @@ def configura(imp: Impostazioni, esito) -> None:
     app = [("Radarr", "http://radarr:7878/radarr", imp.obbligatorio("RADARR_API_KEY"))]
     if imp.sonarr:
         app.append(("Sonarr", "http://sonarr:8989/sonarr", imp.obbligatorio("SONARR_API_KEY")))
+    if imp.lidarr:
+        app.append(("Lidarr", "http://lidarr:8686/lidarr", imp.obbligatorio("LIDARR_API_KEY")))
     for nome, indirizzo, chiave in app:
         arr.assicura_da_schema(
             "applications",
@@ -40,6 +57,9 @@ def configura(imp: Impostazioni, esito) -> None:
         extra={"priority": 1},
     )
     ok("qBittorrent collegato (categoria \"manuale\")")
+
+    if imp.flaresolverr:
+        collega_flaresolverr(arr)
 
     indexer = arr.get("indexer")
     if indexer:

@@ -78,6 +78,11 @@ input:focus, textarea:focus { border-color: var(--accento); outline: none; }
 .scheda .titolo { font-weight: 600; padding: 0 .6rem; }
 .scheda .anno { color: var(--tenue); font-size: .85rem; padding: 0 .6rem; }
 
+/* striscia orizzontale scorrevole (comoda col telecomando e col dito) */
+.striscia { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(140px, 160px); gap: 1rem;
+  overflow-x: auto; padding-bottom: .6rem; scroll-snap-type: x proximity; }
+.striscia .scheda { scroll-snap-align: start; }
+
 .etichette { display: flex; flex-wrap: wrap; gap: .5rem; }
 .etichetta { background: var(--pannello); color: var(--testo); padding: .4rem .9rem; border-radius: 999px; text-decoration: none; }
 .etichetta:hover { background: var(--pannello-2); }
@@ -153,3 +158,14 @@ dialog { background: var(--pannello); color: var(--testo); border: 0; border-rad
 dialog::backdrop { background: rgba(0, 0, 0, .6); }
 
 .piede { color: var(--tenue); font-size: .8rem; text-align: center; padding: 2rem 1rem; }
+
+/* pagina Musica */
+.griglia-artisti { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: .8rem; }
+.artista { display: flex; gap: .8rem; align-items: center; background: var(--pannello); border-radius: var(--raggio); padding: .7rem; }
+.artista .iniziale { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: linear-gradient(135deg, #5b3cc4, var(--accento-scuro)); font-size: 1.4rem; font-weight: 700; }
+.artista .descrizione { flex: 1; min-width: 8rem; display: flex; flex-direction: column; overflow-wrap: break-word; }
+.artista button { flex: 0 0 auto; padding: .5rem .9rem; }
+.barra.grande { height: 18px; }
+.barra.piena div { background: var(--rosso); }
+.blocco h3 { font-size: 1rem; color: var(--tenue); margin: 1rem 0 .3rem; }

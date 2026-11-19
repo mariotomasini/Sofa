@@ -43,6 +43,16 @@ cerca_hdhomerun() {
   "${DOCKER[@]}" run --rm --network host mediabox/configuratore:locale hdhomerun 2>/dev/null || true
 }
 
+# Menu "Cosa guardi?" (0 = scelte salvate, 3 = nessuna modifica)
+menu_impostazioni() {
+  local opzioni=(-i)
+  [[ -t 0 && -t 1 ]] && opzioni=(-it)
+  local esito=0
+  "${DOCKER[@]}" run --rm "${opzioni[@]}" --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" \
+    mediabox/configuratore:locale impostazioni "$@" || esito=$?
+  return "$esito"
+}
+
 configuratore_genera() {
   configuratore_costruisci
   "${DOCKER[@]}" run --rm --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" \
@@ -68,11 +78,33 @@ applica() {
   titolo "Scarico e avvio i servizi (la prima volta può richiedere diversi minuti)"
   compose build -q cerca || errore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova."
   compose pull -q --ignore-buildable 2>/dev/null || compose pull --ignore-pull-failures -q || true
-  compose run --rm -T configuratore prepara
+  compose run --rm --remove-orphans -T configuratore prepara
   compose up -d --remove-orphans || errore "Alcuni servizi non sono partiti." \
     "Guarda i messaggi qui sopra; spesso basta riprovare con \"mediabox configura\"."
   riavvia_segnati
   ok "Servizi avviati"
   # configura restituisce errore se qualcosa non è andato: il riepilogo lo spiega
   compose run --rm -T configuratore configura || return 1
+}
+
+# Sposta film, musica e download quando cambia MEDIA_DIR (servizi spenti)
+sposta_media() {
+  local vecchia="$1" nuova="$2"
+  [[ -n "$vecchia" && -n "$nuova" && "$vecchia" != "$nuova" ]] || return 0
+  titolo "Sposto film, musica e download"
+  info "Da $vecchia a $nuova (con tanti film può richiedere molto tempo: non spegnere il PC)"
+  compose stop >/dev/null 2>&1 || true
+  sudo mkdir -p "$nuova"
+  sudo chown "$(id -u):$(id -g)" "$nuova"
+  if [[ -d "$vecchia" ]]; then
+    if [[ "$(stat -c %d "$vecchia")" == "$(stat -c %d "$nuova")" ]]; then
+      # stesso disco: spostamento istantaneo
+      find "$vecchia" -mindepth 1 -maxdepth 1 -exec mv -t "$nuova" {} +
+    else
+      cp -a "$vecchia/." "$nuova/" || errore "La copia in $nuova non è riuscita (spazio finito?)." \
+        "I file originali sono ancora in $vecchia. Libera spazio e riprova con: mediabox impostazioni"
+      find "$vecchia" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    fi
+  fi
+  ok "File spostati in $nuova"
 }

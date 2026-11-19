@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block titolo %}Spazio{% endblock %}
+{% block contenuto %}
+<h1>💾 Spazio sul disco</h1>
+{% if disco.disponibile %}
+<div class="blocco">
+  <p><strong>{{ disco.libero | dimensione }} liberi</strong> su {{ disco.totale | dimensione }}
+    ({{ disco.libero_percento }}% libero)</p>
+  <div class="barra grande {{ 'piena' if disco.quasi_pieno else '' }}"><div style="width:{{ 100 - disco.libero_percento }}%"></div></div>
+  <p class="sottotitolo">Quando lo spazio libero scende sotto il {{ disco.soglia | int }}% mediabox fa pulizia da solo
+    {%- if ntfy %} e ti avvisa sul telefono{% endif %}.</p>
+</div>
+{% endif %}
+
+<section class="blocco">
+  <h2>Cosa posso liberare</h2>
+  <div id="anteprima"><p class="caricamento">Controllo…</p></div>
+  <p><button id="libera">Libera spazio adesso</button></p>
+</section>
+
+<section class="blocco">
+  <h2>Pulizie fatte</h2>
+  <div id="registro"><p class="caricamento">Carico…</p></div>
+</section>
+{% endblock %}
+{% block script %}<script>avviaSpazio();</script>{% endblock %}

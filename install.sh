@@ -15,12 +15,19 @@ MEDIABOX_DIR="${MEDIABOX_DIR:-/opt/mediabox}"
 source "$SORGENTE/lib/comune.sh"
 
 CON_SONARR=""
+CON_LIDARR=""
+CON_ANIME=""
 for argomento in "$@"; do
   case "$argomento" in
     --with-sonarr) CON_SONARR="si" ;;
+    --with-lidarr) CON_LIDARR="si" ;;
+    --with-anime) CON_ANIME="si" ;;
     -h|--help|--aiuto)
-      echo "Uso: ./install.sh [--with-sonarr]"
+      echo "Uso: ./install.sh [--with-sonarr] [--with-anime] [--with-lidarr]"
       echo "  --with-sonarr   installa anche Sonarr per organizzare le serie TV"
+      echo "  --with-anime    aggiunge la libreria Anime (usa Sonarr)"
+      echo "  --with-lidarr   installa Lidarr per scaricare e ordinare la musica"
+      echo "Le scelte si cambiano anche dopo, con: mediabox impostazioni"
       exit 0 ;;
     *) errore "Opzione sconosciuta: $argomento" "Usa ./install.sh --aiuto per vedere le opzioni." ;;
   esac
@@ -60,6 +67,8 @@ fi
 ENV_FILE="$MEDIABOX_DIR/.env"
 # shellcheck source=lib/docker.sh
 source "$MEDIABOX_DIR/lib/docker.sh"
+# shellcheck source=lib/aggiorna.sh
+source "$MEDIABOX_DIR/lib/aggiorna.sh"
 
 # --- 3. Pacchetti di sistema e Docker ------------------------------------------------
 titolo "Installo quello che serve"
@@ -170,11 +179,17 @@ if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
 fi
 
 # Chiavi interne dei servizi
-for chiave in RADARR_API_KEY PROWLARR_API_KEY SONARR_API_KEY; do
+for chiave in RADARR_API_KEY PROWLARR_API_KEY SONARR_API_KEY LIDARR_API_KEY; do
   [[ -n "$(leggi_env "$chiave" "$ENV_FILE")" ]] || scrivi_env "$chiave" "$(chiave_casuale)" "$ENV_FILE"
 done
 
-# Cartella dei film: se c'è un disco molto più capiente lo proponiamo
+# Cosa guardi? (solo la prima volta; dopo si cambia con "mediabox impostazioni")
+configuratore_costruisci
+if [[ -n "$NUOVA_INSTALLAZIONE" && -t 0 ]]; then
+  menu_impostazioni --prima-volta || true
+fi
+
+# Cartella dei media: proponiamo un disco molto più capiente, se c'è; si può scriverne un'altra
 if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
   cartella_dati="/srv/mediabox/dati"
   libero_root="$(df -P -B1 / | awk 'NR==2 {print $4}')"
@@ -183,11 +198,18 @@ if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
     | sort -nr | head -n1)"
   if [[ -n "$migliore" ]]; then
     spazio="$(( ${migliore%% *} / 1024 / 1024 / 1024 ))"
-    disco="${migliore#* }"
-    if chiedi_si_no "Ho trovato un disco più capiente in $disco ($spazio GB liberi). Metto lì i film?" s; then
-      cartella_dati="$disco/mediabox"
-    fi
+    cartella_dati="${migliore#* }/mediabox"
+    info "Ho trovato un disco più capiente: ${migliore#* } ($spazio GB liberi)."
   fi
+  echo
+  echo "  Dove salvo film, serie, musica e download?"
+  while true; do
+    read -r -p "  ? Premi Invio per usare $cartella_dati, oppure scrivi un'altra cartella: " scelta || scelta=""
+    scelta="${scelta%/}"
+    if [[ -z "$scelta" ]]; then break; fi
+    if [[ "$scelta" == /* ]]; then cartella_dati="$scelta"; break; fi
+    echo "    Scrivi il percorso completo, che inizia con / (es. /mnt/disco/mediabox)."
+  done
   scrivi_env MEDIA_DIR "$cartella_dati" "$ENV_FILE"
 fi
 MEDIA_DIR="$(leggi_env MEDIA_DIR "$ENV_FILE")"
@@ -202,6 +224,8 @@ scrivi_env PUID "$(id -u)" "$ENV_FILE"
 scrivi_env PGID "$(id -g)" "$ENV_FILE"
 scrivi_env HOST_IP "$(ip_locale)" "$ENV_FILE"
 [[ -n "$CON_SONARR" ]] && scrivi_env WITH_SONARR si "$ENV_FILE"
+[[ -n "$CON_LIDARR" ]] && scrivi_env WITH_LIDARR si "$ENV_FILE"
+[[ -n "$CON_ANIME" ]] && scrivi_env WITH_ANIME si "$ENV_FILE"
 
 if [[ -e /dev/dri/renderD128 ]]; then
   scrivi_env VAAPI si "$ENV_FILE"
@@ -220,7 +244,6 @@ else
   info "Nessun tuner USB (/dev/dvb)"
 fi
 
-configuratore_costruisci
 hdhomerun="$(cerca_hdhomerun)"
 if [[ -n "$hdhomerun" ]]; then
   scrivi_env HDHOMERUN_IP "$hdhomerun" "$ENV_FILE"
@@ -254,6 +277,7 @@ else
   ok "mediabox.local annunciato nella rete di casa"
 fi
 sudo ln -sf "$MEDIABOX_DIR/mediabox" /usr/local/bin/mediabox
+installa_aggiornamenti_automatici
 chmod +x "$MEDIABOX_DIR/mediabox" "$MEDIABOX_DIR/install.sh" "$MEDIABOX_DIR/lib/avahi-alias.sh"
 ok "Comando \"mediabox\" installato"
 

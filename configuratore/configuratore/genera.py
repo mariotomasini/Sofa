@@ -43,6 +43,13 @@ def _hash_password(password: str, caddyfile_esistente: Path) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
+def gateway(subnet: str) -> str:
+    """Primo indirizzo della rete interna: da lì i container raggiungono il PC."""
+    import ipaddress
+
+    return str(next(ipaddress.ip_network(subnet, strict=False).hosts()))
+
+
 def normalizza_percorso(percorso: str) -> str:
     """Percorso adatto a Docker: barre "/" anche su Windows, niente barra finale."""
     percorso = percorso.strip().replace("\\", "/")
@@ -55,6 +62,8 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         imp.obbligatorio(chiave)
     if imp.sonarr:
         imp.obbligatorio("SONARR_API_KEY")
+    if imp.lidarr:
+        imp.obbligatorio("LIDARR_API_KEY")
     if imp.vaapi and not imp.get("RENDER_GID"):
         raise ErroreMediabox(
             "La transcodifica hardware è attiva ma manca RENDER_GID nel file .env.",
@@ -70,6 +79,12 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         vaapi=imp.vaapi,
         dvb=imp.dvb,
         sonarr=imp.sonarr,
+        anime=imp.anime,
+        lidarr=imp.lidarr,
+        bazarr=imp.bazarr,
+        flaresolverr=imp.flaresolverr,
+        beszel=imp.beszel,
+        gateway=gateway(imp.get("SUBNET", "172.28.64.0/24")),
         tv=imp.dvb or bool(imp.hdhomerun),
         hash_password=_hash_password(imp.password, cartella_generato / "Caddyfile"),
     )
