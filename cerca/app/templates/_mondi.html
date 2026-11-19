@@ -26,3 +26,18 @@
 {% macro generi(mondo) %}
 <nav id="generi" class="generi" aria-label="Generi" data-mondo="{{ mondo }}" hidden></nav>
 {% endmacro %}
+
+{# Scelta delle piattaforme per le righe "Su Netflix", "Su Prime Video"… della home #}
+{% macro dialogo_piattaforme(mondo) %}
+<dialog id="dialogo-piattaforme" aria-labelledby="titolo-piattaforme">
+  <form method="dialog" class="modulo">
+    <h2 id="titolo-piattaforme">Le tue piattaforme</h2>
+    <p class="sottotitolo">Scegli quelle che hai: nella home trovi una riga con i titoli più visti di ognuna. <span id="massimo-piattaforme"></span></p>
+    <div id="elenco-piattaforme" class="elenco-piattaforme"></div>
+    <div class="azioni-riga">
+      <button type="button" onclick="salvaPiattaforme('{{ mondo }}')">Salva</button>
+      <button value="annulla" class="secondario">Annulla</button>
+    </div>
+  </form>
+</dialog>
+{% endmacro %}

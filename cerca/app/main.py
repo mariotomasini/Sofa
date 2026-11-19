@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import mimetypes
 import time
@@ -249,6 +250,21 @@ async def pagina_genere(request: Request, genere: int, mondo: str = "film"):
     return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco)
 
 
+@app.get("/piattaforma/{piattaforma}", response_class=HTMLResponse)
+async def pagina_piattaforma(request: Request, piattaforma: int, mondo: str = "film"):
+    s = servizi(request)
+    if (via := solo_adulti(request)) is not None:
+        return via
+    mondo = "serie" if mondo == "serie" else "film"
+    try:
+        trovata = next((p for p in await s.tmdb.piattaforme(tipo_tmdb(mondo)) if p["id"] == piattaforma), None)
+    except ErroreServizio as exc:
+        return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=None, errore=exc)
+    if trovata is None:
+        return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
+    return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=trovata)
+
+
 @app.get("/torrent", response_class=HTMLResponse)
 async def pagina_torrent(request: Request):
     return solo_adulti(request) or pagina(request, "torrent.html", sezione="torrent")
@@ -308,7 +324,7 @@ async def api_home(request: Request, mondo: str = "film"):
     s = servizi(request)
     if in_kids(request) or mondo not in ("film", "serie"):
         return {"righe": []}
-    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo))
+    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo), piattaforme_scelte(s))
     if mondo == "serie" and s.config.sonarr_url:
         try:
             episodi = await s.serie.nuovi_episodi()
@@ -317,6 +333,46 @@ async def api_home(request: Request, mondo: str = "film"):
         if episodi:
             risposta["righe"].append({"tipo": "episodi", "titolo": "Nuovi episodi delle tue serie", "elementi": episodi})
     return risposta
+
+
+def piattaforme_scelte(s: Servizi) -> list[int] | None:
+    """Le piattaforme scelte nella home (None = quelle di partenza)."""
+    try:
+        valore = json.loads(s.archivio.stato_leggi("piattaforme") or "null")
+    except ValueError:
+        return None
+    return [int(x) for x in valore if str(x).isdigit()] if isinstance(valore, list) else None
+
+
+@app.get("/api/piattaforme")
+async def api_piattaforme(request: Request, mondo: str = "film"):
+    s = servizi(request)
+    tutte = await s.tmdb.piattaforme(tipo_tmdb(mondo))
+    scelte = piattaforme_scelte(s)
+    if scelte is None:
+        scelte = list(home_netflix.PIATTAFORME_INIZIALI)
+    return {"tutte": tutte[:40], "scelte": scelte, "massimo": home_netflix.MASSIMO_PIATTAFORME}
+
+
+class SceltaPiattaforme(BaseModel):
+    scelte: list[int]
+
+
+@app.post("/api/piattaforme")
+async def api_piattaforme_salva(request: Request, dati: SceltaPiattaforme):
+    s = servizi(request)
+    if in_kids(request):
+        return JSONResponse({"errore": "In Kids non si cambiano le piattaforme."}, status_code=403)
+    scelte = list(dict.fromkeys(dati.scelte))[: home_netflix.MASSIMO_PIATTAFORME]
+    s.archivio.stato_scrivi("piattaforme", json.dumps(scelte))
+    return {"scelte": scelte, "messaggio": "Fatto: la home mostra le tue piattaforme."}
+
+
+@app.get("/api/piattaforma/{piattaforma}")
+async def api_piattaforma(request: Request, piattaforma: int, mondo: str = "film", pagina: int = 1):
+    s = servizi(request)
+    elementi = await s.tmdb.su_piattaforma(tipo_tmdb(mondo), piattaforma, pagina=pagina)
+    return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
 
 
 @app.get("/api/generi")

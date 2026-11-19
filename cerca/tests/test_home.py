@@ -241,3 +241,38 @@ def test_chiave_inclusa_rifiutata_spiega_cosa_fare():
     with pytest.raises(ErroreServizio) as exc:
         asyncio.run(prova(False))
     assert "Impostazioni" in exc.value.cosa_fare
+
+
+def test_righe_per_piattaforma():
+    richieste = []
+    fornitori = {"results": [
+        {"provider_id": 119, "provider_name": "Amazon Prime Video", "logo_path": "/prime.jpg",
+         "display_priorities": {"IT": 2}},
+        {"provider_id": 8, "provider_name": "Netflix", "logo_path": "/netflix.jpg", "display_priorities": {"IT": 1}},
+        {"provider_id": 283, "provider_name": "Crunchyroll", "logo_path": "/cr.jpg", "display_priorities": {"IT": 9}},
+    ]}
+
+    def extra(percorso, parametri):
+        if percorso == "/watch/providers/movie":
+            return httpx.Response(200, json=fornitori)
+        if percorso == "/discover/movie" and "with_watch_providers" in parametri:
+            base = int(parametri["with_watch_providers"]) * 1000
+            return httpx.Response(200, json={"results": [film(base + i) for i in range(1, 4)]})
+        if percorso.startswith("/discover/") or percorso.startswith("/trending/"):
+            return httpx.Response(200, json={"results": [film(i) for i in range(1, 4)]})
+        return httpx.Response(404)
+
+    async def prova(scelte):
+        tmdb = crea_tmdb(extra, richieste)
+        assert [x["nome"] for x in await tmdb.piattaforme("movie")] == ["Netflix", "Amazon Prime Video", "Crunchyroll"]
+        return await home.righe(tmdb, JellyfinFinto(rotto=True), "movie", scelte)
+
+    risposta = asyncio.run(prova([283, 8, 999]))  # 999 non esiste: si salta
+    righe = [r for r in risposta["righe"] if r["tipo"] == "piattaforma"]
+    assert [r["titolo"] for r in righe] == ["Su Crunchyroll", "Su Netflix"]
+    assert righe[1]["elementi"][0]["id"] == 8001 and righe[1]["logo"].endswith("/netflix.jpg")
+    filtro = next(q for p_, q in richieste if q.get("with_watch_providers") == "8")
+    assert filtro["watch_region"] == "IT" and filtro["with_watch_monetization_types"] == "flatrate|free|ads"
+    # senza scelte salvate: Netflix, Prime Video, Disney+ (che qui non c'è)
+    predefinite = asyncio.run(prova(None))
+    assert [r["titolo"] for r in predefinite["righe"] if r["tipo"] == "piattaforma"] == ["Su Netflix", "Su Amazon Prime Video"]

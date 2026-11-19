@@ -4,7 +4,8 @@ Ordine delle righe:
 1-2. consigliati per genere (dai generi di quello che guardi in Jellyfin)
 3.   Top 10 della settimana
 4.   i 10 appena usciti
-5.   Continua a guardare (da Jellyfin)
+5.   una riga per ogni piattaforma scelta (Netflix, Prime Video…)
+6.   Continua a guardare (da Jellyfin)
 
 Ogni riga è indipendente: se Jellyfin non risponde spariscono solo i consigli
 personali e "Continua a guardare", il resto si vede lo stesso.
@@ -68,7 +69,11 @@ async def _senza_errori(coro, predefinito):
         return predefinito
 
 
-async def righe(tmdb, jellyfin, tipo: str) -> dict:
+PIATTAFORME_INIZIALI = (8, 119, 337)  # Netflix, Prime Video, Disney+
+MASSIMO_PIATTAFORME = 6
+
+
+async def righe(tmdb, jellyfin, tipo: str, piattaforme: list[int] | None = None) -> dict:
     """Le righe della home per tipo "movie" (Film) o "tv" (Serie TV)."""
     preferiti_jf, libreria = await asyncio.gather(
         _senza_errori(jellyfin.generi_preferiti(tipo), []),
@@ -86,14 +91,24 @@ async def righe(tmdb, jellyfin, tipo: str) -> dict:
         return risposta
 
     generi = scegli_generi([mappa[n] for n in preferiti_jf if n in mappa], tipo)
+    scelte = list(PIATTAFORME_INIZIALI if piattaforme is None else piattaforme)[:MASSIMO_PIATTAFORME]
+    try:
+        note = {x["id"]: x for x in await tmdb.piattaforme(tipo)}
+    except ErroreServizio:
+        note = {}
+    scelte = [note[i] for i in scelte if i in note]
     risultati = await asyncio.gather(
         *(tmdb.scopri(tipo, g) for g, _ in generi),
         tmdb.top_settimana(tipo),
         tmdb.appena_usciti(tipo),
+        *(tmdb.su_piattaforma(tipo, x["id"]) for x in scelte),
         _senza_errori(jellyfin.continua(tipo), []),
         return_exceptions=True,
     )
-    consigliati, (top10, nuovi, continua) = risultati[: len(generi)], risultati[len(generi):]
+    consigliati = risultati[: len(generi)]
+    top10, nuovi = risultati[len(generi):len(generi) + 2]
+    per_piattaforma = risultati[len(generi) + 2:-1]
+    continua = risultati[-1]
 
     risposta = {"righe": []}
     gia_mostrati = set(libreria)
@@ -113,6 +128,14 @@ async def righe(tmdb, jellyfin, tipo: str) -> dict:
             risposta.setdefault("errore", _errore(elementi))
             continue
         risposta["righe"].append({"tipo": chiave, "titolo": NOMI[tipo][chiave], "elementi": elementi})
+    for piattaforma, elementi in zip(scelte, per_piattaforma, strict=True):
+        if isinstance(elementi, BaseException):
+            risposta.setdefault("errore", _errore(elementi))
+            continue
+        risposta["righe"].append({
+            "tipo": "piattaforma", "titolo": f"Su {piattaforma['nome']}", "piattaforma": piattaforma["id"],
+            "logo": piattaforma["logo"], "elementi": elementi[:MASSIMO_PER_RIGA],
+        })
     if isinstance(continua, list):
         risposta["righe"].append({"tipo": "continua", "titolo": "Continua a guardare", "elementi": continua})
     risposta["righe"] = [r for r in risposta["righe"] if r["elementi"]]
