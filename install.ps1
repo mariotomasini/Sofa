@@ -71,9 +71,15 @@ if ($LASTEXITCODE -ne 0) {
     if ($WithAnime) { $comando += " -WithAnime" }
     if ($WithLidarr) { $comando += " -WithLidarr" }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "mediabox" -Value $comando
-    Scrivi-Avviso "Serve un riavvio del PC: lo faccio tra 2 minuti. Dopo l'accesso l'installazione continua da sola."
-    Scrivi-Info "Per riavviare più tardi, scrivi: shutdown /a"
+    Scrivi-Avviso "Serve un riavvio del PC: lo faccio tra 2 minuti. Salva quello che hai aperto."
+    Scrivi-Info "Dopo il riavvio accedi a Windows e accetta la richiesta di permessi: l'installazione continua da sola."
+    Scrivi-Info "Per rimandare il riavvio, in un'altra finestra scrivi: shutdown /a"
     & shutdown.exe /r /t 120 /c "mediabox: riavvio per attivare WSL2. L'installazione continua dopo l'accesso."
+    # la finestra resta aperta fino al riavvio, così l'avviso si legge
+    for ($secondi = 120; $secondi -gt 0; $secondi -= 10) {
+        Write-Host "  Riavvio tra $secondi secondi…"
+        Start-Sleep -Seconds 10
+    }
     exit 0
 }
 Scrivi-Ok "WSL2 attivo"
