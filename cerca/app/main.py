@@ -233,7 +233,7 @@ async def scheda_film(request: Request, tmdb_id: int):
 
 
 @app.get("/genere/{genere}", response_class=HTMLResponse)
-async def pagina_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0):
+async def pagina_genere(request: Request, genere: int, mondo: str = "film"):
     s = servizi(request)
     if in_kids(request):
         mondo = "kids"
@@ -242,11 +242,11 @@ async def pagina_genere(request: Request, genere: int, mondo: str = "film", grat
     try:
         elenco = await (s.tmdb.generi_kids() if mondo == "kids" else s.tmdb.generi(tipo_tmdb(mondo)))
     except ErroreServizio as exc:
-        return pagina(request, "genere.html", mondo=mondo, genere=None, generi=[], gratis=False, errore=exc)
+        return pagina(request, "genere.html", mondo=mondo, genere=None, generi=[], errore=exc)
     trovato = next((g for g in elenco if g["id"] == genere), None)
     if trovato is None:
         return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
-    return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco, gratis=bool(gratis))
+    return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco)
 
 
 @app.get("/torrent", response_class=HTMLResponse)
@@ -329,11 +329,11 @@ async def api_generi(request: Request, mondo: str = "film"):
 
 
 @app.get("/api/genere/{genere}")
-async def api_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0, pagina: int = 1):
+async def api_genere(request: Request, genere: int, mondo: str = "film", pagina: int = 1):
     s = servizi(request)
     kids = in_kids(request) or mondo == "kids"
     tipo = "movie" if kids else tipo_tmdb(mondo)
-    elementi = await s.tmdb.scopri(tipo, genere, solo_gratis=bool(gratis), pagina=pagina, kids=kids)
+    elementi = await s.tmdb.scopri(tipo, genere, pagina=pagina, kids=kids)
     return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
 
 

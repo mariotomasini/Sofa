@@ -445,7 +445,7 @@ async function avviaHome(mondo = "film") {
 }
 
 // Pagina di un genere: griglia con "Mostra altri"
-function avviaGenere(genere, mondo, gratis) {
+function avviaGenere(genere, mondo) {
   const griglia = document.getElementById("griglia-genere");
   const altri = document.getElementById("altri");
   let pagina = 0;
@@ -454,13 +454,13 @@ function avviaGenere(genere, mondo, gratis) {
     pagina += 1;
     altri.disabled = true;
     try {
-      const d = await chiama(`/api/genere/${genere}?mondo=${encodeURIComponent(mondo)}&gratis=${gratis ? 1 : 0}&pagina=${pagina}`);
+      const d = await chiama(`/api/genere/${genere}?mondo=${encodeURIComponent(mondo)}&pagina=${pagina}`);
       if (pagina === 1) griglia.innerHTML = "";
       const nuovi = d.elementi.filter((f) => !visti.has(f.id));
       nuovi.forEach((f) => visti.add(f.id));
       griglia.insertAdjacentHTML("beforeend", nuovi.map(htmlScheda).join(""));
       if (pagina === 1 && !nuovi.length) {
-        griglia.innerHTML = `<p>${gratis ? "In questo momento non trovo titoli gratis di questo genere in Italia." : "Nessun titolo trovato."}</p>`;
+        griglia.innerHTML = "<p>Nessun titolo trovato.</p>";
       }
       altri.hidden = !d.altri;
     } catch (e) {

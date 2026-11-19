@@ -163,3 +163,32 @@ def test_verifica_tmdb_senza_rete(cartella, monkeypatch):
     client = TestClient(crea_app(cartella))
     r = client.post("/impostazioni/api/verifica-tmdb", json={"chiave": "abc"}).json()
     assert not r["ok"] and r["sconosciuto"]
+
+
+def test_chiave_tmdb_inclusa_nel_progetto(cartella):
+    from configuratore.impostazioni import Impostazioni
+
+    (cartella / "tmdb-chiave-pubblica.txt").write_text("# commento\n\n  eyJchiave-del-progetto  \n")
+    assert p.tmdb_pubblica(cartella)
+    stato = TestClient(crea_app(cartella)).get("/impostazioni/api/stato").json()
+    assert stato["tmdb_pubblica"] and not stato["configurato"]
+
+    # la procedura non chiede la chiave e non la scrive nel file .env
+    p.salva_installazione(cartella, dati_validi(tmdb=""))
+    assert leggi_env(cartella / ".env")["TMDB_API_KEY"] == ""
+    assert p.configurato(cartella)
+
+    imp = Impostazioni.carica(cartella)
+    assert imp.get("TMDB_API_KEY") == "eyJchiave-del-progetto"
+    assert imp.get("TMDB_CHIAVE_PUBBLICA") == "si"
+
+    # una chiave tua vince su quella del progetto
+    p.aggiorna_env(cartella / ".env", {"TMDB_API_KEY": "la-mia"})
+    imp = Impostazioni.carica(cartella)
+    assert imp.get("TMDB_API_KEY") == "la-mia" and not imp.get("TMDB_CHIAVE_PUBBLICA")
+
+
+def test_senza_chiave_inclusa_la_procedura_la_chiede(cartella):
+    with pytest.raises(p.DatiNonValidi) as exc:
+        p.salva_installazione(cartella, dati_validi(tmdb=""))
+    assert exc.value.campo == "tmdb"

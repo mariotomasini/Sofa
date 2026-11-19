@@ -65,7 +65,7 @@ function datiModulo() {
   const vociWindows = {};
   document.querySelectorAll("[data-windows]").forEach((c) => { vociWindows[c.dataset.windows] = c.checked; });
   return {
-    tmdb: $("tmdb").value.trim(),
+    tmdb: $("tmdb") ? $("tmdb").value.trim() : "",
     password: $("password").value,
     password2: $("password2").value,
     voci, voci_windows: vociWindows,
@@ -92,6 +92,8 @@ function aggiornaDipendenze() {
 }
 
 // --- procedura a passi --------------------------------------------------------------------
+// con la chiave TMDB inclusa in mediabox il passo della chiave non serve
+if (STATO.tmdb_pubblica && !STATO.configurato) document.querySelector('[data-passo="tmdb"]').remove();
 const passi = [...document.querySelectorAll("#modulo .passo")].map((s) => s.dataset.passo);
 let attuale = 0;
 let tmdbVerificata = "";
@@ -151,7 +153,8 @@ function riempiRiepilogo() {
   const voci = [...document.querySelectorAll("[data-voce]")].filter((c) => c.checked)
     .map((c) => c.closest(".scelta").querySelector("strong").textContent);
   const righe = [
-    ["Catalogo", d.tmdb ? (tmdbVerificata ? "Chiave TMDB verificata" : "Chiave TMDB (non verificata)") : "—"],
+    ["Catalogo", d.tmdb ? (tmdbVerificata ? "Chiave TMDB verificata" : "Chiave TMDB (non verificata)")
+      : (STATO.tmdb_pubblica ? "TMDB, con la chiave inclusa in mediabox" : "—")],
     ["Utente", "admin, con la password che hai scelto"],
     ["Attivi", ["Film", ...voci].join(", ")],
     ["Film e musica in", d.cartella],

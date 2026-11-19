@@ -76,7 +76,7 @@ def test_nomi_dei_generi_di_jellyfin_in_italiano_e_inglese():
     assert serie == {"Azione": 10759, "Dramma": 18, "Fantascienza": 10765}
 
 
-def test_scopri_solo_gratis_e_kids():
+def test_scopri_e_kids():
     richieste = []
 
     def extra(percorso, parametri):
@@ -86,15 +86,14 @@ def test_scopri_solo_gratis_e_kids():
 
     async def prova():
         tmdb = crea_tmdb(extra, richieste)
-        normale = await tmdb.scopri("movie", 16, solo_gratis=True)
+        normale = await tmdb.scopri("movie", 16)
         kids = await tmdb.scopri("movie", 16, kids=True)
         return normale, kids
 
     normale, kids = asyncio.run(prova())
     assert [f["id"] for f in normale] == [1, 2, 4]  # senza locandina no
     assert [f["id"] for f in kids] == [1]  # niente horror e solo titoli per bambini
-    gratis = richieste[0][1]
-    assert gratis["watch_region"] == "IT" and gratis["with_watch_monetization_types"] == "free|ads"
+    assert "watch_region" not in richieste[0][1]
     assert richieste[1][1]["certification.lte"] == "PG"
 
 
@@ -223,3 +222,22 @@ def test_jellyfin_generi_continua_e_libreria():
     assert continua[0]["percentuale"] == 38
     assert continua[0]["poster"].startswith("/jellyfin/Items/s1/Images/Primary")
     assert continua[0]["link"] == "/jellyfin/web/#/details?id=e1"
+
+
+def test_chiave_inclusa_rifiutata_spiega_cosa_fare():
+    import pytest
+
+    def rifiuta(r: httpx.Request) -> httpx.Response:
+        return httpx.Response(401)
+
+    async def prova(pubblica):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(rifiuta)) as client:
+            config = Config(tmdb_chiave="x", tmdb_api="https://api.themoviedb.org/3", tmdb_chiave_pubblica=pubblica)
+            await TMDB(config, ArchivioFinto(), client).tendenze()
+
+    with pytest.raises(ErroreServizio) as exc:
+        asyncio.run(prova(True))
+    assert "inclusa in mediabox" in exc.value.cosa and "mediabox update" in exc.value.cosa_fare
+    with pytest.raises(ErroreServizio) as exc:
+        asyncio.run(prova(False))
+    assert "Impostazioni" in exc.value.cosa_fare

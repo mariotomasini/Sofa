@@ -117,7 +117,7 @@ class TMDB:
         if not chiave or chiave == "da-impostare":
             raise ErroreServizio(
                 "Manca la chiave di TMDB.",
-                "Mettila in TMDB_API_KEY nel file .env di mediabox e poi esegui \"mediabox configura\".",
+                "Aggiungila dalla pagina Impostazioni di mediabox (/impostazioni), voce \"La chiave di TMDB\".",
             )
         # Il "Read Access Token" (lungo) va nell'intestazione, la chiave corta nei parametri
         if len(chiave) > 40:
@@ -140,10 +140,16 @@ class TMDB:
                 "Controlla che il PC di mediabox sia collegato a Internet e riprova tra poco.",
             ) from exc
         if r.status_code == 401:
+            if self.config.tmdb_chiave_pubblica:
+                raise ErroreServizio(
+                    "La chiave TMDB inclusa in mediabox non funziona più.",
+                    "Aggiorna mediabox (mediabox update) oppure metti una chiave tua dalla pagina Impostazioni "
+                    "(/impostazioni): è gratuita su themoviedb.org → Impostazioni → API.",
+                )
             raise ErroreServizio(
                 "TMDB rifiuta la chiave API.",
-                "Controlla TMDB_API_KEY nel file .env (themoviedb.org → Impostazioni → API), "
-                "poi esegui \"mediabox configura\".",
+                "Controlla la chiave nella pagina Impostazioni di mediabox (/impostazioni): "
+                "deve essere tutta, senza spazi (themoviedb.org → Impostazioni → API).",
             )
         if r.status_code == 429:
             raise ErroreServizio("TMDB chiede di rallentare.", "Aspetta qualche secondo e riprova.")
@@ -247,9 +253,8 @@ class TMDB:
         nomi = {g["id"]: g["nome"] for g in await self.generi("movie")}
         return [{"id": g, "nome": nomi[g]} for g in GENERI_PER_KIDS if g in nomi]
 
-    async def scopri(self, tipo: str, genere: int, solo_gratis: bool = False, pagina: int = 1,
-                     kids: bool = False) -> list[dict]:
-        """I titoli più popolari di un genere; con solo_gratis quelli gratis in Italia."""
+    async def scopri(self, tipo: str, genere: int, pagina: int = 1, kids: bool = False) -> list[dict]:
+        """I titoli più popolari di un genere."""
         parametri = {
             "language": self.config.lingua_tmdb,
             "with_genres": str(genere),
@@ -259,9 +264,6 @@ class TMDB:
             # niente titoli sconosciuti con un voto a caso
             "vote_count.gte": "50",
         }
-        if solo_gratis:
-            parametri |= {"watch_region": self.config.paese, "with_watch_monetization_types": "free|ads"}
-            parametri.pop("vote_count.gte")
         if kids:
             parametri |= {
                 "without_genres": ",".join(str(g) for g in sorted(GENERI_NO_KIDS)),

@@ -27,11 +27,11 @@
       <section class="passo" data-passo="benvenuto" aria-labelledby="t-benvenuto">
         <p class="etichetta">Benvenuto</p>
         <h1 id="t-benvenuto">Configuriamo mediabox</h1>
-        <p class="grande">Bastano cinque minuti. Ti chiedo una chiave gratuita, una password e cosa vuoi guardare: al resto penso io.</p>
+        <p class="grande">Bastano {{ "due minuti. Ti chiedo una password" if stato.tmdb_pubblica else "cinque minuti. Ti chiedo una chiave gratuita, una password" }} e cosa vuoi guardare: al resto penso io.</p>
         <ul class="elenco-semplice">
-          <li><span class="spunta" aria-hidden="true">1</span>Il catalogo dei film (chiave gratuita di TMDB)</li>
-          <li><span class="spunta" aria-hidden="true">2</span>Una password per te</li>
-          <li><span class="spunta" aria-hidden="true">3</span>Cosa guardi e dove salvarlo</li>
+          {% if not stato.tmdb_pubblica %}<li><span class="spunta" aria-hidden="true">1</span>Il catalogo dei film (chiave gratuita di TMDB)</li>{% endif %}
+          <li><span class="spunta" aria-hidden="true">{{ 1 if stato.tmdb_pubblica else 2 }}</span>Una password per te</li>
+          <li><span class="spunta" aria-hidden="true">{{ 2 if stato.tmdb_pubblica else 3 }}</span>Cosa guardi e dove salvarlo</li>
         </ul>
         {% if s.hardware %}
         <div class="trovato">
@@ -45,7 +45,11 @@
       <section class="passo" data-passo="tmdb" aria-labelledby="t-tmdb">
         <p class="etichetta">Il catalogo dei film</p>
         <h1 id="t-tmdb">La chiave di TMDB</h1>
-        <p class="solo-impostazioni">La chiave è già salvata. Incollane una nuova solo se vuoi cambiarla.</p>
+        {% if s.tmdb_impostata %}
+        <p class="solo-impostazioni">Usi una chiave tua, già salvata. Incollane una nuova solo se vuoi cambiarla.</p>
+        {% elif stato.tmdb_pubblica %}
+        <p class="solo-impostazioni">Uso la chiave inclusa in mediabox: non devi fare niente. Se preferisci usarne una tua, incollala qui.</p>
+        {% endif %}
         <ol class="istruzioni solo-procedura">
           <li>Crea un account gratuito su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org ↗</a>.</li>
           <li>Apri <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Impostazioni → API ↗</a> e chiedi una chiave per uso personale.</li>

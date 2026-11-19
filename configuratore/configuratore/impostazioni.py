@@ -37,6 +37,22 @@ def _si(valore: str) -> bool:
     return valore.strip().lower() in {"si", "sì", "yes", "true", "1", "on"}
 
 
+FILE_CHIAVE_PUBBLICA = "tmdb-chiave-pubblica.txt"
+
+
+def chiave_tmdb_pubblica(cartella: Path) -> str:
+    """La chiave TMDB inclusa nel progetto (vuota se nessuno l'ha ancora messa)."""
+    try:
+        righe = (cartella / FILE_CHIAVE_PUBBLICA).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    for riga in righe:
+        riga = riga.strip()
+        if riga and not riga.startswith("#"):
+            return "".join(riga.split())
+    return ""
+
+
 @dataclass
 class Impostazioni:
     valori: dict[str, str] = field(default_factory=dict)
@@ -52,6 +68,10 @@ class Impostazioni:
             )
         valori = leggi_env(cartella / ".env.example")
         valori.update(leggi_env(file_env))
+        # senza una chiave tua si usa quella del progetto
+        if not valori.get("TMDB_API_KEY") and (pubblica := chiave_tmdb_pubblica(cartella)):
+            valori["TMDB_API_KEY"] = pubblica
+            valori["TMDB_CHIAVE_PUBBLICA"] = "si"
         return cls(valori)
 
     def get(self, chiave: str, predefinito: str = "") -> str:

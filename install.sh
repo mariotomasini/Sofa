@@ -187,7 +187,8 @@ chmod +x "$MEDIABOX_DIR/mediabox" "$MEDIABOX_DIR/install.sh" "$MEDIABOX_DIR/lib/
 ok "Comando \"mediabox\" installato"
 
 # --- 7. Configurazione dal browser -------------------------------------------------------
-if [[ -z "$(leggi_env TMDB_API_KEY "$ENV_FILE")" || -z "$(leggi_env ADMIN_PASSWORD "$ENV_FILE")" ]]; then
+# (la password la scrive solo la procedura: se manca, la procedura non è stata fatta)
+if [[ -z "$(leggi_env ADMIN_PASSWORD "$ENV_FILE")" ]]; then
   scrivi_dischi
   avvia_procedura_web
   porta="$(leggi_env HTTP_PORT "$ENV_FILE")"

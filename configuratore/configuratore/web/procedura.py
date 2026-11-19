@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..impostazioni import leggi_env
+from ..impostazioni import chiave_tmdb_pubblica, leggi_env
 from ..menu import PREDEFINITI, VOCI, aggiorna_env, attivo, lingue_valide, modifiche_finali, percorso_valido
 
 FLAG_PRONTA = ".configurazione-pronta"
@@ -74,9 +74,13 @@ def valori(cartella: Path) -> dict[str, str]:
     return base
 
 
+def tmdb_pubblica(cartella: Path) -> bool:
+    return bool(chiave_tmdb_pubblica(cartella))
+
+
 def configurato(cartella: Path) -> bool:
     v = valori(cartella)
-    return bool(v.get("TMDB_API_KEY")) and bool(v.get("ADMIN_PASSWORD"))
+    return bool(v.get("ADMIN_PASSWORD")) and (bool(v.get("TMDB_API_KEY")) or tmdb_pubblica(cartella))
 
 
 def windows(v: dict[str, str]) -> bool:
@@ -209,11 +213,12 @@ def salva_installazione(cartella: Path, dati: dict) -> None:
         raise DatiNonValidi("", "mediabox è già configurato: per cambiare le scelte apri le impostazioni.")
     v = valori(cartella)
     chiave = re.sub(r"\s", "", str(dati.get("tmdb") or ""))
-    if not chiave:
+    if not chiave and not tmdb_pubblica(cartella):
         raise DatiNonValidi("tmdb", "Incolla la chiave di TMDB.")
     password = valida_password(str(dati.get("password") or ""), str(dati.get("password2") or ""))
     modifiche = modifiche_da_scelte(v, dati)
-    modifiche["TMDB_API_KEY"] = chiave
+    if chiave:
+        modifiche["TMDB_API_KEY"] = chiave
     modifiche["ADMIN_PASSWORD"] = password
     if not v.get("IMPOSTAZIONI_SEGRETO"):
         modifiche["IMPOSTAZIONI_SEGRETO"] = secrets.token_hex(32)

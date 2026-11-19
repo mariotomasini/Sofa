@@ -16,6 +16,8 @@ def _env(nome: str, predefinito: str = "") -> str:
 @dataclass(frozen=True)
 class Config:
     tmdb_chiave: str = field(default_factory=lambda: _env("TMDB_API_KEY"))
+    # "si" quando si usa la chiave inclusa in mediabox invece di una propria
+    tmdb_chiave_pubblica: bool = field(default_factory=lambda: _env("TMDB_CHIAVE_PUBBLICA", "no") == "si")
     tmdb_api: str = field(default_factory=lambda: _env("TMDB_API_URL", "https://api.themoviedb.org/3").rstrip("/"))
     paese: str = field(default_factory=lambda: _env("PAESE", "IT"))
     lingua: str = field(default_factory=lambda: _env("LINGUA", "it"))

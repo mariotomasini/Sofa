@@ -299,17 +299,6 @@ body[data-mondo="kids"] .scheda > .titolo { font-size: 1.22rem; }
 /* Pagina di un genere */
 .genere-testa { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap; margin: 1.8rem 0 1.4rem; }
 .genere-testa h1 { font-size: 2.2rem; margin: .3rem 0 .2rem; }
-.interruttore {
-  display: inline-flex; align-items: center; gap: .75rem; min-height: 48px; padding: .4rem 1.1rem .4rem .5rem;
-  background: var(--pannello); border-radius: var(--raggio-pill); color: var(--testo); text-decoration: none; font-weight: 700;
-}
-.levetta { width: 46px; height: 28px; border-radius: 14px; background: var(--pannello-2); position: relative; transition: background .15s; }
-.levetta::after {
-  content: ""; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--testo-2); transition: transform .15s;
-}
-.interruttore.acceso .levetta { background: var(--verde); }
-.interruttore.acceso .levetta::after { transform: translateX(18px); background: var(--su-verde); }
 .centrato { text-align: center; margin-top: 1.6rem; }
 
 /* --- etichette (ultime ricerche) ------------------------------------------------------------- */

@@ -165,7 +165,8 @@ if ($percorsoMacchina -notlike "*$Cartella*") {
 Scrivi-Ok "Comando 'mediabox' installato (funziona nelle nuove finestre di PowerShell o Prompt)"
 
 # --- 6. Configurazione dal browser --------------------------------------------------------------
-if (-not (Leggi-Env "TMDB_API_KEY" $script:EnvFile) -or -not (Leggi-Env "ADMIN_PASSWORD" $script:EnvFile)) {
+# (la password la scrive solo la procedura: se manca, la procedura non è stata fatta)
+if (-not (Leggi-Env "ADMIN_PASSWORD" $script:EnvFile)) {
     $pubbliche = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq "Public" })
     if ($pubbliche) {
         # altrimenti il telefono non raggiunge la pagina di configurazione

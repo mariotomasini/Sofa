@@ -1,0 +1,4 @@
+# Chiave TMDB del progetto mediabox, usata quando nelle impostazioni non c'è una chiave tua.
+# È pubblica di proposito: serve solo a leggere il catalogo (come fanno Jellyfin, Radarr e Kodi).
+# Per crearla: account su themoviedb.org → Impostazioni → API → "Token di accesso in lettura".
+# Incollala su una riga qui sotto, senza spazi. Le righe che iniziano con # vengono ignorate.

@@ -48,19 +48,11 @@ Con mediabox puoi:
 - Un PC sempre acceso, collegato alla rete di casa (meglio con il cavo).
   - **Linux** (consigliato): Debian 12 o Ubuntu Server 24.04, 64 bit. Un processore Intel con grafica integrata permette la transcodifica hardware, cioè meno fatica per il PC.
   - **Windows**: Windows 10 (versione 22H2) o Windows 11, 64 bit, con la virtualizzazione attiva nel BIOS. Ci sono alcuni limiti, elencati in [Differenze su Windows](#differenze-su-windows).
-- Una **chiave gratuita di TMDB**, il catalogo dei film:
-  1. crea un account su [themoviedb.org](https://www.themoviedb.org/signup);
-  2. vai su *Impostazioni → API* e chiedi una chiave per uso personale;
-  3. copia la **API Key** (corta) oppure il **Read Access Token** (lungo): vanno bene tutti e due.
 - Facoltativi:
   - l'app **ntfy** sul telefono, per le notifiche;
   - un **tuner TV**: HDHomeRun di rete oppure chiavetta USB DVB-T2.
 
-Durante l'installazione ti verranno chieste solo tre cose:
-
-1. la chiave TMDB;
-2. una password di amministrazione;
-3. facoltativo, il nome per le notifiche ntfy.
+Il catalogo dei film viene da **TMDB**. mediabox ha già una chiave TMDB inclusa (file `tmdb-chiave-pubblica.txt`), quindi non devi registrarti da nessuna parte. Se preferisci usare una chiave tua, la metti quando vuoi nelle impostazioni: è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*, e vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se il file della chiave inclusa è vuoto, la procedura guidata te la chiede.
 
 ---
 
@@ -80,7 +72,7 @@ L'installer non fa domande nel terminale (a parte la password del tuo utente, pe
 2. riconosce la scheda grafica Intel, i tuner USB e un eventuale HDHomeRun in rete;
 3. ti scrive l'indirizzo da aprire nel browser, ad esempio **`http://mediabox.local`**. Va bene anche il telefono, se è sulla stessa rete;
 4. nel browser una **procedura guidata** ti chiede, un passo alla volta:
-   - la chiave gratuita di **TMDB**, con le istruzioni per averla, e la controlla subito;
+   - solo se manca la chiave inclusa, quella di **TMDB**: con le istruzioni per averla, e la controlla subito;
    - la **password** di amministrazione;
    - **cosa guardi**: serie TV, anime, musica, sottotitoli, pulizia, aggiornamenti…;
    - **dove salvare** film e musica, con lo spazio libero di ogni disco e quello consigliato;
@@ -182,7 +174,7 @@ Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torre
 
 ### La pagina iniziale, come Netflix
 
-Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): toccane uno per vedere i titoli più visti di quel genere. Con l'interruttore **"Solo gratis in Italia"** restano solo quelli che puoi guardare gratis (RaiPlay, Pluto TV, Mediaset Infinity…).
+Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): toccane uno per vedere i titoli più visti di quel genere.
 
 Poi, riga per riga:
 
@@ -595,7 +587,13 @@ Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Us
 
 ### Cerca dice "TMDB rifiuta la chiave API"
 
-Controlla `TMDB_API_KEY` nel file `.env`: deve essere tutta, senza spazi. Poi esegui `mediabox configura`.
+Se usi una chiave tua, controllala nelle impostazioni (`/impostazioni`): deve essere tutta, senza spazi.
+
+Se usi quella inclusa in mediabox e Cerca dice che *non funziona più*, scrivi `mediabox update`: la chiave inclusa arriva con gli aggiornamenti. Nel frattempo puoi mettere una chiave tua dalle impostazioni.
+
+### Per chi pubblica mediabox: la chiave inclusa
+
+La chiave inclusa va messa una volta sola nel file `tmdb-chiave-pubblica.txt`, su una riga, senza spazi. Crea un account TMDB per il progetto, poi da *Impostazioni → API* chiedi una chiave per un'applicazione open source e copia il **Read Access Token**. È una chiave di sola lettura ed è pubblica di proposito, come quelle incluse in Jellyfin, Radarr e Kodi. Il limite di TMDB è di circa 50 richieste al secondo per ogni indirizzo IP, quindi le installazioni non si rubano capacità a vicenda. Se TMDB la revoca, basta sostituirla e pubblicare una nuova versione.
 
 ---
 
