@@ -14,6 +14,14 @@ INDIRIZZO = "http://qbittorrent:8080"
 
 CATEGORIE = ["radarr", "cerca", "manuale", "sonarr"]
 
+# Un torrent di un film non contiene mai programmi: questi file non vengono
+# nemmeno scaricati (protegge da torrent falsi con virus).
+FILE_ESCLUSI = [
+    "*.exe", "*.msi", "*.scr", "*.bat", "*.cmd", "*.com", "*.pif", "*.lnk", "*.url", "*.vbs", "*.vbe",
+    "*.js", "*.jse", "*.wsf", "*.hta", "*.cpl", "*.reg", "*.ps1", "*.jar", "*.apk", "*.dmg", "*.pkg",
+    "*.dll", "*.sys", "*.msp", "*.zipx",
+]
+
 
 def preferenze(imp: Impostazioni) -> dict:
     """Preferenze fisse: l'upload è ridotto al minimo e niente porte aperte."""
@@ -44,7 +52,18 @@ def preferenze(imp: Impostazioni) -> dict:
         "bypass_auth_subnet_whitelist": imp.get("SUBNET"),
         "web_ui_reverse_proxy_enabled": True,
         "web_ui_reverse_proxies_list": imp.get("SUBNET"),
+        # Il nome usato nel browser (mediabox.local, IP, Tailscale) cambia:
+        # il controllo dell'host bloccherebbe l'accesso da /qbit con errore 401.
+        "web_ui_host_header_validation_enabled": False,
         "web_ui_upnp": False,
+        # Sicurezza: niente programmi nei download, niente comandi automatici
+        "excluded_file_names_enabled": True,
+        "excluded_file_names": "\n".join(FILE_ESCLUSI),
+        "autorun_enabled": False,
+        "autorun_on_torrent_added_enabled": False,
+        # Il seeding si ferma subito: nessun limite di tempo che lo riattivi
+        "max_seeding_time_enabled": False,
+        "max_inactive_seeding_time_enabled": False,
     }
 
 

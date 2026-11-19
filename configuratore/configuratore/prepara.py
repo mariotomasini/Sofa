@@ -127,6 +127,7 @@ def impostazioni_qbittorrent(imp: Impostazioni, esistente: str = "") -> str:
         "WebUI\\AuthSubnetWhitelist": subnet,
         "WebUI\\ReverseProxySupportEnabled": "true",
         "WebUI\\TrustedReverseProxiesList": subnet,
+        "WebUI\\HostHeaderValidation": "false",
         "General\\Locale": "it",
         "Connection\\UPnP": "false",
     })

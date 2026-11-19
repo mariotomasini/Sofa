@@ -132,12 +132,25 @@ def wizard_iniziale(jf: Jellyfin, imp: Impostazioni) -> None:
             "PreferredMetadataLanguage": lingua,
         },
     )
-    jf.get("/Startup/User", "preparare l'utente di Jellyfin")
-    jf.post(
-        "/Startup/User",
-        "creare l'utente di Jellyfin",
+    # Jellyfin 12 risponde a /health prima di aver creato l'utente iniziale:
+    # finché GET /Startup/User non dà 200, il POST successivo può fallire con 500.
+    for _ in range(40):
+        try:
+            if httpx.get(jf._url("/Startup/User"), headers=_intestazione(), timeout=10).status_code == 200:
+                break
+        except httpx.HTTPError:
+            pass
+        time.sleep(1.5)
+    r = httpx.post(
+        jf._url("/Startup/User"),
         json={"Name": imp.utente, "Password": imp.password},
+        headers=_intestazione(),
+        timeout=30,
     )
+    # 403 = l'utente ha già una password (wizard interrotto a metà): va bene,
+    # l'accesso con la password del .env lo verifica subito dopo.
+    if r.status_code != 403:
+        controlla(r, "creare l'utente di Jellyfin")
     jf.post(
         "/Startup/RemoteAccess",
         "impostare l'accesso remoto di Jellyfin",
@@ -145,6 +158,17 @@ def wizard_iniziale(jf: Jellyfin, imp: Impostazioni) -> None:
     )
     jf.post("/Startup/Complete", "completare il wizard di Jellyfin")
     ok(f"Wizard iniziale completato (utente \"{imp.utente}\")")
+
+
+def assicura_amministratore(jf: Jellyfin) -> None:
+    """Alcune versioni lasciano l'utente del wizard senza diritti di amministratore."""
+    io = jf.get("/Users/Me", "leggere l'utente di Jellyfin").json()
+    politica = io.get("Policy") or {}
+    if politica.get("IsAdministrator"):
+        return
+    politica["IsAdministrator"] = True
+    jf.post(f"/Users/{io['Id']}/Policy", "rendere amministratore l'utente di Jellyfin", json=politica)
+    ok("Utente promosso ad amministratore")
 
 
 def imposta_sistema(jf: Jellyfin, imp: Impostazioni) -> None:
@@ -394,6 +418,7 @@ def configura(imp: Impostazioni, esito) -> None:
     else:
         info("Wizard iniziale già completato")
     jf.accedi(imp.utente, imp.password)
+    assicura_amministratore(jf)
     imposta_sistema(jf, imp)
     ok("Jellyfin risponde su /jellyfin")
     crea_librerie(jf, imp)
