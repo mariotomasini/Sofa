@@ -14,6 +14,9 @@ Con mediabox puoi:
 - **ricevere un avviso** quando un film della tua lista diventa gratis su un servizio con pubblicità;
 - vedere **i film di tendenza e le nuove uscite** al cinema in Italia;
 - avere i **sottotitoli in italiano** (e nelle lingue che scegli) scaricati in automatico;
+- scoprire **musica nuova** simile a quella che ascolti, e le tendenze della settimana;
+- tenere d'occhio **spazio, processore e temperatura**, con **pulizia automatica** quando il disco si riempie;
+- ricevere da solo gli **aggiornamenti** di mediabox quando esce una nuova versione;
 - usare tutto anche **da fuori casa**, senza aprire porte sul router (Tailscale).
 
 ---
@@ -27,13 +30,16 @@ Con mediabox puoi:
 5. [Come si usa Cerca](#come-si-usa-cerca)
 6. [Serie, anime e musica](#serie-anime-e-musica)
 7. [Cambiare le scelte dopo l'installazione](#cambiare-le-scelte-dopo-linstallazione)
-8. [TV in diretta](#tv-in-diretta)
-9. [Usare mediabox fuori casa](#usare-mediabox-fuori-casa)
-10. [Il comando mediabox](#il-comando-mediabox)
-11. [Backup](#backup)
-12. [Dove sono i file](#dove-sono-i-file)
-13. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-14. [Per chi vuole mettere le mani nel codice](#per-chi-vuole-mettere-le-mani-nel-codice)
+8. [Spazio, pulizia e monitoraggio](#spazio-pulizia-e-monitoraggio)
+9. [Notifiche sul telefono](#notifiche-sul-telefono)
+10. [Aggiornamenti](#aggiornamenti)
+11. [TV in diretta](#tv-in-diretta)
+12. [Usare mediabox fuori casa](#usare-mediabox-fuori-casa)
+13. [Il comando mediabox](#il-comando-mediabox)
+14. [Backup](#backup)
+15. [Dove sono i file](#dove-sono-i-file)
+16. [Risoluzione dei problemi](#risoluzione-dei-problemi)
+17. [Per chi vuole mettere le mani nel codice](#per-chi-vuole-mettere-le-mani-nel-codice)
 
 ---
 
@@ -78,7 +84,9 @@ L'installer:
 
 La prima volta ci vogliono **10-20 minuti**, a seconda della connessione.
 
-Puoi rilanciare `./install.sh` quando vuoi: non cancella nulla e sistema quello che manca. mediabox viene installato in `/opt/mediabox`; film e download vanno in `/srv/mediabox/dati`, oppure in un disco più grande, se l'installer ne trova uno e tu confermi.
+Puoi rilanciare `./install.sh` quando vuoi: non cancella nulla e sistema quello che manca. mediabox viene installato in `/opt/mediabox`.
+
+L'installer ti chiede anche **dove salvare film, serie, musica e download**. Propone `/srv/mediabox/dati`, oppure un disco più grande se ne trova uno: premi Invio per accettare o scrivi un'altra cartella (es. `/mnt/disco/mediabox`). Puoi cambiarla anche dopo, con `mediabox impostazioni` (voce `c`): i file già presenti vengono spostati da soli.
 
 ---
 
@@ -137,6 +145,7 @@ Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato a
 | Sonarr *(serie e anime)* | `/sonarr` | sì |
 | Lidarr *(musica)* | `/lidarr` | sì |
 | Bazarr *(sottotitoli)* | `/bazarr` | sì |
+| Beszel *(grafici del PC)* | `/beszel` | il suo accesso: admin@mediabox.local |
 | TVHeadend *(se c'è un tuner USB)* | `/tv` | sì |
 
 L'utente è sempre **admin** e la password è quella che hai scelto durante l'installazione.
@@ -232,7 +241,19 @@ La libreria **Musica** di Jellyfin c'è sempre: copia i tuoi album in `media/mus
 
 Per scaricare e ordinare musica in automatico attiva **Lidarr** (voce 3): cerchi un artista, scegli gli album e Lidarr li mette in `Artista/Album (Anno)/`.
 
-Per ascoltare dal telefono, anche offline e fuori casa, le app **Finamp** (gratuita) e **Symfonium** funzionano meglio dell'app Jellyfin.
+Per ascoltare dal telefono, anche offline e fuori casa, le app **Finamp** (gratuita) e **Symfonium** funzionano meglio dell'app Jellyfin. Symfonium (Android, circa 5 €) crea anche mix e playlist automatiche dai tuoi ascolti, come Spotify.
+
+### Scoprire musica nuova
+
+Nella pagina **Musica** di Cerca trovi:
+
+- **Per te**: artisti simili a quelli che ascolti di più in Jellyfin. Più un artista è simile a vari tuoi preferiti, più sale in classifica; quelli che hai già non compaiono.
+- **Di tendenza questa settimana**: gli artisti più ascoltati nel mondo.
+- con Lidarr attivo, il pulsante **Aggiungi**: Lidarr scarica l'ultimo album dell'artista, e il resto lo scegli tu in Lidarr.
+
+![Pagina Musica](docs/cerca-musica.png)
+
+I suggerimenti arrivano da [ListenBrainz](https://listenbrainz.org), un servizio aperto e gratuito: non serve un account e viene inviato solo il nome degli artisti, non cosa ascolti né quando.
 
 ### Sottotitoli
 
@@ -264,13 +285,107 @@ Si apre lo stesso menu dell'installazione:
    [ ] 3. Musica con Lidarr (scarica e ordina per artista e album)
    [✔] 4. Sottotitoli automatici (Bazarr)
    [✔] 5. FlareSolverr (aiuta gli indexer protetti da Cloudflare)
-       6. Lingue dei sottotitoli: it,en
-       7. Notifiche sul telefono (ntfy): non impostate
+   [ ] 6. Pulizia automatica dei film ed episodi già visti quando il disco è quasi pieno
+   [ ] 7. Beszel (grafici di processore, memoria, dischi e temperatura, con avvisi)
+   [✔] 8. Aggiornamenti automatici di mediabox quando esce una nuova versione
+
+       l. Lingue dei sottotitoli: it,en
+       n. Notifiche sul telefono (ntfy): non impostate
+       c. Cartella di film, musica e download: /srv/mediabox/dati
 ```
 
-Scrivi il numero di una voce per attivarla o disattivarla, poi `s` per salvare: mediabox installa, configura o spegne quello che serve.
+Scrivi il numero di una voce per attivarla o disattivarla, oppure una lettera per cambiare lingue, notifiche o cartella. Poi scrivi `s` per salvare: mediabox installa, configura o spegne quello che serve.
 
 Se disattivi un servizio, le sue impostazioni restano salvate: riattivandolo ritrovi tutto com'era. I file scaricati non vengono mai cancellati.
+
+---
+
+## Spazio, pulizia e monitoraggio
+
+### Nella pagina iniziale
+
+In alto trovi sempre processore, memoria, temperatura e **spazio libero sul disco dei film**.
+
+![Pagina iniziale con lo stato del PC](docs/pagina-iniziale.png)
+
+### Avviso e pulizia automatica
+
+Quando lo spazio libero scende sotto il **10%** (si cambia con `SOGLIA_DISCO_LIBERO` nel file `.env`), mediabox fa pulizia da solo:
+
+1. **sempre**: toglie i **download abbandonati**, cioè download falliti o annullati che nessuno usa più da almeno 14 giorni;
+2. **solo se la attivi** (`mediabox impostazioni`, voce "Pulizia automatica"): toglie anche **film ed episodi già visti da più di 30 giorni**, partendo dai più vecchi, finché lo spazio torna sufficiente.
+
+La pulizia non tocca mai:
+
+- i **preferiti** (❤️ in Jellyfin);
+- quello che qualcuno sta ancora guardando;
+- la musica e le registrazioni;
+- i film che hai copiato tu a mano.
+
+I film e gli episodi tolti non vengono riscaricati: Radarr e Sonarr smettono di seguirli. Se ne vuoi uno indietro, riaggiungilo da Cerca.
+
+Se dopo la pulizia lo spazio è ancora poco, ricevi un avviso sul telefono (ntfy) e in Cerca compare un riquadro rosso.
+
+Nella pagina **Spazio** di Cerca vedi cosa si potrebbe liberare, puoi lanciare la pulizia a mano con **"Libera spazio adesso"** e trovi l'elenco di tutto quello che è stato tolto.
+
+![Pagina Spazio](docs/cerca-spazio.png)
+
+### Beszel: grafici e avvisi del PC
+
+Attivalo con `mediabox impostazioni` (voce Beszel). All'indirizzo `/beszel` trovi i grafici di processore, memoria, dischi, rete e temperatura delle ultime ore e degli ultimi giorni.
+
+Ricevi un avviso sul telefono, se hai impostato ntfy, quando:
+
+- il PC non risponde;
+- il processore o la memoria restano oltre il 90% per 10 minuti;
+- il disco supera il 90%;
+- la temperatura supera 85 °C.
+
+Per entrare in Beszel usa l'email **admin@mediabox.local** e la password di mediabox. Beszel ha il suo accesso e non usa la password dei pannelli.
+
+![Beszel](docs/beszel.png)
+
+Su Windows Beszel misura la macchina virtuale di Docker e non tutto il PC: i valori di disco e temperatura possono essere diversi da quelli di Windows.
+
+---
+
+## Notifiche sul telefono
+
+mediabox può mandarti notifiche con l'app gratuita **ntfy**, senza account:
+
+1. scegli un **argomento**, cioè un nome difficile da indovinare, es. `mediabox-rossi-4821`. Lo chiede l'installer, oppure lo imposti con `mediabox impostazioni`, voce `n`;
+2. sul telefono installa **ntfy** (Play Store, F-Droid o App Store), premi **+** e scrivi lo stesso argomento.
+
+Riceverai un avviso quando:
+
+- un film scaricato è **pronto in Jellyfin**;
+- un film della lista "avvisami" diventa **gratis**;
+- il disco è **quasi pieno**, o mediabox ha fatto pulizia;
+- mediabox si è **aggiornato**, o l'aggiornamento non è riuscito;
+- con Beszel attivo, il PC non risponde, è sotto sforzo o troppo caldo.
+
+L'argomento è come una password: chi lo conosce vede le tue notifiche. Non sceglierne uno ovvio.
+
+---
+
+## Aggiornamenti
+
+Ogni notte, verso le 4:30, mediabox controlla se su GitHub è uscita una **nuova versione**. Se c'è:
+
+1. fa un backup;
+2. scarica la nuova versione;
+3. aggiorna i servizi e riapplica la configurazione;
+4. ti avvisa sul telefono (ntfy) quando ha finito, o se qualcosa non è andato.
+
+Il file `.env` e le tue scelte restano come sono. Le versioni dei servizi che hai cambiato a mano nel `.env` non vengono toccate.
+
+- Per aggiornare subito: `mediabox update`.
+- Per vedere la versione installata e l'ultima disponibile: `mediabox versione`.
+- Per spegnere gli aggiornamenti automatici: `mediabox impostazioni`, voce "Aggiornamenti automatici".
+
+Su Linux l'aggiornamento automatico lo fa un timer di systemd (`mediabox-aggiorna.timer`), su Windows un'attività pianificata ("mediabox - aggiornamento automatico").
+
+> Per chi pubblica mediabox: una nuova versione è una **Release** su GitHub con un tag come `v1.3.0`. Ricordati di aggiornare il file `VERSION` con lo stesso numero.
 
 ---
 
@@ -332,7 +447,8 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox logs [servizio]` | mostra i messaggi di un servizio (Ctrl+C per uscire) |
 | `mediabox impostazioni` | cambia cosa usi: serie, anime, musica, sottotitoli, notifiche |
 | `mediabox configura` | riapplica la configurazione dopo una modifica al file `.env` |
-| `mediabox update` | aggiorna i servizi (fa prima un backup) |
+| `mediabox update` | aggiorna mediabox e i servizi (fa prima un backup) |
+| `mediabox versione` | mostra la versione installata e l'ultima disponibile |
 | `mediabox backup` | crea un backup |
 | `mediabox restore <file>` | ripristina un backup |
 | `mediabox remote` | attiva l'accesso da fuori casa (Tailscale) |

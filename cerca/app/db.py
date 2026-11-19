@@ -51,6 +51,13 @@ CREATE TABLE IF NOT EXISTS cache (
     valore TEXT NOT NULL,
     scade REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pulizia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quando REAL NOT NULL,
+    cosa TEXT NOT NULL,
+    dimensione INTEGER NOT NULL,
+    motivo TEXT
+);
 CREATE TABLE IF NOT EXISTS stato (
     chiave TEXT PRIMARY KEY,
     valore TEXT
@@ -163,6 +170,16 @@ class Archivio:
             "UPDATE avvisami SET gratis_dal = ?, provider = ?, notificato = ? WHERE tmdb_id = ?",
             (gratis_dal, json.dumps(provider), int(notificato), tmdb_id),
         )
+
+    # --- pulizia ----------------------------------------------------------------
+    def registra_pulizia(self, cosa: str, dimensione: int, motivo: str) -> None:
+        self._esegui(
+            "INSERT INTO pulizia (quando, cosa, dimensione, motivo) VALUES (?, ?, ?, ?)",
+            (time.time(), cosa, dimensione, motivo),
+        )
+
+    def pulizie(self, quante: int = 30) -> list[dict]:
+        return self._righe("SELECT * FROM pulizia ORDER BY quando DESC LIMIT ?", (quante,))
 
     # --- stato generico --------------------------------------------------------
     def stato_leggi(self, chiave: str) -> str | None:

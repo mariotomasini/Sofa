@@ -105,6 +105,10 @@ class Impostazioni:
         return _si(self.get("WITH_FLARESOLVERR", "si"))
 
     @property
+    def beszel(self) -> bool:
+        return _si(self.get("WITH_BESZEL", "no"))
+
+    @property
     def lingue_sottotitoli(self) -> list[str]:
         lingue = [x.strip().lower() for x in self.get("LINGUE_SOTTOTITOLI", "it,en").split(",") if x.strip()]
         return list(dict.fromkeys(lingue)) or ["it", "en"]

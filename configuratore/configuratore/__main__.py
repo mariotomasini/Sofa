@@ -20,7 +20,7 @@ from .messaggi import ErroreMediabox, avviso, titolo
 
 def _configura(imp: Impostazioni) -> int:
     from .riepilogo import Esito, stampa_riepilogo
-    from .servizi import bazarr, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tvheadend
+    from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tvheadend
 
     esito = Esito()
     passi = [
@@ -36,6 +36,8 @@ def _configura(imp: Impostazioni) -> int:
         passi.append(("Bazarr", bazarr.configura))
     if imp.dvb:
         passi.append(("TVHeadend", tvheadend.configura))
+    if imp.beszel:
+        passi.append(("Beszel", beszel.configura))
     passi.append(("Jellyfin", jellyfin.configura))
 
     for nome, funzione in passi:

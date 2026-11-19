@@ -22,10 +22,13 @@ from .config import Config
 from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
 from .jellyfin import Jellyfin
+from .musica import Musica
 from .prowlarr import Prowlarr
+from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, nuovo_client
+from .stato import ControlloDisco
 from .tmdb import TMDB
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -61,6 +64,10 @@ class Servizi:
             config, self.archivio, client, self.qbit, self.radarr, self.tmdb, self.jellyfin
         )
         self.avvisami = Avvisami(config, self.archivio, self.tmdb, client)
+        self.download.notifica = self.avvisami.notifica
+        self.musica = Musica(config, self.archivio, client, self.jellyfin)
+        self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
+        self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
 
 
 @asynccontextmanager
@@ -72,6 +79,7 @@ async def ciclo_di_vita(app: FastAPI):
         compiti = [
             asyncio.create_task(servizi.download.ciclo()),
             asyncio.create_task(servizi.avvisami.ciclo()),
+            asyncio.create_task(servizi.disco.ciclo()),
         ]
         log.info("Cerca è pronto")
         yield
@@ -109,7 +117,10 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     s = servizi(request)
     contesto.setdefault("errore", None)
     return modelli.TemplateResponse(
-        request, nome, {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), **contesto}
+        request,
+        nome,
+        {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), "disco": s.disco.stato(),
+         "lidarr": bool(s.config.lidarr_url), **contesto},
     )
 
 
@@ -168,6 +179,16 @@ async def pagina_download(request: Request):
     return pagina(request, "download.html")
 
 
+@app.get("/musica", response_class=HTMLResponse)
+async def pagina_musica(request: Request):
+    return pagina(request, "musica.html")
+
+
+@app.get("/spazio", response_class=HTMLResponse)
+async def pagina_spazio(request: Request):
+    return pagina(request, "spazio.html")
+
+
 @app.get("/salute")
 async def salute():
     return {"stato": "ok"}
@@ -192,6 +213,44 @@ async def api_novita(request: Request):
         elif isinstance(valore, list):
             risposta[chiave] = valore
     return risposta
+
+
+@app.get("/api/musica/per-te")
+async def api_musica_per_te(request: Request):
+    return await servizi(request).musica.per_te()
+
+
+@app.get("/api/musica/tendenze")
+async def api_musica_tendenze(request: Request):
+    return {"artisti": await servizi(request).musica.tendenze()}
+
+
+class RichiestaArtista(BaseModel):
+    mbid: str
+
+
+@app.post("/api/musica/lidarr")
+async def api_musica_lidarr(request: Request, dati: RichiestaArtista):
+    return {"messaggio": await servizi(request).musica.aggiungi_a_lidarr(dati.mbid)}
+
+
+@app.get("/api/stato")
+async def api_stato(request: Request):
+    return servizi(request).disco.stato()
+
+
+@app.get("/api/pulizia")
+async def api_pulizia(request: Request):
+    return await servizi(request).pulizia.anteprima()
+
+
+@app.post("/api/pulizia")
+async def api_pulizia_avvia(request: Request):
+    esito = await servizi(request).pulizia.libera("richiesta dalla pagina Spazio")
+    gb = esito["liberati"] / 1024**3
+    if not esito["tolti"]:
+        return {**esito, "messaggio": "Non c'era niente da togliere."}
+    return {**esito, "messaggio": f"Liberati {gb:.1f} GB ({esito['tolti']} elementi)."}
 
 
 @app.get("/api/film/{tmdb_id}/provider")

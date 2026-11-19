@@ -209,13 +209,14 @@ def test_chiave_bazarr():
 def test_menu_impostazioni(cartella, monkeypatch, capsys):
     from configuratore.menu import menu
 
-    risposte = iter(["2", "6", "it,en,ja", "7", "casa rossi!", "s"])
+    risposte = iter(["2", "l", "it,en,ja", "n", "casa rossi!", "c", "/mnt/grande/mediabox/", "s"])
     monkeypatch.setattr("builtins.input", lambda *_: next(risposte))
     assert menu(cartella) == 0
     valori = leggi_env(cartella / ".env")
     assert valori["WITH_ANIME"] == "si"
     assert valori["LINGUE_SOTTOTITOLI"] == "it,en,ja"
     assert valori["NTFY_TOPIC"] == "casarossi"
+    assert valori["MEDIA_DIR"] == "/mnt/grande/mediabox"
     assert valori["SONARR_API_KEY"] == "s"  # chiave già presente: non cambia
     # le altre righe del file restano com'erano
     assert valori["TMDB_API_KEY"] == "abc"
@@ -238,3 +239,14 @@ def test_menu_crea_chiave_lidarr(cartella, monkeypatch):
     menu(cartella)
     valori = leggi_env(cartella / ".env")
     assert valori["WITH_LIDARR"] == "si" and len(valori["LIDARR_API_KEY"]) == 32
+
+
+def test_percorso_valido():
+    from configuratore.menu import percorso_valido
+
+    assert percorso_valido("/mnt/disco/", False) == "/mnt/disco"
+    assert percorso_valido("relativo/x", False) is None
+    assert percorso_valido("D:\\Mediabox\\", True) == "D:/Mediabox"
+    assert percorso_valido('"E:\\Film"', True) == "E:/Film"
+    assert percorso_valido("D:", True) is None
+    assert percorso_valido("/linux", True) is None

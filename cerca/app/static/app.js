@@ -11,6 +11,7 @@ function esc(testo) {
 }
 
 function dimensione(byte) {
+  if (byte === 0) return "0 B";
   if (!byte) return "?";
   const unita = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
@@ -326,4 +327,96 @@ async function avviaNovita() {
   } catch (e) {
     sezione.hidden = true;  // senza TMDB la pagina resta comunque usabile
   }
+}
+
+// --- pagina Musica --------------------------------------------------------------------
+function htmlArtista(a, dettaglio) {
+  const iniziale = esc((a.nome || "?").trim().charAt(0).toUpperCase());
+  const azione = a.in_libreria
+    ? '<span class="sottotitolo">già in libreria</span>'
+    : (window.LIDARR ? `<button data-mbid="${esc(a.mbid)}">Aggiungi</button>` : "");
+  return `<div class="artista"><div class="iniziale">${iniziale}</div>` +
+    `<div class="descrizione"><strong>${esc(a.nome)}</strong>` +
+    `<span class="sottotitolo">${esc(dettaglio)}</span>` +
+    `<a class="sottotitolo" href="https://listenbrainz.org/artist/${esc(a.mbid)}" target="_blank" rel="noopener">anteprima ↗</a>` +
+    `</div>${azione}</div>`;
+}
+
+function avviaMusica() {
+  const perTe = document.getElementById("per-te");
+  const tendenze = document.getElementById("tendenze-musica");
+  chiama("/api/musica/per-te").then((d) => {
+    if (d.avviso) { perTe.innerHTML = `<div class="nota"><p>${esc(d.avviso)}</p></div>`; return; }
+    document.getElementById("partenza").textContent = d.partenza.length
+      ? "Partendo da: " + d.partenza.join(", ") : "";
+    perTe.innerHTML = d.suggerimenti.length
+      ? d.suggerimenti.map((a) => htmlArtista(a, "simile a " + a.simile_a.join(", "))).join("")
+      : "<p>Nessun suggerimento per ora: ascolta qualche brano in Jellyfin e riprova.</p>";
+  }).catch((e) => { perTe.innerHTML = htmlErrore(e); });
+
+  chiama("/api/musica/tendenze").then((d) => {
+    tendenze.innerHTML = d.artisti.map((a) =>
+      htmlArtista(a, Number(a.ascolti).toLocaleString("it-IT") + " ascolti")).join("");
+  }).catch((e) => { tendenze.innerHTML = htmlErrore(e); });
+
+  document.querySelector("main").addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button[data-mbid]");
+    if (!b) return;
+    b.disabled = true;
+    try {
+      const r = await inviaJSON("/api/musica/lidarr", { mbid: b.dataset.mbid });
+      avviso(r.messaggio);
+      b.textContent = "✓ Aggiunto";
+    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
+  });
+}
+
+// --- pagina Spazio ----------------------------------------------------------------
+function avviaSpazio() {
+  const anteprima = document.getElementById("anteprima");
+  const registro = document.getElementById("registro");
+  const bottone = document.getElementById("libera");
+
+  function voce(testo, byte, dettaglio) {
+    return `<li><div class="descrizione"><strong>${esc(testo)}</strong><br>` +
+      `<span class="sottotitolo">${esc(dettaglio)}</span></div><div class="azioni">${dimensione(byte)}</div></li>`;
+  }
+
+  async function carica() {
+    try {
+      const d = await chiama("/api/pulizia");
+      let html = "";
+      if (d.abbandonati.length) {
+        html += "<h3>Download abbandonati (tolti sempre)</h3><ul class=\"risultati\">" +
+          d.abbandonati.map((a) => voce(a.nome, a.dimensione, `fermo da ${a.giorni} giorni, non lo usa nessun download`)).join("") + "</ul>";
+      }
+      if (d.pulizia_visti) {
+        html += `<h3>Già visti da più di ${d.giorni} giorni (tolti solo se serve spazio, dal più vecchio)</h3>`;
+        html += d.visti.length
+          ? "<ul class=\"risultati\">" + d.visti.map((v) => voce(v.serie ? `${v.serie} – ${v.nome}` : v.nome, v.dimensione,
+              `visto ${v.giorni} giorni fa`)).join("") + "</ul>"
+          : "<p>Nessun film o episodio visto da abbastanza tempo.</p>";
+      } else {
+        html += '<div class="nota"><p>La pulizia dei film e degli episodi già visti è spenta. Puoi attivarla con ' +
+          '<code>mediabox impostazioni</code>: tocca solo quello che è già stato visto da tempo, mai i preferiti.</p></div>';
+      }
+      if (!d.abbandonati.length && !(d.pulizia_visti && d.visti.length)) html = "<p>Niente da togliere: tutto in ordine. 👍</p>" + html;
+      html += `<p class="sottotitolo">Totale che si potrebbe liberare: <strong>${dimensione(d.totale)}</strong></p>`;
+      anteprima.innerHTML = html;
+      registro.innerHTML = d.registro.length
+        ? "<ul class=\"risultati\">" + d.registro.map((r) => voce(r.cosa, r.dimensione,
+            new Date(r.quando * 1000).toLocaleString("it-IT") + " · " + (r.motivo || ""))).join("") + "</ul>"
+        : "<p>Nessuna pulizia finora.</p>";
+    } catch (e) { anteprima.innerHTML = htmlErrore(e); registro.innerHTML = ""; }
+  }
+
+  bottone.addEventListener("click", async () => {
+    if (!confirm("Tolgo i download abbandonati" + " e, se serve spazio e la pulizia dei visti è attiva, i film ed episodi visti da tempo. Continuo?")) return;
+    bottone.disabled = true;
+    try { avviso((await chiama("/api/pulizia", { method: "POST" })).messaggio); }
+    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
+    bottone.disabled = false;
+    carica();
+  });
+  carica();
 }

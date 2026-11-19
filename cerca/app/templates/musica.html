@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block titolo %}Musica{% endblock %}
+{% block contenuto %}
+<h1>🎵 Scopri musica</h1>
+<p class="sottotitolo">Suggerimenti basati su quello che ascolti in Jellyfin. I dati arrivano da ListenBrainz,
+  un servizio aperto: viene inviato solo il nome degli artisti, nessun dato personale.</p>
+
+<section>
+  <h2>Per te</h2>
+  <p id="partenza" class="sottotitolo"></p>
+  <div id="per-te" class="griglia-artisti"><p class="caricamento">Cerco artisti simili…</p></div>
+</section>
+
+<section>
+  <h2>🔥 Di tendenza questa settimana</h2>
+  <p class="sottotitolo">Gli artisti più ascoltati nel mondo su ListenBrainz.</p>
+  <div id="tendenze-musica" class="griglia-artisti"><p class="caricamento">Carico…</p></div>
+</section>
+{% if not lidarr %}
+<div class="nota">
+  <strong>Vuoi scaricare questi artisti?</strong>
+  <p>Attiva Lidarr con <code>mediabox impostazioni</code> (voce "Musica con Lidarr"): comparirà il pulsante "Aggiungi".</p>
+</div>
+{% endif %}
+{% endblock %}
+{% block script %}<script>window.LIDARR = {{ 'true' if lidarr else 'false' }}; avviaMusica();</script>{% endblock %}

@@ -12,12 +12,20 @@
   <header class="testata">
     <a class="logo" href="{{ base }}/">🎬 Cerca</a>
     <nav>
+      <a href="{{ base }}/musica">Musica</a>
       <a href="{{ base }}/download">Download</a>
+      <a href="{{ base }}/spazio">Spazio</a>
       <a href="{{ base }}/torrent">Aggiungi torrent</a>
       <a href="/">mediabox</a>
     </nav>
   </header>
   <main>
+    {% if disco and disco.quasi_pieno %}
+    <div class="errore" role="alert">
+      <strong>⚠️ Spazio quasi finito</strong>
+      <p>{{ disco.messaggio }} <a href="{{ base }}/spazio">Vedi cosa posso liberare →</a></p>
+    </div>
+    {% endif %}
     {% if errore %}
     <div class="errore" role="alert">
       <strong>{{ errore.cosa }}</strong>

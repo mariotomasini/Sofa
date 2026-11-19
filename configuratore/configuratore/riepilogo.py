@@ -57,6 +57,8 @@ def pagine(imp: Impostazioni) -> list[tuple[str, str, bool]]:
         elenco.append(("Lidarr", "/lidarr/", True))
     if imp.bazarr:
         elenco.append(("Bazarr", "/bazarr/", True))
+    if imp.beszel:
+        elenco.append(("Beszel", "/beszel/", False))
     if imp.dvb:
         elenco.append(("TVHeadend", "/tv/", True))
     return elenco
@@ -75,6 +77,8 @@ def stampa_indirizzi(imp: Impostazioni) -> None:
         lucchetto = "  (utente e password di amministrazione)" if protetto else ""
         print(f"    {nome:<16} {principale}{percorso}{lucchetto}")
     print(f"\n  Utente: {imp.utente}   Password: quella scelta durante l'installazione")
+    if imp.beszel:
+        print(f"  Per Beszel l'utente è l'email {imp.utente}@mediabox.local (stessa password)")
     print("  Nell'app Jellyfin della TV scrivi come server:")
     print(f"    {principale}/jellyfin")
 
@@ -92,6 +96,8 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
         attivi.append("Bazarr (sottotitoli: " + ", ".join(imp.lingue_sottotitoli) + ")")
     if imp.flaresolverr:
         attivi.append("FlareSolverr (indexer protetti da Cloudflare)")
+    if imp.beszel:
+        attivi.append("Beszel (grafici e avvisi del PC)")
     if imp.dvb:
         attivi.append("TVHeadend (tuner USB)")
     if imp.hdhomerun:

@@ -12,6 +12,8 @@ ENV_FILE="$MEDIABOX_DIR/.env"
 source "$MEDIABOX_DIR/lib/comune.sh"
 # shellcheck source=lib/docker.sh
 source "$MEDIABOX_DIR/lib/docker.sh"
+# shellcheck source=lib/aggiorna.sh
+source "$MEDIABOX_DIR/lib/aggiorna.sh"
 
 aiuto() {
   cat <<'EOF'
@@ -24,7 +26,8 @@ Uso: mediabox <comando>
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
   impostazioni       cambia cosa usi: serie, anime, musica, sottotitoli, notifiche
   configura          rigenera la configurazione dal file .env e la riapplica
-  update             aggiorna i servizi all'ultima versione (fa prima un backup)
+  update             aggiorna mediabox e i servizi all'ultima versione (fa prima un backup)
+  versione           mostra la versione installata e l'ultima disponibile
   backup             salva configurazioni e impostazioni nella cartella backup/
   restore <file>     ripristina un backup
   remote             installa Tailscale per usare mediabox da fuori casa
@@ -142,10 +145,13 @@ case "$comando" in
     controlla_installazione; prepara_docker; aggiorna_ip; applica ;;
   impostazioni)
     controlla_installazione; prepara_docker; configuratore_costruisci
+    cartella_prima="$(leggi_env MEDIA_DIR "$ENV_FILE")"
     esito=0
     # shellcheck disable=SC2119  # nessun argomento: menu normale
     menu_impostazioni || esito=$?
     if [[ "$esito" -eq 0 ]]; then
+      sposta_media "$cartella_prima" "$(leggi_env MEDIA_DIR "$ENV_FILE")"
+      installa_aggiornamenti_automatici
       aggiorna_ip; applica
     elif [[ "$esito" -ne 3 ]]; then
       exit "$esito"
@@ -153,10 +159,37 @@ case "$comando" in
   update)
     controlla_installazione; prepara_docker
     backup
-    titolo "Aggiornamento"
+    if aggiorna_codice; then
+      # il nuovo codice va eseguito dal nuovo script
+      exec "$MEDIABOX_DIR/mediabox" aggiorna-servizi
+    fi
+    "$MEDIABOX_DIR/mediabox" aggiorna-servizi ;;
+  aggiorna-servizi)
+    controlla_installazione; prepara_docker
+    titolo "Aggiorno i servizi"
+    configuratore_genera
     compose pull -q --ignore-buildable
     compose build -q --pull cerca
-    applica && ok "mediabox aggiornato" ;;
+    applica && ok "mediabox aggiornato alla versione $(versione_installata)" ;;
+  aggiorna-automatico)
+    # avviato ogni notte dal timer di systemd
+    controlla_installazione; prepara_docker
+    [[ "$(leggi_env AGGIORNAMENTI_AUTOMATICI "$ENV_FILE")" == "no" ]] && exit 0
+    riga="$(ultima_release)"
+    [[ -n "$riga" ]] && piu_nuova "${riga%% *}" "$(versione_installata)" || exit 0
+    if "$MEDIABOX_DIR/mediabox" update >> "$MEDIABOX_DIR/aggiornamenti.log" 2>&1; then
+      notifica_ntfy "mediabox aggiornato alla versione $(versione_installata)."
+    else
+      notifica_ntfy "L'aggiornamento di mediabox non è riuscito: scrivi \"mediabox update\" sul PC per vedere perché."
+    fi ;;
+  versione)
+    controlla_installazione
+    echo "  Versione installata: $(versione_installata)"
+    riga="$(ultima_release)"
+    if [[ -n "$riga" ]]; then
+      echo "  Ultima su GitHub:    ${riga%% *}"
+      piu_nuova "${riga%% *}" "$(versione_installata)" && echo "  Per aggiornare: mediabox update"
+    fi ;;
   backup)
     controlla_installazione; prepara_docker; backup ;;
   restore)

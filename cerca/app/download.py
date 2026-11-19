@@ -90,6 +90,8 @@ class GestoreDownload:
         self.radarr = radarr
         self.tmdb = tmdb
         self.jellyfin = jellyfin
+        # funzione per le notifiche sul telefono (la imposta main.py)
+        self.notifica = None
         self._compiti: dict[int, asyncio.Task] = {}
         self._importazioni: set[int] = set()
 
@@ -368,6 +370,13 @@ class GestoreDownload:
                 with contextlib.suppress(OSError):
                     Path(voce["percorso"]).parent.rmdir()
             self.archivio.aggiorna_download(id_download, stato="importato", messaggio="")
+            if self.notifica:
+                anno = f" ({voce['anno']})" if voce.get("anno") else ""
+                await self.notifica(
+                    "Pronto da guardare",
+                    f"{voce['titolo']}{anno} è in Jellyfin.",
+                    f"{self.config.indirizzo_pubblico}/jellyfin/",
+                )
         except ErroreServizio as exc:
             self.archivio.aggiorna_download(
                 id_download, stato="errore", messaggio=f"{exc.cosa} {exc.cosa_fare}".strip()

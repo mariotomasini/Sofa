@@ -22,8 +22,14 @@ VOCI = [
     ("WITH_LIDARR", "Musica con Lidarr (scarica e ordina per artista e album)", "LIDARR_API_KEY"),
     ("WITH_BAZARR", "Sottotitoli automatici (Bazarr)", ""),
     ("WITH_FLARESOLVERR", "FlareSolverr (aiuta gli indexer protetti da Cloudflare)", ""),
+    ("PULIZIA_VISTI", "Pulizia automatica dei film ed episodi già visti quando il disco è quasi pieno", ""),
+    ("WITH_BESZEL", "Beszel (grafici di processore, memoria, dischi e temperatura, con avvisi)", ""),
+    ("AGGIORNAMENTI_AUTOMATICI", "Aggiornamenti automatici di mediabox quando esce una nuova versione", ""),
 ]
-PREDEFINITI = {"WITH_SONARR": "no", "WITH_ANIME": "no", "WITH_LIDARR": "no", "WITH_BAZARR": "si", "WITH_FLARESOLVERR": "si"}
+PREDEFINITI = {
+    "WITH_SONARR": "no", "WITH_ANIME": "no", "WITH_LIDARR": "no", "WITH_BAZARR": "si",
+    "WITH_FLARESOLVERR": "si", "WITH_BESZEL": "no", "AGGIORNAMENTI_AUTOMATICI": "si", "PULIZIA_VISTI": "no",
+}
 
 
 def attivo(valori: dict[str, str], chiave: str) -> bool:
@@ -63,6 +69,14 @@ def modifiche_finali(originali: dict[str, str], scelte: dict[str, str]) -> dict[
     return risultato
 
 
+def percorso_valido(testo: str, windows: bool) -> str | None:
+    """Percorso assoluto della cartella dei media (su Windows con la lettera del disco)."""
+    percorso = testo.strip().strip('"').replace("\\", "/").rstrip("/")
+    if windows:
+        return percorso if re.fullmatch(r"[A-Za-z]:(/[^<>:\"|?*]*)?", percorso) and len(percorso) > 2 else None
+    return percorso if percorso.startswith("/") and len(percorso) > 1 and "\n" not in percorso else None
+
+
 def _stampa(scelte: dict[str, str], prima_volta: bool) -> None:
     print()
     if prima_volta:
@@ -74,11 +88,12 @@ def _stampa(scelte: dict[str, str], prima_volta: bool) -> None:
     for i, (chiave, descrizione, _) in enumerate(VOCI, 1):
         segno = "✔" if attivo(scelte, chiave) else " "
         print(f"   [{segno}] {i}. {descrizione}")
-    print(f"       6. Lingue dei sottotitoli: {scelte.get('LINGUE_SOTTOTITOLI', 'it,en')}")
-    ntfy = scelte.get("NTFY_TOPIC", "") or "non impostate"
-    print(f"       7. Notifiche sul telefono (ntfy): {ntfy}")
     print()
-    print("   Scrivi un numero per attivare/disattivare, poi Invio.")
+    print(f"       l. Lingue dei sottotitoli: {scelte.get('LINGUE_SOTTOTITOLI', 'it,en')}")
+    print(f"       n. Notifiche sul telefono (ntfy): {scelte.get('NTFY_TOPIC', '') or 'non impostate'}")
+    print(f"       c. Cartella di film, musica e download: {scelte.get('MEDIA_DIR', '')}")
+    print()
+    print("   Scrivi un numero per attivare/disattivare, oppure una lettera per cambiare, poi Invio.")
     print("   s = salva e applica    q = esci senza cambiare nulla")
 
 
@@ -86,7 +101,8 @@ def menu(cartella: Path, prima_volta: bool = False) -> int:
     file_env = cartella / ".env"
     originali = leggi_env(cartella / ".env.example")
     originali.update(leggi_env(file_env))
-    chiavi = [v[0] for v in VOCI] + ["LINGUE_SOTTOTITOLI", "NTFY_TOPIC"]
+    windows = originali.get("PIATTAFORMA", "linux").lower() == "windows"
+    chiavi = [v[0] for v in VOCI] + ["LINGUE_SOTTOTITOLI", "NTFY_TOPIC", "MEDIA_DIR"]
     scelte = {k: originali.get(k, PREDEFINITI.get(k, "")) for k in chiavi}
     while True:
         _stampa(scelte, prima_volta)
@@ -103,17 +119,26 @@ def menu(cartella: Path, prima_volta: bool = False) -> int:
             scelte[chiave] = "no" if attivo(scelte, chiave) else "si"
             if chiave == "WITH_ANIME" and attivo(scelte, "WITH_ANIME"):
                 print("    (gli anime usano Sonarr: verrà installato anche quello)")
-        elif risposta == "6":
+        elif risposta == "l":
             nuove = lingue_valide(input("  ? Lingue, separate da virgola (es. it,en,ja): "))
             if nuove:
                 scelte["LINGUE_SOTTOTITOLI"] = nuove
             else:
                 print("    Usa codici di due lettere: it = italiano, en = inglese, ja = giapponese…")
-        elif risposta == "7":
+        elif risposta == "n":
             testo = input("  ? Argomento ntfy (vuoto = nessuna notifica): ")
             scelte["NTFY_TOPIC"] = re.sub(r"[^A-Za-z0-9_-]", "", testo)
+        elif risposta == "c":
+            esempio = "D:\\Mediabox" if windows else "/mnt/disco/mediabox"
+            nuovo = percorso_valido(input(f"  ? Nuova cartella (es. {esempio}): "), windows)
+            if nuovo:
+                scelte["MEDIA_DIR"] = nuovo
+                if originali.get("MEDIA_DIR") and nuovo != originali.get("MEDIA_DIR"):
+                    print("    Film, musica e download già presenti verranno spostati lì al salvataggio.")
+            else:
+                print(f"    Scrivi il percorso completo della cartella, es. {esempio}")
         else:
-            print("    Non ho capito: scrivi un numero da 1 a 7, oppure s o q.")
+            print(f"    Non ho capito: scrivi un numero da 1 a {len(VOCI)}, una lettera (l, n, c), s oppure q.")
     modifiche = modifiche_finali(originali, scelte)
     if not modifiche:
         print("  Nessuna modifica.")

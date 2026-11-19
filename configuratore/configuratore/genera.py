@@ -43,6 +43,13 @@ def _hash_password(password: str, caddyfile_esistente: Path) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
+def gateway(subnet: str) -> str:
+    """Primo indirizzo della rete interna: da lì i container raggiungono il PC."""
+    import ipaddress
+
+    return str(next(ipaddress.ip_network(subnet, strict=False).hosts()))
+
+
 def normalizza_percorso(percorso: str) -> str:
     """Percorso adatto a Docker: barre "/" anche su Windows, niente barra finale."""
     percorso = percorso.strip().replace("\\", "/")
@@ -76,6 +83,8 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         lidarr=imp.lidarr,
         bazarr=imp.bazarr,
         flaresolverr=imp.flaresolverr,
+        beszel=imp.beszel,
+        gateway=gateway(imp.get("SUBNET", "172.28.64.0/24")),
         tv=imp.dvb or bool(imp.hdhomerun),
         hash_password=_hash_password(imp.password, cartella_generato / "Caddyfile"),
     )

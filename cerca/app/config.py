@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+VERO = {"si", "sì", "yes", "true", "1"}
+
 
 def _env(nome: str, predefinito: str = "") -> str:
     return os.environ.get(nome, predefinito).strip()
@@ -23,6 +25,13 @@ class Config:
     radarr_chiave: str = field(default_factory=lambda: _env("RADARR_API_KEY"))
     qbit_url: str = field(default_factory=lambda: _env("QBIT_URL", "http://qbittorrent:8080"))
     jellyfin_url: str = field(default_factory=lambda: _env("JELLYFIN_URL", "http://jellyfin:8096/jellyfin"))
+    lidarr_url: str = field(default_factory=lambda: _env("LIDARR_URL"))
+    lidarr_chiave: str = field(default_factory=lambda: _env("LIDARR_API_KEY"))
+    sonarr_url: str = field(default_factory=lambda: _env("SONARR_URL"))
+    sonarr_chiave: str = field(default_factory=lambda: _env("SONARR_API_KEY"))
+    pulizia_visti: bool = field(default_factory=lambda: _env("PULIZIA_VISTI", "no").lower() in VERO)
+    pulizia_giorni: int = field(default_factory=lambda: int(_env("PULIZIA_GIORNI", "30") or 30))
+    soglia_disco: float = field(default_factory=lambda: float(_env("SOGLIA_DISCO_LIBERO", "10") or 10))
     utente: str = field(default_factory=lambda: _env("ADMIN_USER", "admin"))
     password: str = field(default_factory=lambda: _env("ADMIN_PASSWORD"))
     ntfy_topic: str = field(default_factory=lambda: _env("NTFY_TOPIC"))

@@ -18,6 +18,7 @@ Set-StrictMode -Version 2.0
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 . (Join-Path $PSScriptRoot "lib\comune.ps1")
+. (Join-Path $PSScriptRoot "lib\aggiorna.ps1")
 
 # --- Permessi di amministratore --------------------------------------------------------
 $identita = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
@@ -174,18 +175,24 @@ if ($WithLidarr) { Scrivi-Env "WITH_LIDARR" "si" $script:EnvFile }
 Costruisci-Configuratore
 if ($nuovaInstallazione) { [void](Mostra-MenuImpostazioni -PrimaVolta) }
 
-# Cartella dei film: il disco con più spazio libero
+# Cartella dei media: proponiamo il disco con più spazio libero; si può scriverne un'altra
 if ($nuovaInstallazione) {
     $dischi = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Sort-Object FreeSpace -Descending
-    $cartellaDati = "C:/Mediabox/dati"
+    $proposta = "C:\Mediabox\dati"
     $migliore = $dischi | Select-Object -First 1
     if ($migliore -and $migliore.DeviceID -ne "C:") {
-        $gb = [math]::Round($migliore.FreeSpace / 1GB)
-        if (Chiedi-SiNo "Metto film e download su $($migliore.DeviceID)\Mediabox ($gb GB liberi)?" $true) {
-            $cartellaDati = "$($migliore.DeviceID)/Mediabox"
-        }
+        $proposta = "$($migliore.DeviceID)\Mediabox"
+        Scrivi-Info "Il disco con più spazio è $($migliore.DeviceID) ($([math]::Round($migliore.FreeSpace / 1GB)) GB liberi)."
     }
-    Scrivi-Env "MEDIA_DIR" $cartellaDati $script:EnvFile
+    Write-Host ""
+    Write-Host "  Dove salvo film, serie, musica e download?"
+    while ($true) {
+        $scelta = (Read-Host "  ? Premi Invio per usare $proposta, oppure scrivi un'altra cartella").Trim().Trim('"').TrimEnd("\")
+        if (-not $scelta) { $scelta = $proposta; break }
+        if ($scelta -match "^[A-Za-z]:\\.+") { break }
+        Write-Host "    Scrivi il percorso completo con la lettera del disco (es. E:\Film)."
+    }
+    Scrivi-Env "MEDIA_DIR" ($scelta -replace "\\", "/") $script:EnvFile
 }
 $mediaDir = Leggi-Env "MEDIA_DIR" $script:EnvFile
 New-Item -ItemType Directory -Force -Path ($mediaDir -replace "/", "\") | Out-Null
@@ -264,6 +271,7 @@ if ($percorsoMacchina -notlike "*$Cartella*") {
     [Environment]::SetEnvironmentVariable("Path", "$percorsoMacchina;$Cartella", "Machine")
 }
 Scrivi-Ok "Comando 'mediabox' installato (funziona nelle nuove finestre di PowerShell o Prompt)"
+Installa-AggiornamentiAutomatici
 
 # --- 6. Avvio e configurazione automatica ---------------------------------------------------
 $tuttoBene = Applica-Configurazione

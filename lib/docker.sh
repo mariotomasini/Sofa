@@ -86,3 +86,25 @@ applica() {
   # configura restituisce errore se qualcosa non è andato: il riepilogo lo spiega
   compose run --rm -T configuratore configura || return 1
 }
+
+# Sposta film, musica e download quando cambia MEDIA_DIR (servizi spenti)
+sposta_media() {
+  local vecchia="$1" nuova="$2"
+  [[ -n "$vecchia" && -n "$nuova" && "$vecchia" != "$nuova" ]] || return 0
+  titolo "Sposto film, musica e download"
+  info "Da $vecchia a $nuova (con tanti film può richiedere molto tempo: non spegnere il PC)"
+  compose stop >/dev/null 2>&1 || true
+  sudo mkdir -p "$nuova"
+  sudo chown "$(id -u):$(id -g)" "$nuova"
+  if [[ -d "$vecchia" ]]; then
+    if [[ "$(stat -c %d "$vecchia")" == "$(stat -c %d "$nuova")" ]]; then
+      # stesso disco: spostamento istantaneo
+      find "$vecchia" -mindepth 1 -maxdepth 1 -exec mv -t "$nuova" {} +
+    else
+      cp -a "$vecchia/." "$nuova/" || errore "La copia in $nuova non è riuscita (spazio finito?)." \
+        "I file originali sono ancora in $vecchia. Libera spazio e riprova con: mediabox impostazioni"
+      find "$vecchia" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    fi
+  fi
+  ok "File spostati in $nuova"
+}

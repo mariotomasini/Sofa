@@ -67,6 +67,13 @@
 		reverse_proxy bazarr:6767
 	}
 {%- endif %}
+{%- if beszel %}
+	redir /beszel /beszel/
+	# Beszel chiede da sé email e password (vedi README): niente password di Caddy qui
+	handle_path /beszel/* {
+		reverse_proxy beszel:8090
+	}
+{%- endif %}
 {%- if dvb %}
 
 	# --- TVHeadend (http_root /tv) ---------------------------------------
