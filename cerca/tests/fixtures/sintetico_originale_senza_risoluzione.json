@@ -1,0 +1,11 @@
+{
+ "metadata": {"identifier": "film_sintetico_1950", "title": "Film sintetico", "year": "1950"},
+ "files": [
+  {"name": "film.avi", "source": "original", "format": "Cinepack", "size": "900000000", "length": "5400"},
+  {"name": "film.mp4", "source": "derivative", "format": "h.264", "size": "500000000", "height": "576", "width": "720", "length": "5400", "original": "film.avi"},
+  {"name": "film_512kb.mp4", "source": "derivative", "format": "512Kb MPEG4", "size": "300000000", "height": "240", "width": "320", "length": "5400", "original": "film.avi"},
+  {"name": "film.ogv", "source": "derivative", "format": "Ogg Video", "size": "350000000", "height": "300", "width": "400", "length": "5400", "original": "film.avi"},
+  {"name": "film_sample.mkv", "source": "original", "format": "Matroska", "size": "90000000", "height": "1080", "width": "1920", "length": "60"},
+  {"name": "__ia_thumb.jpg", "source": "original", "format": "Item Tile", "size": "9000"}
+ ]
+}
