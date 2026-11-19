@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import mimetypes
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -93,6 +94,8 @@ async def ciclo_di_vita(app: FastAPI):
 
 
 app = FastAPI(title="Cerca", lifespan=ciclo_di_vita, docs_url=None, redoc_url=None, openapi_url=None)
+# il manifest dell'app per il telefono va servito con il suo tipo
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 app.mount("/static", StaticFiles(directory=CARTELLA / "static"), name="static")
 modelli = Jinja2Templates(directory=CARTELLA / "templates")
 

@@ -9,8 +9,15 @@
   <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ base }}/static/style.css">
+  <!-- icone e "app" sul telefono (Aggiungi a schermata Home) -->
   <link rel="icon" href="{{ base }}/static/logo.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="{{ base }}/static/logo.svg">
+  <link rel="icon" href="{{ base }}/static/icone/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ base }}/static/icone/apple-touch-icon.png">
+  <link rel="manifest" href="{{ base }}/static/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cerca">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body data-mondo="{{ mondo }}" data-sezione="{{ sezione }}"{% if kids %} data-kids="si"{% endif %}>
   <a class="salta" href="#contenuto">Vai al contenuto</a>

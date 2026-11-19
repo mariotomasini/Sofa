@@ -191,6 +191,17 @@ Nella pagina iniziale di Cerca trovi i film **di tendenza questa settimana** e q
    - **Indexer (Prowlarr)**: i risultati dei tuoi indexer, con dimensione, seed e peer. **Scarica** manda il torrent a qBittorrent.
 4. Segui l'avanzamento nella pagina **Download**. A download finito mediabox passa il film a Radarr, che lo rinomina e lo mette nella libreria **Film** di Jellyfin con la locandina. Lo stato diventa **"Pronto in Jellyfin"**.
 
+### Cerca come app sul telefono
+
+Puoi mettere Cerca nella schermata Home del telefono: si apre a tutto schermo, con la sua icona, come un'app.
+
+- **iPhone (Safari)**: apri `http://mediabox.local/cerca`, premi **Condividi** (il quadrato con la freccia) e poi **Aggiungi alla schermata Home**.
+- **Android (Chrome)**: apri lo stesso indirizzo, premi **⋮** e poi **Aggiungi a schermata Home** (oppure **Installa app**).
+
+Se `mediabox.local` sul telefono non funziona, usa l'indirizzo IP (es. `http://192.168.1.50/cerca`), oppure quello di Tailscale per usarla anche fuori casa.
+
+Su Android, con un indirizzo `http://` la scorciatoia si apre nel browser. Si apre a tutto schermo solo con un indirizzo `https://`, per esempio quello HTTPS di Tailscale. Su iPhone si apre a tutto schermo in entrambi i casi.
+
 ### Avvisami se diventa gratis
 
 Nella scheda di un film premi **"Avvisami se diventa disponibile gratis"**. Ogni giorno mediabox controlla se il film è comparso tra i servizi gratuiti con pubblicità, come Pluto TV o Rakuten TV:
