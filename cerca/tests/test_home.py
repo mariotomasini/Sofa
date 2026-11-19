@@ -275,4 +275,5 @@ def test_righe_per_piattaforma():
     assert filtro["watch_region"] == "IT" and filtro["with_watch_monetization_types"] == "flatrate|free|ads"
     # senza scelte salvate: Netflix, Prime Video, Disney+ (che qui non c'è)
     predefinite = asyncio.run(prova(None))
-    assert [r["titolo"] for r in predefinite["righe"] if r["tipo"] == "piattaforma"] == ["Su Netflix", "Su Amazon Prime Video"]
+    titoli = [r["titolo"] for r in predefinite["righe"] if r["tipo"] == "piattaforma"]
+    assert titoli == ["Su Netflix", "Su Amazon Prime Video"]
