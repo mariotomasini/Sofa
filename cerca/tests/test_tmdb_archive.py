@@ -129,3 +129,12 @@ def test_calendario_sonarr_un_episodio_per_serie():
     r = interpreta_calendario(episodi)
     assert [(x["titolo"], x["sottotitolo"], x["pronto"]) for x in r] == [
         ("Serie A", "St. 2 · Ep. 4", False), ("Serie B", "St. 1 · Ep. 1", True)]
+
+
+def test_pertinente_titoli_di_una_parola():
+    titoli = ["The Matrix", "Matrix"]
+    assert pertinente({"title": "The Matrix (1999) 720p"}, titoli, "1999")
+    assert not pertinente(
+        {"title": "NPTEL Lectures: Mathematics - Advanced Matrix Theory and Linear Algebra for Engineers"}, titoli, "1999"
+    )
+    assert pertinente({"title": "George Romero's Night of the Living Dead"}, ["Night of the Living Dead"], "1968")

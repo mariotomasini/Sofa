@@ -352,11 +352,11 @@ body[data-mondo="kids"] .scheda > .titolo { font-size: 1.22rem; }
 /* righe dei risultati (Archive, indexer, pulizie) */
 .risultati { list-style: none; padding: 0; margin: 0; }
 .risultati li {
-  display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+  display: flex; flex-wrap: wrap; gap: .8rem 1rem; align-items: center; justify-content: space-between;
   padding: .95rem .2rem; border-top: 1px solid var(--linea);
 }
 .risultati li:first-child { border-top: 0; }
-.risultati .descrizione { min-width: 0; display: flex; flex-direction: column; gap: .15rem; overflow-wrap: anywhere; }
+.risultati .descrizione { flex: 1 1 15rem; min-width: 0; display: flex; flex-direction: column; gap: .15rem; overflow-wrap: anywhere; }
 .risultati .descrizione strong { font-size: 1.06rem; }
 .azioni { display: flex; gap: .55rem; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
 .risultati .azioni button { min-height: 48px; }

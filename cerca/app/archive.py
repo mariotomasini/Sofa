@@ -40,6 +40,27 @@ def query_ricerca(titoli: list[str]) -> str:
     return f"({parte_titoli}) AND mediatype:(movies)"
 
 
+ARTICOLI = {"the", "a", "an", "il", "lo", "la", "i", "gli", "le", "un", "una", "l"}
+# parole che spesso accompagnano il titolo senza cambiare il film
+CONTORNO = re.compile(r"^(\d+p?|hd|sd|dvd|dvdrip|rip|ita|eng|sub|subs|film|movie|full|versione|restaurato|restored|bn)$")
+
+
+def _titolo_corrisponde(titolo: str, titolo_doc: str) -> bool:
+    """Il titolo del film apre quello dell'item, oppure c'è dentro con poche parole in più.
+
+    Così "Matrix" non prende "Lezioni di matematica: Advanced Matrix Theory".
+    """
+    if not titolo or titolo not in titolo_doc:
+        return False
+    parole = titolo_doc.split()
+    while parole and parole[0] in ARTICOLI:
+        parole = parole[1:]
+    if " ".join(parole).startswith(titolo.removeprefix("the ")) or titolo_doc.startswith(titolo):
+        return True
+    extra = [w for w in titolo_doc.split() if w not in set(titolo.split()) and not CONTORNO.match(w)]
+    return len(extra) <= 3
+
+
 def pertinente(doc: dict, titoli: list[str], anno: str) -> bool:
     """Tiene solo gli item che sembrano davvero il film cercato."""
     titolo_doc = normalizza(str(doc.get("title", "")))
@@ -48,7 +69,7 @@ def pertinente(doc: dict, titoli: list[str], anno: str) -> bool:
     parole_doc = set(titolo_doc.split())
     if parole_doc & PAROLE_SOSPETTE:
         return False
-    if not any(normalizza(t) and normalizza(t) in titolo_doc for t in titoli):
+    if not any(_titolo_corrisponde(normalizza(t), titolo_doc) for t in titoli):
         return False
     anno_doc = str(doc.get("year", "") or "")[:4]
     anni_nel_titolo = set(re.findall(r"\b(19\d\d|20\d\d)\b", titolo_doc))
