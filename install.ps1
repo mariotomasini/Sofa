@@ -32,6 +32,19 @@ if (-not $identita.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrat
 }
 
 $script:PausaSuErrore = $true
+# Tutto quello che compare nella finestra finisce anche in un registro, utile se qualcosa va storto
+$script:RegistroInstaller = Join-Path $env:TEMP "mediabox-installa.log"
+try { Start-Transcript -Path $script:RegistroInstaller -Append | Out-Null } catch { $script:RegistroInstaller = "" }
+# Un errore imprevisto non deve chiudere la finestra senza spiegazioni
+trap {
+    Write-Host ""
+    Write-Host "  × Errore imprevisto: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    Riga $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())"
+    if ($script:RegistroInstaller) { Write-Host "    Il registro completo è in: $($script:RegistroInstaller)" }
+    Write-Host "    Rilancia installa.cmd: riprende da dove era arrivato."
+    Read-Host "  Premi Invio per chiudere" | Out-Null
+    exit 1
+}
 $script:MediaboxDir = $Cartella
 $script:EnvFile = Join-Path $Cartella ".env"
 $riavvioNecessario = $false
@@ -237,4 +250,5 @@ if (-not $tuttoBene) {
     Scrivi-Avviso "Qualcosa non è andato: leggi 'Cosa non è andato' qui sopra (o nel browser). Spesso basta scrivere: mediabox configura"
 }
 Write-Host ""
-Write-Host "  Fatto. Puoi chiudere questa finestra."
+Write-Host "  Fatto."
+Read-Host "  Premi Invio per chiudere questa finestra" | Out-Null

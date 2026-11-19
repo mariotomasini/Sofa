@@ -15,6 +15,7 @@ function Esci-ConErrore([string]$Cosa, [string]$CosaFare = "") {
     if ($CosaFare) { Write-Host "    Cosa fare: $CosaFare" }
     Write-Host ""
     if ($script:InRegistro) { Scrivi-StatoInstallazione "errore" }
+    if ($script:RegistroInstaller) { Write-Host "    Il registro completo è in: $($script:RegistroInstaller)" }
     # Durante l'installazione (finestra aperta con doppio clic) aspettiamo prima di chiudere
     if ($script:PausaSuErrore) { Read-Host "  Premi Invio per chiudere" | Out-Null }
     exit 1
