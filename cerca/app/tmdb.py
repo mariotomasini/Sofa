@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 import httpx
 
 from .config import Config
@@ -64,6 +66,14 @@ GENERI_KIDS = {16, 10751}
 GENERI_NO_KIDS = {27, 53, 80, 10752}
 
 
+# Generi mostrati in Kids (gli altri restano fuori)
+GENERI_PER_KIDS = (16, 10751, 12, 35, 14, 10402)
+# Generi di partenza dei "consigliati" quando in Jellyfin non hai ancora visto nulla
+GENERI_INIZIALI = {"movie": (35, 28), "tv": (18, 80)}
+# In TMDB alcuni generi delle serie hanno un id diverso da quello dei film
+EQUIVALENTI_TV = {28: 10759, 12: 10759, 14: 10765, 878: 10765, 10752: 10768}
+
+
 def adatto_ai_bambini(f: dict) -> bool:
     generi = set(f.get("genre_ids") or [])
     return not f.get("adult") and bool(generi & GENERI_KIDS) and not generi & GENERI_NO_KIDS
@@ -86,6 +96,14 @@ def interpreta_provider(risposta: dict, paese: str) -> dict:
             gruppi.append({"tipo": chiave, "etichetta": etichetta, "provider": elenco})
     gratis = [p for g in gruppi if g["tipo"] in ("ads", "free") for p in g["provider"]]
     return {"link": dati.get("link", ""), "gruppi": gruppi, "gratis": gratis}
+
+
+def riassunto(f: dict, tipo: str) -> dict:
+    return riassunto_serie(f) if tipo == "tv" else riassunto_film(f)
+
+
+def tipo_tmdb(mondo: str) -> str:
+    return "tv" if mondo == "serie" else "movie"
 
 
 class TMDB:
@@ -218,6 +236,77 @@ class TMDB:
             UN_GIORNO,
         )
         return [riassunto_film(f) for f in dati.get("results", []) if adatto_ai_bambini(f)][:20]
+
+    # --- home in stile Netflix --------------------------------------------------------
+    async def generi(self, tipo: str = "movie", lingua: str | None = None) -> list[dict]:
+        """Elenco dei generi di TMDB: [{"id", "nome"}]. Cambia di rado: cache di una settimana."""
+        dati = await self._get(f"/genre/{tipo}/list", {"language": lingua or self.config.lingua_tmdb}, 7 * UN_GIORNO)
+        return [{"id": g["id"], "nome": (g.get("name") or "").strip()} for g in dati.get("genres", []) if g.get("name")]
+
+    async def generi_kids(self) -> list[dict]:
+        nomi = {g["id"]: g["nome"] for g in await self.generi("movie")}
+        return [{"id": g, "nome": nomi[g]} for g in GENERI_PER_KIDS if g in nomi]
+
+    async def scopri(self, tipo: str, genere: int, solo_gratis: bool = False, pagina: int = 1,
+                     kids: bool = False) -> list[dict]:
+        """I titoli più popolari di un genere; con solo_gratis quelli gratis in Italia."""
+        parametri = {
+            "language": self.config.lingua_tmdb,
+            "with_genres": str(genere),
+            "include_adult": "false",
+            "sort_by": "popularity.desc",
+            "page": str(max(1, min(pagina, 20))),
+            # niente titoli sconosciuti con un voto a caso
+            "vote_count.gte": "50",
+        }
+        if solo_gratis:
+            parametri |= {"watch_region": self.config.paese, "with_watch_monetization_types": "free|ads"}
+            parametri.pop("vote_count.gte")
+        if kids:
+            parametri |= {
+                "without_genres": ",".join(str(g) for g in sorted(GENERI_NO_KIDS)),
+                "certification_country": "US",
+                "certification.lte": "PG",
+            }
+        dati = await self._get(f"/discover/{tipo}", parametri, 12 * 3600)
+        risultati = [f for f in dati.get("results", []) if f.get("poster_path")]
+        if kids:
+            risultati = [f for f in risultati if adatto_ai_bambini(f)]
+        return [riassunto(f, tipo) for f in risultati]
+
+    async def top_settimana(self, tipo: str) -> list[dict]:
+        dati = await self._get(f"/trending/{tipo}/week", {"language": self.config.lingua_tmdb}, 6 * 3600)
+        return [riassunto(f, tipo) for f in dati.get("results", []) if f.get("poster_path")][:10]
+
+    async def appena_usciti(self, tipo: str, oggi: dt.date | None = None) -> list[dict]:
+        """I 10 titoli usciti negli ultimi due mesi più visti (film nei cinema italiani, serie nuove)."""
+        oggi = oggi or dt.date.today()
+        dal, al = (oggi - dt.timedelta(days=60)).isoformat(), oggi.isoformat()
+        if tipo == "tv":
+            parametri = {"first_air_date.gte": dal, "first_air_date.lte": al}
+        else:
+            parametri = {"primary_release_date.gte": dal, "primary_release_date.lte": al, "region": self.config.paese}
+        dati = await self._get(
+            f"/discover/{tipo}",
+            {**parametri, "language": self.config.lingua_tmdb, "include_adult": "false", "sort_by": "popularity.desc"},
+            6 * 3600,
+        )
+        return [riassunto(f, tipo) for f in dati.get("results", []) if f.get("poster_path")][:10]
+
+    async def id_genere(self, tipo: str, nomi: list[str]) -> dict[str, int]:
+        """Traduce i nomi dei generi di Jellyfin (italiano o inglese) negli id di TMDB."""
+        tabella: dict[str, int] = {}
+        for lingua in ("en-US", self.config.lingua_tmdb):
+            propri = await self.generi(tipo, lingua)
+            for g in propri:
+                tabella[g["nome"].casefold()] = g["id"]
+            if tipo == "tv":  # "Azione" su una serie: lo cerchiamo tra i generi dei film e lo convertiamo
+                validi = {g["id"] for g in propri}
+                for g in await self.generi("movie", lingua):
+                    convertito = EQUIVALENTI_TV.get(g["id"], g["id"])
+                    if convertito in validi:
+                        tabella.setdefault(g["nome"].casefold(), convertito)
+        return {n: tabella[n.casefold()] for n in nomi if n.casefold() in tabella}
 
     async def provider(self, tmdb_id: int, durata_cache: float = 12 * 3600) -> dict:
         dati = await self._get(f"/movie/{tmdb_id}/watch/providers", {}, durata_cache)

@@ -21,3 +21,8 @@
   <button type="submit">Cerca</button>
 </form>
 {% endmacro %}
+
+{# Fila dei generi sotto la ricerca: la riempie avviaGeneri() #}
+{% macro generi(mondo) %}
+<nav id="generi" class="generi" aria-label="Generi" data-mondo="{{ mondo }}" hidden></nav>
+{% endmacro %}

@@ -170,16 +170,26 @@ Se la TV non lo trova, usa l'IP: `http://192.168.1.50/jellyfin`. Molte TV non ri
 
 In alto scegli il **mondo**: **Film**, **Serie TV**, **Kids** o **Musica**. Ogni mondo ha il suo colore, la sua ricerca e le sue novità:
 
-- **Film**: tendenze della settimana e uscite al cinema in Italia;
-- **Serie TV**: i nuovi episodi delle serie che segui in Sonarr e le serie di tendenza. Scegliendo una serie si apre Sonarr, dove decidi cosa scaricare;
-- **Kids**: solo cartoni e film per famiglie, con locandine più grandi. In Kids non si scarica nulla e il menu sparisce: si esce solo con **"Esci da Kids"** in alto a destra. Il PC o la TV restano in Kids finché non premi quel pulsante;
+- **Film** e **Serie TV**: una pagina come quella di Netflix (vedi sotto). Nelle Serie TV c'è anche la riga dei nuovi episodi delle serie che segui in Sonarr; scegliendo una serie si apre Sonarr, dove decidi cosa scaricare;
+- **Kids**: solo cartoni e film per famiglie, con locandine più grandi e generi adatti ai bambini. In Kids non si scarica nulla e il menu sparisce: si esce solo con **"Esci da Kids"** in alto a destra. Il PC o la TV restano in Kids finché non premi quel pulsante;
 - **Musica**: suggerimenti di artisti e tendenze.
 
 Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Kids, mediabox). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
 
 ![Pagina iniziale di Cerca](docs/cerca-home.png)
 
-Nella pagina iniziale di Cerca trovi i film **di tendenza questa settimana** e quelli **usciti da poco al cinema in Italia**: cliccane uno per vedere dove guardarlo.
+### La pagina iniziale, come Netflix
+
+Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): toccane uno per vedere i titoli più visti di quel genere. Con l'interruttore **"Solo gratis in Italia"** restano solo quelli che puoi guardare gratis (RaiPlay, Pluto TV, Mediaset Infinity…).
+
+Poi, riga per riga:
+
+1. **Perché ti piace: …** — due righe di consigli scelti in base ai generi di quello che hai visto (o messo tra i preferiti) in Jellyfin. I titoli che hai già non te li ripropone. Finché non hai visto nulla trovi "Da non perdere: Commedia / Azione" (per le serie: Dramma / Crime);
+2. **Top 10 della settimana**, con i numeri grandi;
+3. **Appena usciti**: i 10 titoli più visti usciti negli ultimi due mesi (film nei cinema italiani, serie nuove);
+4. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
+
+I consigli e "Continua a guardare" usano l'utente amministratore di Jellyfin creato all'installazione: se in famiglia usate utenti diversi, i consigli seguono quello.
 
 ![Scheda di un film](docs/cerca-film.png)
 

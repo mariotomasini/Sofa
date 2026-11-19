@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "_mondi.html" import selettore, ricerca %}
+{% from "_mondi.html" import selettore, ricerca, generi %}
 {% block contenuto %}
 {{ selettore(mondo, base, mondi, kids) }}
 {{ ricerca(mondo, base, mondi) }}
+{{ generi(mondo) }}
 
 <div class="in-primo-piano{% if gratis %} con-gratis{% endif %}">
   {% for f in gratis[:2] %}
@@ -32,12 +33,7 @@
   </section>
 </div>
 
-<section id="novita" class="novita" hidden>
-  <h2>Di tendenza questa settimana</h2>
-  <div id="tendenze" class="striscia"></div>
-  <h2>Usciti da poco al cinema</h2>
-  <div id="cinema" class="striscia"></div>
-</section>
+<div id="righe" class="righe" aria-busy="true"></div>
 
 {% if scaricati %}
 <section>
@@ -79,4 +75,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block script %}<script>avviaDownload({ soloAttivi: true }); avviaNovita("film");</script>{% endblock %}
+{% block script %}<script>avviaDownload({ soloAttivi: true }); avviaGeneri(); avviaHome("film");</script>{% endblock %}

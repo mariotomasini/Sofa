@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from . import home as home_netflix
 from .archive import InternetArchive
 from .avvisami import Avvisami
 from .config import Config
@@ -31,7 +32,7 @@ from .radarr import Radarr
 from .rete import ErroreServizio, nuovo_client
 from .serie import Serie
 from .stato import ControlloDisco
-from .tmdb import TMDB
+from .tmdb import TMDB, tipo_tmdb
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("cerca")
@@ -231,6 +232,23 @@ async def scheda_film(request: Request, tmdb_id: int):
     return pagina(request, "film.html", film=film, avvisami=s.archivio.avvisami_presente(tmdb_id))
 
 
+@app.get("/genere/{genere}", response_class=HTMLResponse)
+async def pagina_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0):
+    s = servizi(request)
+    if in_kids(request):
+        mondo = "kids"
+    if mondo not in ("film", "serie", "kids"):
+        mondo = "film"
+    try:
+        elenco = await (s.tmdb.generi_kids() if mondo == "kids" else s.tmdb.generi(tipo_tmdb(mondo)))
+    except ErroreServizio as exc:
+        return pagina(request, "genere.html", mondo=mondo, genere=None, generi=[], gratis=False, errore=exc)
+    trovato = next((g for g in elenco if g["id"] == genere), None)
+    if trovato is None:
+        return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
+    return pagina(request, "genere.html", mondo=mondo, genere=trovato, generi=elenco, gratis=bool(gratis))
+
+
 @app.get("/torrent", response_class=HTMLResponse)
 async def pagina_torrent(request: Request):
     return solo_adulti(request) or pagina(request, "torrent.html", sezione="torrent")
@@ -282,6 +300,41 @@ async def api_novita(request: Request, mondo: str = "film"):
         elif isinstance(valore, list):
             risposta[chiave] = valore
     return risposta
+
+
+@app.get("/api/home")
+async def api_home(request: Request, mondo: str = "film"):
+    """Le righe della home in stile Netflix di Film e Serie TV."""
+    s = servizi(request)
+    if in_kids(request) or mondo not in ("film", "serie"):
+        return {"righe": []}
+    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo))
+    if mondo == "serie" and s.config.sonarr_url:
+        try:
+            episodi = await s.serie.nuovi_episodi()
+        except ErroreServizio:
+            episodi = []
+        if episodi:
+            risposta["righe"].append({"tipo": "episodi", "titolo": "Nuovi episodi delle tue serie", "elementi": episodi})
+    return risposta
+
+
+@app.get("/api/generi")
+async def api_generi(request: Request, mondo: str = "film"):
+    s = servizi(request)
+    if in_kids(request) or mondo == "kids":
+        return {"generi": await s.tmdb.generi_kids(), "mondo": "kids"}
+    mondo = "serie" if mondo == "serie" else "film"
+    return {"generi": await s.tmdb.generi(tipo_tmdb(mondo)), "mondo": mondo}
+
+
+@app.get("/api/genere/{genere}")
+async def api_genere(request: Request, genere: int, mondo: str = "film", gratis: int = 0, pagina: int = 1):
+    s = servizi(request)
+    kids = in_kids(request) or mondo == "kids"
+    tipo = "movie" if kids else tipo_tmdb(mondo)
+    elementi = await s.tmdb.scopri(tipo, genere, solo_gratis=bool(gratis), pagina=pagina, kids=kids)
+    return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
 
 
 @app.get("/api/musica/per-te")

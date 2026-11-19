@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% from "_mondi.html" import selettore, ricerca %}
+{% from "_mondi.html" import selettore, ricerca, generi %}
 {% block titolo %}{{ mondi[mondo].nome }}{% endblock %}
 {% block contenuto %}
 {{ selettore(mondo, base, mondi, kids) }}
 {{ ricerca(mondo, base, mondi) }}
+{{ generi(mondo) }}
 
 {% if mondo == "kids" %}
 <p class="nota-mondo">Qui ci sono solo titoli adatti ai bambini.</p>
@@ -14,11 +15,15 @@
 </div>
 {% endif %}
 
+{% if mondo == "kids" %}
 <section id="novita" class="novita" hidden>
-  <h2 id="titolo-prima">{{ "Nuovi episodi delle tue serie" if mondo == "serie" else "Cartoni animati" }}</h2>
+  <h2>Cartoni animati</h2>
   <div id="tendenze" class="striscia"></div>
-  <h2 id="titolo-seconda">{{ "Serie di tendenza" if mondo == "serie" else "Film per tutta la famiglia" }}</h2>
+  <h2>Film per tutta la famiglia</h2>
   <div id="cinema" class="striscia"></div>
 </section>
+{% else %}
+<div id="righe" class="righe" aria-busy="true"></div>
+{% endif %}
 {% endblock %}
-{% block script %}<script>avviaNovita("{{ mondo }}");</script>{% endblock %}
+{% block script %}<script>avviaGeneri(); {% if mondo == "kids" %}avviaNovita("kids");{% else %}avviaHome("{{ mondo }}");{% endif %}</script>{% endblock %}

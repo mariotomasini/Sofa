@@ -381,6 +381,98 @@ async function avviaNovita(mondo = "film") {
   }
 }
 
+// --- home in stile Netflix --------------------------------------------------------------
+// Fila dei generi sotto la ricerca (in Kids solo generi adatti ai bambini)
+async function avviaGeneri() {
+  const nav = document.getElementById("generi");
+  if (!nav) return;
+  const mondo = nav.dataset.mondo;
+  try {
+    const d = await chiama(`/api/generi?mondo=${encodeURIComponent(mondo)}`);
+    nav.innerHTML = d.generi.map((g) =>
+      `<a class="genere" href="${BASE}/genere/${g.id}?mondo=${encodeURIComponent(d.mondo)}">${esc(g.nome)}</a>`).join("");
+    nav.hidden = !d.generi.length;
+  } catch (e) {
+    nav.hidden = true;
+  }
+}
+
+function htmlTop(f, i) {
+  const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo)}` : `${BASE}/film/${f.id}`;
+  return `<a class="scheda-top" href="${link}" aria-label="${i + 1}. ${esc(f.titolo)}">` +
+    `<span class="numero" aria-hidden="true">${i + 1}</span>` +
+    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) + "</a>";
+}
+
+// Jellyfin non ha l'immagine: al suo posto il segnaposto con il titolo
+function posterMancante(img) {
+  img.outerHTML = htmlSenzaPoster(img.dataset.titolo, img.dataset.anno);
+}
+
+function htmlContinua(e) {
+  const percentuale = Math.max(3, Math.min(100, e.percentuale || 0));
+  return `<a class="scheda scheda-continua" href="${esc(e.link)}">` +
+    `<img src="${esc(e.poster)}" alt="" loading="lazy" data-titolo="${esc(e.titolo)}" data-anno="${esc(e.anno)}" onerror="posterMancante(this)">` +
+    (e.percentuale ? `<span class="avanzamento" role="progressbar" aria-valuenow="${e.percentuale}" aria-valuemin="0" aria-valuemax="100" aria-label="Visto al ${e.percentuale}%"><span style="width:${percentuale}%"></span></span>` : "") +
+    `<span class="titolo">${esc(e.titolo)}</span><span class="anno">${esc(e.sottotitolo || (e.percentuale ? `visto al ${e.percentuale}%` : "da iniziare"))}</span></a>`;
+}
+
+function htmlRiga(r, mondo) {
+  let schede;
+  if (r.tipo === "top10") schede = r.elementi.map(htmlTop).join("");
+  else if (r.tipo === "continua") schede = r.elementi.map(htmlContinua).join("");
+  else schede = r.elementi.map(htmlScheda).join("");
+  const tutti = r.genere
+    ? `<a class="link-accento" href="${BASE}/genere/${r.genere}?mondo=${encodeURIComponent(mondo)}">Vedi tutti →</a>` : "";
+  const id = `riga-${r.tipo}-${r.genere || ""}`;
+  return `<section class="riga riga-${esc(r.tipo)}" aria-labelledby="${id}">` +
+    `<div class="riga-testa"><h2 id="${id}">${esc(r.titolo)}</h2>${tutti}</div>` +
+    `<div class="striscia${r.tipo === "top10" ? " striscia-top" : ""}">${schede}</div></section>`;
+}
+
+async function avviaHome(mondo = "film") {
+  const contenitore = document.getElementById("righe");
+  if (!contenitore) return;
+  contenitore.innerHTML = '<p class="caricamento">Carico i consigli…</p>';
+  try {
+    const d = await chiama(`/api/home?mondo=${encodeURIComponent(mondo)}`);
+    contenitore.innerHTML = d.righe.map((r) => htmlRiga(r, mondo)).join("") +
+      (d.errore && !d.righe.length ? htmlErrore(d.errore) : "");
+  } catch (e) {
+    contenitore.innerHTML = htmlErrore(e);
+  }
+  contenitore.removeAttribute("aria-busy");
+}
+
+// Pagina di un genere: griglia con "Mostra altri"
+function avviaGenere(genere, mondo, gratis) {
+  const griglia = document.getElementById("griglia-genere");
+  const altri = document.getElementById("altri");
+  let pagina = 0;
+  const visti = new Set();
+  async function carica() {
+    pagina += 1;
+    altri.disabled = true;
+    try {
+      const d = await chiama(`/api/genere/${genere}?mondo=${encodeURIComponent(mondo)}&gratis=${gratis ? 1 : 0}&pagina=${pagina}`);
+      if (pagina === 1) griglia.innerHTML = "";
+      const nuovi = d.elementi.filter((f) => !visti.has(f.id));
+      nuovi.forEach((f) => visti.add(f.id));
+      griglia.insertAdjacentHTML("beforeend", nuovi.map(htmlScheda).join(""));
+      if (pagina === 1 && !nuovi.length) {
+        griglia.innerHTML = `<p>${gratis ? "In questo momento non trovo titoli gratis di questo genere in Italia." : "Nessun titolo trovato."}</p>`;
+      }
+      altri.hidden = !d.altri;
+    } catch (e) {
+      griglia.insertAdjacentHTML("beforeend", htmlErrore(e));
+      altri.hidden = true;
+    }
+    altri.disabled = false;
+  }
+  altri.addEventListener("click", carica);
+  carica();
+}
+
 // --- pagina Musica --------------------------------------------------------------------
 function tintaDalNome(nome) {
   let h = 0;

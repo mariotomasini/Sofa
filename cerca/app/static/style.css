@@ -251,6 +251,67 @@ body[data-mondo="kids"] .scheda > .titolo { font-size: 1.22rem; }
 .riquadro-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .9rem; }
 .riquadro-testa h2 { margin: 0; }
 
+/* --- home in stile Netflix: generi, righe, Top 10, continua a guardare ------------------------- */
+.generi {
+  display: flex; gap: .55rem; overflow-x: auto; margin: 1.2rem -6px 0; padding: 6px;
+  scrollbar-width: none;
+}
+.generi::-webkit-scrollbar { display: none; }
+.genere {
+  flex: 0 0 auto; display: inline-flex; align-items: center; min-height: 44px; padding: .5rem 1.1rem;
+  border: 2px solid var(--bordo); border-radius: var(--raggio-pill); color: var(--testo-2);
+  text-decoration: none; font-size: .98rem; white-space: nowrap; transition: border-color .15s, color .15s;
+}
+.genere:hover { border-color: var(--accento); color: var(--testo); }
+.genere[aria-current="page"] { background: var(--accento); border-color: var(--accento); color: var(--su-accento); font-weight: 700; }
+
+.righe:empty { display: none; }
+.riga-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.riga-testa h2 { margin-bottom: 1rem; }
+.riga-testa .link-accento { white-space: nowrap; }
+
+/* Top 10: numeri grandi "scavati" accanto alla locandina */
+.striscia-top { grid-auto-columns: calc(var(--locandina) * 1.5); gap: 10px; }
+.scheda-top {
+  display: flex; align-items: flex-end; text-decoration: none; color: var(--testo);
+  border-radius: var(--raggio); scroll-snap-align: start;
+}
+.scheda-top .numero {
+  flex: 0 0 auto; width: calc(var(--locandina) * .6); margin-right: calc(var(--locandina) * -.03); padding-right: .04em; position: relative; z-index: 0;
+  font-size: calc(var(--locandina) * .82); font-weight: 700; line-height: .78; letter-spacing: 0;
+  text-align: right; color: var(--sfondo); -webkit-text-stroke: 3px var(--accento); paint-order: stroke;
+  user-select: none;
+}
+.scheda-top:nth-child(10) .numero { letter-spacing: -.08em; font-size: calc(var(--locandina) * .66); }
+.scheda-top > img, .scheda-top > .senza-poster {
+  position: relative; z-index: 1; width: var(--locandina); aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--raggio);
+  background: var(--pannello-2); transition: transform .18s ease; box-shadow: -8px 0 18px rgb(0 0 0 / .45);
+}
+.scheda-top:hover > img { transform: scale(1.03); }
+.scheda-top:focus-visible { outline: none; }
+.scheda-top:focus-visible > img, .scheda-top:focus-visible > .senza-poster { outline: var(--focus); outline-offset: 4px; }
+
+/* Continua a guardare: barra di avanzamento sotto la locandina */
+.scheda-continua > img, .scheda-continua > .senza-poster { border-bottom: 0; }
+.avanzamento { display: block; height: 6px; margin-top: .45rem; border-radius: 3px; background: var(--pannello-2); overflow: hidden; }
+.avanzamento > span { display: block; height: 100%; background: var(--accento); border-radius: 3px; }
+
+/* Pagina di un genere */
+.genere-testa { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap; margin: 1.8rem 0 1.4rem; }
+.genere-testa h1 { font-size: 2.2rem; margin: .3rem 0 .2rem; }
+.interruttore {
+  display: inline-flex; align-items: center; gap: .75rem; min-height: 48px; padding: .4rem 1.1rem .4rem .5rem;
+  background: var(--pannello); border-radius: var(--raggio-pill); color: var(--testo); text-decoration: none; font-weight: 700;
+}
+.levetta { width: 46px; height: 28px; border-radius: 14px; background: var(--pannello-2); position: relative; transition: background .15s; }
+.levetta::after {
+  content: ""; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--testo-2); transition: transform .15s;
+}
+.interruttore.acceso .levetta { background: var(--verde); }
+.interruttore.acceso .levetta::after { transform: translateX(18px); background: var(--su-verde); }
+.centrato { text-align: center; margin-top: 1.6rem; }
+
 /* --- etichette (ultime ricerche) ------------------------------------------------------------- */
 .etichette { display: flex; flex-wrap: wrap; gap: .6rem; }
 .etichetta { background: var(--pannello); color: var(--testo); padding: .65rem 1.1rem; min-height: 44px; display: inline-flex; align-items: center; border-radius: var(--raggio-pill); text-decoration: none; font-size: 1rem; }
@@ -567,4 +628,10 @@ button:disabled { background: var(--pannello-2); color: var(--tenue); opacity: 1
   .risultati .azioni { flex-wrap: nowrap; }
   .risultati .azioni button { flex: 1; padding: 0 .8rem; min-height: 48px; font-size: .98rem; }
   .riga-stato .sottotitolo { display: none; }
+}
+
+@media (max-width: 760px) {
+  .genere-testa h1 { font-size: 1.6rem; }
+  .scheda-top .numero { -webkit-text-stroke: 2px var(--accento); }
+  .generi { margin-left: calc(var(--pagina) * -1); margin-right: calc(var(--pagina) * -1); padding: 6px var(--pagina); }
 }
