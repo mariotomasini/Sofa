@@ -1,0 +1,13 @@
+[Unit]
+Description=mediabox: annuncia mediabox.local nella rete di casa
+After=avahi-daemon.service network-online.target
+Requires=avahi-daemon.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/mediabox/lib/avahi-alias.sh mediabox.local
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

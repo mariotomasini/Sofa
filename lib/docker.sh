@@ -28,7 +28,7 @@ compose() {
     -f "$MEDIABOX_DIR/generato/docker-compose.yml" "$@"
 }
 
-configuratore_genera() {
+configuratore_costruisci() {
   local immagine_base
   immagine_base="$(leggi_env IMG_PYTHON "$MEDIABOX_DIR/.env")"
   immagine_base="${immagine_base:-docker.io/library/python:3.13-slim}"
@@ -36,6 +36,15 @@ configuratore_genera() {
   "${DOCKER[@]}" build -q --build-arg "BASE_IMAGE=$immagine_base" \
     -t mediabox/configuratore:locale "$MEDIABOX_DIR/configuratore" >/dev/null \
     || errore "Non riesco a preparare il configuratore." "Controlla la connessione a Internet e riprova."
+}
+
+# Stampa l'IP del primo HDHomeRun trovato in rete (o niente)
+cerca_hdhomerun() {
+  "${DOCKER[@]}" run --rm --network host mediabox/configuratore:locale hdhomerun 2>/dev/null || true
+}
+
+configuratore_genera() {
+  configuratore_costruisci
   "${DOCKER[@]}" run --rm --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" \
     mediabox/configuratore:locale genera || errore "Non riesco a generare i file di configurazione." \
     "Leggi il messaggio qui sopra, correggi il file .env e riprova."

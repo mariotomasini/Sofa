@@ -21,7 +21,7 @@ from ..rete import attendi
 
 INDIRIZZO = "http://tvheadend:9981/tv"
 NOME_RETE = "DVB-T Italia"
-ELENCO_MUX = "dvb-t/it-All"
+ETICHETTA_MUX = "Italy: it-All"
 
 
 class TVHeadend:
@@ -81,11 +81,17 @@ def configura(imp: Impostazioni, esito) -> None:
     reti = tv.chiama("mpegts/network/grid", "leggere le reti", limit=50).get("entries", [])
     rete = next((r for r in reti if r.get("networkname") == NOME_RETE), None)
     if rete is None:
+        # La chiave della lista dei multiplex cambia tra versioni: la cerchiamo per nome
+        elenco = tv.chiama("dvb/scanfile/list", "leggere le liste dei multiplex", type="dvbt").get("entries", [])
+        italiane = [e for e in elenco if e.get("val") == ETICHETTA_MUX] or [
+            e for e in elenco if str(e.get("val", "")).startswith("Italy")
+        ]
+        lista = italiane[0]["key"] if italiane else ""
         rete = tv.chiama(
             "mpegts/network/create",
             "creare la rete DVB-T",
             **{"class": "dvb_network_dvbt"},
-            conf={"networkname": NOME_RETE, "scanfile": ELENCO_MUX, "autodiscovery": 1, "skipinitscan": False},
+            conf={"networkname": NOME_RETE, "scanfile": lista, "autodiscovery": 1, "skipinitscan": False},
         )
         ok(f"Rete \"{NOME_RETE}\" creata con l'elenco dei multiplex italiani")
     uuid_rete = rete.get("uuid")

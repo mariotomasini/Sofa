@@ -1,0 +1,159 @@
+"""Test del configuratore: generazione dei file, qBittorrent, Radarr, HDHomeRun."""
+
+import json
+import re
+import zlib
+from pathlib import Path
+
+import bcrypt
+import pytest
+
+from configuratore.genera import genera, normalizza_percorso
+from configuratore.hdhomerun import e_risposta, pacchetto_richiesta
+from configuratore.impostazioni import Impostazioni, leggi_env
+from configuratore.messaggi import ErroreMediabox
+from configuratore.prepara import (
+    hash_qbittorrent,
+    impostazioni_qbittorrent,
+    leggi_ini,
+    prepara_jellyfin,
+    verifica_hash_qbittorrent,
+)
+from configuratore.servizi.radarr import costruisci_profilo, qualita_ammessa
+
+RADICE = Path(__file__).parents[2]
+FIXTURE = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def cartella(tmp_path):
+    """Una cartella mediabox finta con .env.example vero e un .env di prova."""
+    (tmp_path / ".env.example").write_text((RADICE / ".env.example").read_text())
+    (tmp_path / ".env").write_text(
+        "TMDB_API_KEY=abc\nADMIN_PASSWORD=Pa$$word123\nRADARR_API_KEY=r\nPROWLARR_API_KEY=p\n"
+        "SONARR_API_KEY=s\nMEDIA_DIR=D:\\Mediabox\\\nHOST_IP=192.168.1.10\n"
+    )
+    return tmp_path
+
+
+def test_leggi_env_con_virgolette_e_commenti(tmp_path):
+    f = tmp_path / ".env"
+    f.write_text('# commento\nA="uno"\nB=due=tre\n\nC=\n')
+    assert leggi_env(f) == {"A": "uno", "B": "due=tre", "C": ""}
+
+
+def test_env_mancante_da_errore_chiaro(tmp_path):
+    with pytest.raises(ErroreMediabox) as e:
+        Impostazioni.carica(tmp_path)
+    assert "installer" in e.value.cosa_fare
+
+
+def test_percorsi_windows():
+    assert normalizza_percorso("D:\\Mediabox\\") == "D:/Mediabox"
+    assert normalizza_percorso("/srv/mediabox/dati/") == "/srv/mediabox/dati"
+
+
+def test_genera_base(cartella):
+    imp = Impostazioni.carica(cartella)
+    cambiati = genera(imp, cartella)
+    assert "docker-compose.yml" in cambiati and "Caddyfile" in cambiati
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    # il "$" della password va raddoppiato per Docker Compose
+    assert 'ADMIN_PASSWORD: "Pa$$$$word123"' in compose
+    assert '"D:/Mediabox:/data"' in compose
+    assert "sonarr:" not in compose and "tvheadend:" not in compose
+    assert "/dev/dri" not in compose
+    caddy = (cartella / "generato" / "Caddyfile").read_text()
+    assert "handle /sonarr*" not in caddy
+    hash_pw = re.search(r"admin (\$2[aby]\$\S+)", caddy).group(1)
+    assert bcrypt.checkpw(b"Pa$$word123", hash_pw.encode())
+    # seconda esecuzione: niente cambia (niente riavvii inutili)
+    assert genera(imp, cartella) == []
+    assert (cartella / "generato" / ".da-riavviare").read_text().split() == ["caddy"]
+
+
+def test_genera_con_opzioni(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_SONARR=si\nDVB=si\nVAAPI=si\nRENDER_GID=993\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert "sonarr:" in compose and "tvheadend:" in compose
+    assert '- "993"' in compose and "/dev/dri:/dev/dri" in compose
+    assert "TVHeadend" in (cartella / "generato" / "homepage" / "services.yaml").read_text()
+
+
+def test_vaapi_senza_gruppo_da_errore(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("VAAPI=si\n")
+    with pytest.raises(ErroreMediabox):
+        genera(Impostazioni.carica(cartella), cartella)
+
+
+def test_password_con_virgolette_rifiutata(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write('ADMIN_PASSWORD=ab"cdefgh\n')
+    with pytest.raises(ErroreMediabox):
+        genera(Impostazioni.carica(cartella), cartella)
+
+
+def test_hash_qbittorrent():
+    valore = hash_qbittorrent("segreta")
+    assert valore.startswith("@ByteArray(") and valore.endswith(")")
+    assert verifica_hash_qbittorrent("segreta", f'"{valore}"')
+    assert not verifica_hash_qbittorrent("altra", valore)
+    assert not verifica_hash_qbittorrent("segreta", "spazzatura")
+
+
+def test_impostazioni_qbittorrent_unisce_senza_perdere_nulla(cartella):
+    imp = Impostazioni.carica(cartella)
+    esistente = "[BitTorrent]\nSession\\Port=6881\n\n[Preferences]\nWebUI\\Port=8080\nAltro\\Valore=1\n"
+    testo = impostazioni_qbittorrent(imp, esistente)
+    ini = leggi_ini(testo)
+    assert ini["BitTorrent"]["Session\\Port"] == "6881"
+    assert ini["Preferences"]["Altro\\Valore"] == "1"
+    assert ini["Preferences"]["WebUI\\AuthSubnetWhitelist"] == "172.28.64.0/24"
+    assert ini["Preferences"]["WebUI\\HostHeaderValidation"] == "false"
+    assert ini["LegalNotice"]["Accepted"] == "true"
+    # la password resta la stessa alla seconda passata
+    assert impostazioni_qbittorrent(imp, testo) == testo
+
+
+def test_base_url_jellyfin(cartella, tmp_path):
+    imp = Impostazioni.carica(cartella)
+    volumi = tmp_path / "volumi"
+    (volumi / "jellyfin_config").mkdir(parents=True)
+    assert prepara_jellyfin(imp, volumi) is False  # primo avvio: file nuovo, niente riavvio
+    rete = volumi / "jellyfin_config" / "config" / "network.xml"
+    assert "<BaseUrl>/jellyfin</BaseUrl>" in rete.read_text()
+    rete.write_text(rete.read_text().replace("/jellyfin", ""))
+    assert prepara_jellyfin(imp, volumi) is True  # cambiato: va riavviato
+    assert "<BaseUrl>/jellyfin</BaseUrl>" in rete.read_text()
+
+
+def test_profilo_qualita_radarr():
+    schema = json.loads((FIXTURE / "radarr_qualityprofile_schema.json").read_text())
+    profilo = costruisci_profilo(schema, -1)
+    ammessi = set()
+    for e in profilo["items"]:
+        if e.get("allowed"):
+            ammessi |= {e["quality"]["name"]} if e.get("quality") else {i["quality"]["name"] for i in e["items"]}
+    assert {"Bluray-1080p", "WEBDL-1080p", "HDTV-720p", "DVD", "SDTV"} <= ammessi
+    assert not ammessi & {"Remux-1080p", "Bluray-2160p", "CAM", "BR-DISK", "WEBDL-2160p"}
+    assert profilo["cutoff"] == 7  # Bluray-1080p
+    assert profilo["name"] == "Migliore disponibile"
+    assert profilo["language"]["id"] == -1
+
+
+def test_qualita_ammessa():
+    assert qualita_ammessa({"resolution": 1080, "source": "bluray", "modifier": "none"})
+    assert not qualita_ammessa({"resolution": 2160, "source": "webdl", "modifier": "none"})
+    assert not qualita_ammessa({"resolution": 0, "source": "cam", "modifier": "none"})
+
+
+def test_pacchetto_hdhomerun():
+    p = pacchetto_richiesta()
+    assert p[:4] == bytes([0, 2, 0, 12])
+    corpo = bytes([0, 3, 0, 0])
+    risposta = corpo + zlib.crc32(corpo).to_bytes(4, "little")
+    assert e_risposta(risposta)
+    assert not e_risposta(risposta[:-1] + b"\x00")

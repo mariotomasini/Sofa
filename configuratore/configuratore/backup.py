@@ -10,6 +10,7 @@ I servizi vanno fermati prima (lo fa il comando "mediabox backup").
 from __future__ import annotations
 
 import datetime as dt
+import os
 import shutil
 import tarfile
 from pathlib import Path
@@ -43,6 +44,12 @@ def backup(imp: Impostazioni, cartella_mediabox: Path) -> Path:
             if volume.name == "caddy_data":
                 continue
             tar.add(volume, arcname=f"volumi/{volume.name}", filter=_filtro)
+    # Il backup contiene la password: lo legge solo il proprietario
+    os.chmod(destinazione, 0o600)
+    try:
+        os.chown(destinazione, int(imp.get("PUID", "1000")), int(imp.get("PGID", "1000")))
+    except OSError:
+        pass
     dimensione = destinazione.stat().st_size / 1024 / 1024
     ok(f"Backup creato: backup/{nome} ({dimensione:.0f} MB)")
     info("Copialo su una chiavetta o su un altro computer per tenerlo al sicuro.")

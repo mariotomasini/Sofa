@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  mediabox — comando per gestire il media server (Linux)
+#  Scrivi "mediabox aiuto" per l'elenco dei comandi.
+# =============================================================================
+set -euo pipefail
+
+# Segue il collegamento /usr/local/bin/mediabox fino alla cartella vera
+MEDIABOX_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+ENV_FILE="$MEDIABOX_DIR/.env"
+# shellcheck source=lib/comune.sh
+source "$MEDIABOX_DIR/lib/comune.sh"
+# shellcheck source=lib/docker.sh
+source "$MEDIABOX_DIR/lib/docker.sh"
+
+aiuto() {
+  cat <<'EOF'
+Uso: mediabox <comando>
+
+  up                 accende tutti i servizi
+  down               spegne tutti i servizi
+  restart [servizio] riavvia tutto (o un solo servizio, es. "mediabox restart jellyfin")
+  status             mostra quali servizi sono accesi
+  logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
+  configura          rigenera la configurazione dal file .env e la riapplica
+  update             aggiorna i servizi all'ultima versione (fa prima un backup)
+  backup             salva configurazioni e impostazioni nella cartella backup/
+  restore <file>     ripristina un backup
+  remote             installa Tailscale per usare mediabox da fuori casa
+  indirizzi          mostra gli indirizzi da aprire nel browser
+EOF
+}
+
+controlla_installazione() {
+  [[ -f "$ENV_FILE" ]] || errore "mediabox non è ancora installato." "Lancia ./install.sh dalla cartella di mediabox."
+  [[ -f "$MEDIABOX_DIR/generato/docker-compose.yml" ]] || configuratore_genera
+}
+
+stato() {
+  titolo "Stato dei servizi"
+  compose ps --all --format '{{.Service}}\t{{.State}}\t{{.Health}}' | sort | while IFS=$'\t' read -r servizio st salute; do
+    case "$st" in
+      running) testo="${C_OK}acceso${C_FINE}" ;;
+      restarting) testo="${C_AVVISO}si sta riavviando (controlla: mediabox logs $servizio)${C_FINE}" ;;
+      exited|dead) testo="${C_ERRORE}spento${C_FINE}" ;;
+      *) testo="$st" ;;
+    esac
+    case "$salute" in
+      unhealthy) testo="$testo ${C_AVVISO}(non risponde bene)${C_FINE}" ;;
+      starting) testo="$testo (in avvio)" ;;
+    esac
+    printf '  %-14s %s\n' "$servizio" "$testo"
+  done
+}
+
+aggiorna_ip() {
+  local ip
+  ip="$(ip_locale)"
+  [[ -n "$ip" ]] && scrivi_env HOST_IP "$ip" "$ENV_FILE"
+  if command -v tailscale >/dev/null 2>&1; then
+    ip="$(tailscale ip -4 2>/dev/null | head -n1 || true)"
+    [[ -n "$ip" ]] && scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
+  fi
+  return 0
+}
+
+backup() {
+  titolo "Backup"
+  info "Spengo i servizi per un minuto, così il backup è completo…"
+  compose stop >/dev/null
+  if compose run --rm -T configuratore backup; then
+    esito=0
+  else
+    esito=1
+  fi
+  compose start >/dev/null
+  ok "Servizi riaccesi"
+  return "$esito"
+}
+
+restore() {
+  local file="${1:-}"
+  [[ -n "$file" ]] || errore "Indica il file di backup." "Esempio: mediabox restore backup/mediabox-backup-2025-01-31_2100.tar.gz"
+  [[ -f "$file" ]] || errore "Non trovo il file $file." "Controlla il nome con: ls $MEDIABOX_DIR/backup"
+  local assoluto nome
+  assoluto="$(readlink -f "$file")"
+  nome="$(basename "$assoluto")"
+  # Il configuratore vede solo la cartella di mediabox: se serve, copiamo lì il file
+  if [[ "$assoluto" != "$MEDIABOX_DIR/backup/$nome" ]]; then
+    mkdir -p "$MEDIABOX_DIR/backup"
+    cp "$assoluto" "$MEDIABOX_DIR/backup/$nome"
+  fi
+  chiedi_si_no "Il ripristino sostituisce le configurazioni attuali (non i film). Continuo?" n || exit 0
+  compose stop >/dev/null
+  compose run --rm -T configuratore ripristina "backup/$nome"
+  chmod 600 "$ENV_FILE"
+  aggiorna_ip
+  applica
+}
+
+remote() {
+  titolo "Accesso da fuori casa con Tailscale"
+  if ! command -v tailscale >/dev/null 2>&1; then
+    info "Installo Tailscale…"
+    curl -fsSL https://tailscale.com/install.sh | sh >/dev/null \
+      || errore "Non sono riuscito a installare Tailscale." "Controlla la connessione a Internet e riprova."
+  fi
+  if ! tailscale ip -4 >/dev/null 2>&1; then
+    echo "  Ora apri il link che compare qui sotto e accedi (o crea un account gratuito)."
+    sudo tailscale up
+  fi
+  local ip
+  ip="$(tailscale ip -4 | head -n1)"
+  scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
+  ok "Tailscale attivo. Indirizzo di mediabox da fuori casa: http://$ip"
+  echo
+  echo "  Sul telefono installa l'app Tailscale, accedi con lo stesso account,"
+  echo "  poi apri http://$ip nel browser (o http://$ip/jellyfin nell'app Jellyfin)."
+  echo "  Non serve aprire nessuna porta sul router."
+}
+
+comando="${1:-aiuto}"
+shift || true
+case "$comando" in
+  aiuto|help|-h|--help) aiuto ;;
+  up)
+    controlla_installazione; prepara_docker
+    compose up -d --remove-orphans && ok "Servizi accesi" ;;
+  down)
+    controlla_installazione; prepara_docker
+    compose down && ok "Servizi spenti" ;;
+  restart)
+    controlla_installazione; prepara_docker
+    compose restart "$@" && ok "Riavviato" ;;
+  status)
+    controlla_installazione; prepara_docker; stato ;;
+  logs)
+    controlla_installazione; prepara_docker
+    compose logs -f --tail 200 "$@" ;;
+  configura)
+    controlla_installazione; prepara_docker; aggiorna_ip; applica ;;
+  update)
+    controlla_installazione; prepara_docker
+    backup
+    titolo "Aggiornamento"
+    compose pull -q --ignore-buildable
+    compose build -q --pull cerca
+    applica && ok "mediabox aggiornato" ;;
+  backup)
+    controlla_installazione; prepara_docker; backup ;;
+  restore)
+    controlla_installazione; prepara_docker; restore "${1:-}" ;;
+  remote)
+    controlla_installazione; remote
+    prepara_docker; configuratore_genera >/dev/null ;;
+  indirizzi)
+    controlla_installazione; prepara_docker; aggiorna_ip
+    configuratore_costruisci
+    "${DOCKER[@]}" run --rm -v "$MEDIABOX_DIR:/mediabox" mediabox/configuratore:locale indirizzi ;;
+  *)
+    avviso "Comando sconosciuto: $comando"
+    aiuto
+    exit 1 ;;
+esac
