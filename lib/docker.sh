@@ -43,6 +43,16 @@ cerca_hdhomerun() {
   "${DOCKER[@]}" run --rm --network host mediabox/configuratore:locale hdhomerun 2>/dev/null || true
 }
 
+# Menu "Cosa guardi?" (0 = scelte salvate, 3 = nessuna modifica)
+menu_impostazioni() {
+  local opzioni=(-i)
+  [[ -t 0 && -t 1 ]] && opzioni=(-it)
+  local esito=0
+  "${DOCKER[@]}" run --rm "${opzioni[@]}" --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" \
+    mediabox/configuratore:locale impostazioni "$@" || esito=$?
+  return "$esito"
+}
+
 configuratore_genera() {
   configuratore_costruisci
   "${DOCKER[@]}" run --rm --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" \
@@ -68,7 +78,7 @@ applica() {
   titolo "Scarico e avvio i servizi (la prima volta può richiedere diversi minuti)"
   compose build -q cerca || errore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova."
   compose pull -q --ignore-buildable 2>/dev/null || compose pull --ignore-pull-failures -q || true
-  compose run --rm -T configuratore prepara
+  compose run --rm --remove-orphans -T configuratore prepara
   compose up -d --remove-orphans || errore "Alcuni servizi non sono partiti." \
     "Guarda i messaggi qui sopra; spesso basta riprovare con \"mediabox configura\"."
   riavvia_segnati

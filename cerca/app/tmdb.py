@@ -136,6 +136,21 @@ class TMDB:
             film["titolo_originale"] = film["titolo"]
         return film
 
+    async def tendenze(self) -> list[dict]:
+        """Film di tendenza questa settimana."""
+        dati = await self._get("/trending/movie/week", {"language": self.config.lingua_tmdb}, 6 * 3600)
+        return [riassunto_film(f) for f in dati.get("results", []) if f.get("poster_path")][:18]
+
+    async def al_cinema(self) -> list[dict]:
+        """Film usciti da poco nei cinema italiani."""
+        dati = await self._get(
+            "/movie/now_playing",
+            {"language": self.config.lingua_tmdb, "region": self.config.paese},
+            6 * 3600,
+        )
+        film = [riassunto_film(f) for f in dati.get("results", []) if f.get("poster_path")]
+        return sorted(film, key=lambda f: f["popolarita"], reverse=True)[:18]
+
     async def provider(self, tmdb_id: int, durata_cache: float = 12 * 3600) -> dict:
         dati = await self._get(f"/movie/{tmdb_id}/watch/providers", {}, durata_cache)
         return interpreta_provider(dati, self.config.paese)

@@ -26,6 +26,12 @@ volumes:
 {%- if dvb %}
   tvheadend_config:
 {%- endif %}
+{%- if lidarr %}
+  lidarr_config:
+{%- endif %}
+{%- if bazarr %}
+  bazarr_config:
+{%- endif %}
 
 x-utente: &utente
   PUID: "{{ PUID }}"
@@ -142,6 +148,45 @@ services:
       - tvheadend_config:/config
       - "{{ MEDIA_DIR }}/media/registrazioni/tvheadend:/recordings"
 {%- endif %}
+{%- if lidarr %}
+
+  # Musica: cerca, scarica e ordina per artista e album
+  lidarr:
+    image: "{{ IMG_LIDARR }}"
+    restart: unless-stopped
+    environment:
+      <<: *utente
+      LIDARR__SERVER__URLBASE: /lidarr
+      LIDARR__AUTH__APIKEY: "{{ LIDARR_API_KEY }}"
+      LIDARR__AUTH__METHOD: External
+      LIDARR__AUTH__REQUIRED: DisabledForLocalAddresses
+      LIDARR__LOG__ANALYTICSENABLED: "False"
+    volumes:
+      - lidarr_config:/config
+      - "{{ MEDIA_DIR }}:/data"
+{%- endif %}
+{%- if bazarr %}
+
+  # Sottotitoli automatici per film{% if sonarr %} e serie{% endif %}
+  bazarr:
+    image: "{{ IMG_BAZARR }}"
+    restart: unless-stopped
+    environment:
+      <<: *utente
+    volumes:
+      - bazarr_config:/config
+      - "{{ MEDIA_DIR }}:/data"
+{%- endif %}
+{%- if flaresolverr %}
+
+  # Aiuta Prowlarr con gli indexer protetti da Cloudflare (nessuna interfaccia)
+  flaresolverr:
+    image: "{{ IMG_FLARESOLVERR }}"
+    restart: unless-stopped
+    environment:
+      TZ: "{{ TZ }}"
+      LOG_LEVEL: info
+{%- endif %}
 
   # Ricerca unificata dei film (TMDB + Internet Archive + Prowlarr)
   cerca:
@@ -200,4 +245,10 @@ services:
 {%- endif %}
 {%- if dvb %}
       - tvheadend_config:/volumi/tvheadend_config
+{%- endif %}
+{%- if lidarr %}
+      - lidarr_config:/volumi/lidarr_config
+{%- endif %}
+{%- if bazarr %}
+      - bazarr_config:/volumi/bazarr_config
 {%- endif %}

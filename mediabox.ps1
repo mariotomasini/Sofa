@@ -25,6 +25,7 @@ Uso: mediabox <comando>
   restart [servizio] riavvia tutto (o un solo servizio, es. "mediabox restart jellyfin")
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
+  impostazioni       cambia cosa usi: serie, anime, musica, sottotitoli, notifiche
   configura          rigenera la configurazione dal file .env e la riapplica
   update             aggiorna i servizi all'ultima versione (fa prima un backup)
   backup             salva configurazioni e impostazioni nella cartella backup
@@ -124,6 +125,12 @@ switch ($Comando.ToLower()) {
     "status" { Controlla-Installazione; Mostra-Stato }
     "logs" { Controlla-Installazione; Invoca-Compose logs -f --tail 200 @Altri }
     "configura" { Controlla-Installazione; Aggiorna-Ip; [void](Applica-Configurazione) }
+    "impostazioni" {
+        Controlla-Installazione; Costruisci-Configuratore
+        $esito = Mostra-MenuImpostazioni
+        if ($esito -eq 0) { Aggiorna-Ip; [void](Applica-Configurazione) }
+        elseif ($esito -ne 3) { exit $esito }
+    }
     "update" {
         Controlla-Installazione
         [void](Esegui-Backup)

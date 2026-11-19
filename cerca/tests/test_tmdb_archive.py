@@ -61,3 +61,46 @@ def test_pertinente_scarta_trailer_anni_sbagliati_e_altri_titoli():
     assert not pertinente({"title": "Night of the Living Dead", "year": 1990}, titoli, "1968")
     assert not pertinente({"title": "Night of the Living Dead 1990 remake"}, titoli, "1968")
     assert not pertinente({"title": "Dawn of the Dead"}, titoli, "1968")
+
+
+def test_novita_tendenze_e_cinema():
+    import asyncio
+
+    from app.config import Config
+    from app.tmdb import TMDB
+
+    class ArchivioFinto:
+        def cache_leggi(self, chiave):
+            return None
+
+        def cache_scrivi(self, chiave, valore, durata):
+            self.ultima = chiave
+
+    risposte = {
+        "/trending/movie/week": {"results": [
+            {"id": 1, "title": "A", "release_date": "2026-01-01", "poster_path": "/a.jpg", "popularity": 5},
+            {"id": 2, "title": "Senza locandina", "release_date": "2026-01-01", "poster_path": None},
+        ]},
+        "/movie/now_playing": {"results": [
+            {"id": 3, "title": "Poco visto", "release_date": "2026-11-01", "poster_path": "/c.jpg", "popularity": 1},
+            {"id": 4, "title": "Molto visto", "release_date": "2026-11-05", "poster_path": "/d.jpg", "popularity": 90},
+        ]},
+    }
+
+    import httpx
+
+    def gestore(richiesta: httpx.Request) -> httpx.Response:
+        percorso = richiesta.url.path.removeprefix("/3")
+        if percorso == "/movie/now_playing":
+            assert richiesta.url.params["region"] == "IT"
+        return httpx.Response(200, json=risposte[percorso])
+
+    async def prova():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(gestore)) as client:
+            config = Config(tmdb_chiave="chiave-corta", tmdb_api="https://api.themoviedb.org/3")
+            tmdb = TMDB(config, ArchivioFinto(), client)
+            return await tmdb.tendenze(), await tmdb.al_cinema()
+
+    tendenze, cinema = asyncio.run(prova())
+    assert [f["id"] for f in tendenze] == [1]  # i film senza locandina non si mostrano
+    assert [f["titolo"] for f in cinema] == ["Molto visto", "Poco visto"]  # i più visti prima

@@ -22,8 +22,11 @@ CARTELLE_DATI = [
     "downloads/cerca",
     "downloads/manuale",
     "downloads/sonarr",
+    "downloads/lidarr",
     "media/film",
     "media/serie",
+    "media/anime",
+    "media/musica",
     "media/registrazioni",
 ]
 

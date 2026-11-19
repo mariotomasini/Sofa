@@ -4,7 +4,7 @@
 
 Con mediabox puoi:
 
-- **guardare** film, serie e TV in diretta sulla TV, sul telefono o sul PC, con locandine e guida TV (Jellyfin);
+- **guardare** film, serie, anime e TV in diretta, e **ascoltare musica**, sulla TV, sul telefono o sul PC, con locandine, stagioni, saghe e guida TV (Jellyfin);
 - **cercare qualsiasi film** per titolo e vedere subito:
   - dove guardarlo legalmente in Italia (gratis, in abbonamento, a noleggio);
   - se esiste su Internet Archive, per scaricarlo direttamente;
@@ -12,6 +12,8 @@ Con mediabox puoi:
 - **scaricare** un film e ritrovarlo in Jellyfin già rinominato e con la locandina, senza fare nient'altro;
 - **aggiungere un torrent** trovato da te (magnet, link o file `.torrent`), con l'upload ridotto al minimo;
 - **ricevere un avviso** quando un film della tua lista diventa gratis su un servizio con pubblicità;
+- vedere **i film di tendenza e le nuove uscite** al cinema in Italia;
+- avere i **sottotitoli in italiano** (e nelle lingue che scegli) scaricati in automatico;
 - usare tutto anche **da fuori casa**, senza aprire porte sul router (Tailscale).
 
 ---
@@ -23,13 +25,15 @@ Con mediabox puoi:
 3. [Installazione su Windows](#installazione-su-windows)
 4. [Primi passi](#primi-passi)
 5. [Come si usa Cerca](#come-si-usa-cerca)
-6. [TV in diretta](#tv-in-diretta)
-7. [Usare mediabox fuori casa](#usare-mediabox-fuori-casa)
-8. [Il comando mediabox](#il-comando-mediabox)
-9. [Backup](#backup)
-10. [Dove sono i file](#dove-sono-i-file)
-11. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-12. [Per chi vuole mettere le mani nel codice](#per-chi-vuole-mettere-le-mani-nel-codice)
+6. [Serie, anime e musica](#serie-anime-e-musica)
+7. [Cambiare le scelte dopo l'installazione](#cambiare-le-scelte-dopo-linstallazione)
+8. [TV in diretta](#tv-in-diretta)
+9. [Usare mediabox fuori casa](#usare-mediabox-fuori-casa)
+10. [Il comando mediabox](#il-comando-mediabox)
+11. [Backup](#backup)
+12. [Dove sono i file](#dove-sono-i-file)
+13. [Risoluzione dei problemi](#risoluzione-dei-problemi)
+14. [Per chi vuole mettere le mani nel codice](#per-chi-vuole-mettere-le-mani-nel-codice)
 
 ---
 
@@ -64,13 +68,11 @@ cd mediabox
 ./install.sh
 ```
 
-Se vuoi anche **Sonarr**, per organizzare le serie TV scaricate, usa `./install.sh --with-sonarr`.
-
 L'installer:
 
 1. controlla il sistema e installa Docker se manca;
 2. riconosce la scheda grafica Intel, i tuner USB e un eventuale HDHomeRun in rete;
-3. ti fa le tre domande;
+3. ti fa le tre domande, poi ti chiede **cosa guardi**: serie TV, anime, musica, sottotitoli. Basta scrivere i numeri da attivare e poi `s`. Puoi cambiare idea quando vuoi con `mediabox impostazioni`;
 4. scarica e avvia i servizi, poi li configura da solo;
 5. alla fine stampa un **riepilogo** con gli indirizzi e le poche cose da fare a mano.
 
@@ -132,7 +134,9 @@ Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato a
 | qBittorrent | `/qbit` | sì (amministrazione) |
 | Radarr | `/radarr` | sì |
 | Prowlarr | `/prowlarr` | sì |
-| Sonarr *(se installato)* | `/sonarr` | sì |
+| Sonarr *(serie e anime)* | `/sonarr` | sì |
+| Lidarr *(musica)* | `/lidarr` | sì |
+| Bazarr *(sottotitoli)* | `/bazarr` | sì |
 | TVHeadend *(se c'è un tuner USB)* | `/tv` | sì |
 
 L'utente è sempre **admin** e la password è quella che hai scelto durante l'installazione.
@@ -154,6 +158,10 @@ Se la TV non lo trova, usa l'IP: `http://192.168.1.50/jellyfin`. Molte TV non ri
 ---
 
 ## Come si usa Cerca
+
+![Pagina iniziale di Cerca](docs/cerca-home.png)
+
+Nella pagina iniziale di Cerca trovi i film **di tendenza questa settimana** e quelli **usciti da poco al cinema in Italia**: cliccane uno per vedere dove guardarlo.
 
 ![Scheda di un film](docs/cerca-film.png)
 
@@ -193,6 +201,76 @@ qBittorrent è impostato in modo fisso così:
 - upload limitato a **1 KiB/s**;
 - rapporto massimo **0**: appena finito il download, il torrent si **ferma**;
 - **UPnP e NAT-PMP spenti**: nessuna porta viene aperta sul router.
+
+---
+
+## Serie, anime e musica
+
+### Serie TV
+
+Attivale con `mediabox impostazioni` (voce 1): viene installato **Sonarr**.
+
+- In Sonarr cerchi una serie e la aggiungi. Sonarr scarica gli episodi (anche quelli nuovi, appena escono) e li ordina in `Serie/Nome serie (Anno)/Stagione 01/`.
+- In Jellyfin ogni serie è **una sola scheda**, divisa in **stagioni** ed **episodi**.
+- Jellyfin ricorda per ogni utente **gli episodi già visti** e **dove ti sei fermato**: in home trovi "Continua a guardare" e "Prossimi episodi". Se in casa siete in più, crea un utente per ciascuno (*Pannello di controllo → Utenti*).
+- Il plugin Intro Skipper aggiunge i pulsanti **"Salta intro"** e **"Salta titoli di coda"**.
+
+Cerca per ora è pensato solo per i film: le serie aggiungile da Sonarr.
+
+### Anime
+
+Attivali con `mediabox impostazioni` (voce 2). In Jellyfin compare la libreria **Anime**, separata dalle serie, e Sonarr ottiene la cartella `anime`. Quando aggiungi un anime in Sonarr:
+
+1. come *Cartella principale* scegli **/data/media/anime**;
+2. come *Tipo di serie* scegli **Anime**: così Sonarr usa anche la numerazione assoluta degli episodi (es. "One Piece 1071"), che è quella usata da molti rilasci.
+
+Per i sottotitoli degli anime aggiungi l'inglese e, se vuoi, il giapponese alle lingue (voce 6 del menu). Prowlarr passa a Sonarr anche le categorie anime degli indexer.
+
+### Musica
+
+La libreria **Musica** di Jellyfin c'è sempre: copia i tuoi album in `media/musica`, meglio se ordinati come `Artista/Album/01 - Brano.mp3`. Jellyfin scarica copertine e informazioni da MusicBrainz.
+
+Per scaricare e ordinare musica in automatico attiva **Lidarr** (voce 3): cerchi un artista, scegli gli album e Lidarr li mette in `Artista/Album (Anno)/`.
+
+Per ascoltare dal telefono, anche offline e fuori casa, le app **Finamp** (gratuita) e **Symfonium** funzionano meglio dell'app Jellyfin.
+
+### Sottotitoli
+
+**Bazarr** è attivo di serie: cerca da solo i sottotitoli dei film e delle serie, nelle lingue scelte (all'inizio italiano e inglese). Li salva accanto al video e Jellyfin li mostra subito.
+
+Per trovarne di più in italiano crea un account gratuito su [opensubtitles.com](https://www.opensubtitles.com) e aggiungilo in *Bazarr → Impostazioni → Fornitori*.
+
+### Saghe
+
+I film della stessa saga (es. tutti i "Rocky" o tutti gli "Harry Potter") vengono raggruppati da soli in Jellyfin, nella sezione **Collezioni** della libreria Film.
+
+### Indexer protetti da Cloudflare
+
+Alcuni siti mostrano un controllo "Sei un robot?" che blocca Prowlarr. mediabox installa **FlareSolverr**, che lo supera. Per usarlo, in Prowlarr apri l'indexer e aggiungi l'etichetta **flaresolverr**.
+
+---
+
+## Cambiare le scelte dopo l'installazione
+
+```bash
+mediabox impostazioni
+```
+
+Si apre lo stesso menu dell'installazione:
+
+```
+   [✔] 1. Serie TV (Sonarr le scarica e le ordina per stagioni)
+   [ ] 2. Anime (libreria separata in Jellyfin, gestiti da Sonarr)
+   [ ] 3. Musica con Lidarr (scarica e ordina per artista e album)
+   [✔] 4. Sottotitoli automatici (Bazarr)
+   [✔] 5. FlareSolverr (aiuta gli indexer protetti da Cloudflare)
+       6. Lingue dei sottotitoli: it,en
+       7. Notifiche sul telefono (ntfy): non impostate
+```
+
+Scrivi il numero di una voce per attivarla o disattivarla, poi `s` per salvare: mediabox installa, configura o spegne quello che serve.
+
+Se disattivi un servizio, le sue impostazioni restano salvate: riattivandolo ritrovi tutto com'era. I file scaricati non vengono mai cancellati.
 
 ---
 
@@ -252,6 +330,7 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox up` / `mediabox down` | accende / spegne tutto |
 | `mediabox restart [servizio]` | riavvia tutto o un servizio (es. `mediabox restart jellyfin`) |
 | `mediabox logs [servizio]` | mostra i messaggi di un servizio (Ctrl+C per uscire) |
+| `mediabox impostazioni` | cambia cosa usi: serie, anime, musica, sottotitoli, notifiche |
 | `mediabox configura` | riapplica la configurazione dopo una modifica al file `.env` |
 | `mediabox update` | aggiorna i servizi (fa prima un backup) |
 | `mediabox backup` | crea un backup |
@@ -289,6 +368,8 @@ mediabox restore /percorso/mediabox-backup-AAAA-MM-GG_HHMM.tar.gz
 |---|---|---|
 | Film | `/srv/mediabox/dati/media/film` | `D:\Mediabox\media\film` |
 | Serie | `.../media/serie` | `...\media\serie` |
+| Anime | `.../media/anime` | `...\media\anime` |
+| Musica | `.../media/musica` | `...\media\musica` |
 | Registrazioni TV | `.../media/registrazioni` | `...\media\registrazioni` |
 | Download in corso | `.../downloads` | `...\downloads` |
 | Impostazioni (`.env`) | `/opt/mediabox/.env` | `C:\Mediabox\.env` |
@@ -394,7 +475,9 @@ I test di `cerca/tests/test_scelta_archive.py` usano metadati reali di Internet 
 
 ### Componenti usati
 
-[Jellyfin](https://jellyfin.org), [qBittorrent](https://www.qbittorrent.org), [Radarr](https://radarr.video), [Prowlarr](https://prowlarr.com), [Sonarr](https://sonarr.tv), [TVHeadend](https://tvheadend.org), [Caddy](https://caddyserver.com), [Homepage](https://gethomepage.dev), [Intro Skipper](https://github.com/intro-skipper/intro-skipper). I dati dei film vengono da [TMDB](https://www.themoviedb.org) e quelli sulla disponibilità da [JustWatch](https://www.justwatch.com). Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
+Alcune idee (Bazarr, FlareSolverr, anime, menu delle scelte) vengono dal progetto [media-server-setup](https://github.com/Hikki-dev/media-server-setup).
+
+[Jellyfin](https://jellyfin.org), [qBittorrent](https://www.qbittorrent.org), [Radarr](https://radarr.video), [Prowlarr](https://prowlarr.com), [Sonarr](https://sonarr.tv), [Lidarr](https://lidarr.audio), [Bazarr](https://www.bazarr.media), [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr), [TVHeadend](https://tvheadend.org), [Caddy](https://caddyserver.com), [Homepage](https://gethomepage.dev), [Intro Skipper](https://github.com/intro-skipper/intro-skipper). I dati dei film vengono da [TMDB](https://www.themoviedb.org) e quelli sulla disponibilità da [JustWatch](https://www.justwatch.com). Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
 
 ### Uso responsabile
 

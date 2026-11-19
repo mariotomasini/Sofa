@@ -55,6 +55,18 @@
 		reverse_proxy sonarr:8989
 	}
 {%- endif %}
+{%- if lidarr %}
+	handle /lidarr* {
+		import pannello
+		reverse_proxy lidarr:8686
+	}
+{%- endif %}
+{%- if bazarr %}
+	handle /bazarr* {
+		import pannello
+		reverse_proxy bazarr:6767
+	}
+{%- endif %}
 {%- if dvb %}
 
 	# --- TVHeadend (http_root /tv) ---------------------------------------

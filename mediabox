@@ -22,6 +22,7 @@ Uso: mediabox <comando>
   restart [servizio] riavvia tutto (o un solo servizio, es. "mediabox restart jellyfin")
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
+  impostazioni       cambia cosa usi: serie, anime, musica, sottotitoli, notifiche
   configura          rigenera la configurazione dal file .env e la riapplica
   update             aggiorna i servizi all'ultima versione (fa prima un backup)
   backup             salva configurazioni e impostazioni nella cartella backup/
@@ -139,6 +140,16 @@ case "$comando" in
     compose logs -f --tail 200 "$@" ;;
   configura)
     controlla_installazione; prepara_docker; aggiorna_ip; applica ;;
+  impostazioni)
+    controlla_installazione; prepara_docker; configuratore_costruisci
+    esito=0
+    # shellcheck disable=SC2119  # nessun argomento: menu normale
+    menu_impostazioni || esito=$?
+    if [[ "$esito" -eq 0 ]]; then
+      aggiorna_ip; applica
+    elif [[ "$esito" -ne 3 ]]; then
+      exit "$esito"
+    fi ;;
   update)
     controlla_installazione; prepara_docker
     backup

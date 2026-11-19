@@ -180,6 +180,20 @@ async def api_tmdb(request: Request, q: str):
     return {"film": await servizi(request).tmdb.cerca(q)}
 
 
+@app.get("/api/novita")
+async def api_novita(request: Request):
+    """Film di tendenza e nuove uscite: se una delle due fallisce, l'altra si vede lo stesso."""
+    s = servizi(request)
+    tendenze, cinema = await asyncio.gather(s.tmdb.tendenze(), s.tmdb.al_cinema(), return_exceptions=True)
+    risposta: dict = {"tendenze": [], "cinema": []}
+    for chiave, valore in (("tendenze", tendenze), ("cinema", cinema)):
+        if isinstance(valore, ErroreServizio):
+            risposta["errore"] = valore.come_dizionario()
+        elif isinstance(valore, list):
+            risposta[chiave] = valore
+    return risposta
+
+
 @app.get("/api/film/{tmdb_id}/provider")
 async def api_provider(request: Request, tmdb_id: int):
     return await servizi(request).tmdb.provider(tmdb_id)

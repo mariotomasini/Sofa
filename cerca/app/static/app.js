@@ -308,3 +308,22 @@ function avviaDownload({ soloAttivi }) {
     );
   }
 }
+
+// --- novità nella pagina iniziale -------------------------------------------------
+function htmlScheda(f) {
+  return `<a class="scheda" href="${BASE}/film/${f.id}">` +
+    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : '<div class="senza-poster">🎬</div>') +
+    `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${esc(f.anno)}</span></a>`;
+}
+
+async function avviaNovita() {
+  const sezione = document.getElementById("novita");
+  try {
+    const d = await chiama("/api/novita");
+    document.getElementById("tendenze").innerHTML = d.tendenze.map(htmlScheda).join("");
+    document.getElementById("cinema").innerHTML = d.cinema.map(htmlScheda).join("");
+    sezione.hidden = !(d.tendenze.length || d.cinema.length);
+  } catch (e) {
+    sezione.hidden = true;  // senza TMDB la pagina resta comunque usabile
+  }
+}

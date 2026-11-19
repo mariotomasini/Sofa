@@ -96,6 +96,15 @@ function Costruisci-Configuratore {
     if ($LASTEXITCODE -ne 0) { Esci-ConErrore "Non riesco a preparare il configuratore." "Controlla la connessione a Internet e riprova." }
 }
 
+# Menu "Cosa guardi?" (0 = scelte salvate, 3 = nessuna modifica)
+function Mostra-MenuImpostazioni([switch]$PrimaVolta) {
+    $argomenti = "run --rm -it -v `"$($script:MediaboxDir):/mediabox`" mediabox/configuratore:locale impostazioni"
+    if ($PrimaVolta) { $argomenti += " --prima-volta" }
+    # Start-Process lascia il menu collegato alla finestra (le domande compaiono subito)
+    $processo = Start-Process docker -ArgumentList $argomenti -NoNewWindow -Wait -PassThru
+    return $processo.ExitCode
+}
+
 function Genera-File {
     Costruisci-Configuratore
     & docker run --rm -v "$($script:MediaboxDir):/mediabox" mediabox/configuratore:locale genera | Out-Host
@@ -121,7 +130,7 @@ function Applica-Configurazione {
     Invoca-Compose build -q cerca | Out-Host
     if ($LASTEXITCODE -ne 0) { Esci-ConErrore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova." }
     Invoca-Compose pull -q --ignore-buildable | Out-Host
-    Invoca-Compose run --rm -T configuratore prepara | Out-Host
+    Invoca-Compose run --rm --remove-orphans -T configuratore prepara | Out-Host
     Invoca-Compose up -d --remove-orphans | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Esci-ConErrore "Alcuni servizi non sono partiti." "Guarda i messaggi qui sopra; spesso basta riprovare con: mediabox configura"

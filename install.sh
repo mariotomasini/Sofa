@@ -15,12 +15,19 @@ MEDIABOX_DIR="${MEDIABOX_DIR:-/opt/mediabox}"
 source "$SORGENTE/lib/comune.sh"
 
 CON_SONARR=""
+CON_LIDARR=""
+CON_ANIME=""
 for argomento in "$@"; do
   case "$argomento" in
     --with-sonarr) CON_SONARR="si" ;;
+    --with-lidarr) CON_LIDARR="si" ;;
+    --with-anime) CON_ANIME="si" ;;
     -h|--help|--aiuto)
-      echo "Uso: ./install.sh [--with-sonarr]"
+      echo "Uso: ./install.sh [--with-sonarr] [--with-anime] [--with-lidarr]"
       echo "  --with-sonarr   installa anche Sonarr per organizzare le serie TV"
+      echo "  --with-anime    aggiunge la libreria Anime (usa Sonarr)"
+      echo "  --with-lidarr   installa Lidarr per scaricare e ordinare la musica"
+      echo "Le scelte si cambiano anche dopo, con: mediabox impostazioni"
       exit 0 ;;
     *) errore "Opzione sconosciuta: $argomento" "Usa ./install.sh --aiuto per vedere le opzioni." ;;
   esac
@@ -170,9 +177,15 @@ if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
 fi
 
 # Chiavi interne dei servizi
-for chiave in RADARR_API_KEY PROWLARR_API_KEY SONARR_API_KEY; do
+for chiave in RADARR_API_KEY PROWLARR_API_KEY SONARR_API_KEY LIDARR_API_KEY; do
   [[ -n "$(leggi_env "$chiave" "$ENV_FILE")" ]] || scrivi_env "$chiave" "$(chiave_casuale)" "$ENV_FILE"
 done
+
+# Cosa guardi? (solo la prima volta; dopo si cambia con "mediabox impostazioni")
+configuratore_costruisci
+if [[ -n "$NUOVA_INSTALLAZIONE" && -t 0 ]]; then
+  menu_impostazioni --prima-volta || true
+fi
 
 # Cartella dei film: se c'è un disco molto più capiente lo proponiamo
 if [[ -n "$NUOVA_INSTALLAZIONE" ]]; then
@@ -202,6 +215,8 @@ scrivi_env PUID "$(id -u)" "$ENV_FILE"
 scrivi_env PGID "$(id -g)" "$ENV_FILE"
 scrivi_env HOST_IP "$(ip_locale)" "$ENV_FILE"
 [[ -n "$CON_SONARR" ]] && scrivi_env WITH_SONARR si "$ENV_FILE"
+[[ -n "$CON_LIDARR" ]] && scrivi_env WITH_LIDARR si "$ENV_FILE"
+[[ -n "$CON_ANIME" ]] && scrivi_env WITH_ANIME si "$ENV_FILE"
 
 if [[ -e /dev/dri/renderD128 ]]; then
   scrivi_env VAAPI si "$ENV_FILE"
@@ -220,7 +235,6 @@ else
   info "Nessun tuner USB (/dev/dvb)"
 fi
 
-configuratore_costruisci
 hdhomerun="$(cerca_hdhomerun)"
 if [[ -n "$hdhomerun" ]]; then
   scrivi_env HDHOMERUN_IP "$hdhomerun" "$ENV_FILE"

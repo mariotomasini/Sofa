@@ -28,6 +28,13 @@
   <p><a href="{{ base }}/download">Vedi tutti i download →</a></p>
 </section>
 
+<section id="novita" hidden>
+  <h2>🔥 Di tendenza questa settimana</h2>
+  <div id="tendenze" class="striscia"></div>
+  <h2>🎬 Usciti da poco al cinema</h2>
+  <div id="cinema" class="striscia"></div>
+</section>
+
 {% if ricerche %}
 <section>
   <h2>Ultime ricerche</h2>
@@ -68,4 +75,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block script %}<script>avviaDownload({ soloAttivi: true });</script>{% endblock %}
+{% block script %}<script>avviaDownload({ soloAttivi: true }); avviaNovita();</script>{% endblock %}

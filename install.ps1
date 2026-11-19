@@ -8,6 +8,8 @@
 [CmdletBinding()]
 param(
     [switch]$WithSonarr,
+    [switch]$WithAnime,
+    [switch]$WithLidarr,
     [string]$Cartella = "C:\Mediabox"
 )
 
@@ -22,6 +24,8 @@ $identita = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $identita.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $argomenti = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"", "-Cartella", "`"$Cartella`"")
     if ($WithSonarr) { $argomenti += "-WithSonarr" }
+    if ($WithAnime) { $argomenti += "-WithAnime" }
+    if ($WithLidarr) { $argomenti += "-WithLidarr" }
     Start-Process powershell.exe -Verb RunAs -ArgumentList $argomenti
     exit 0
 }
@@ -63,6 +67,8 @@ if ($LASTEXITCODE -ne 0) {
     # Dopo il riavvio l'installazione riparte da sola
     $comando = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Cartella 'install.ps1')`" -Cartella `"$Cartella`""
     if ($WithSonarr) { $comando += " -WithSonarr" }
+    if ($WithAnime) { $comando += " -WithAnime" }
+    if ($WithLidarr) { $comando += " -WithLidarr" }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "mediabox" -Value $comando
     Scrivi-Avviso "Serve un riavvio del PC. Dopo il riavvio e l'accesso, l'installazione continua da sola."
     if (Chiedi-SiNo "Riavvio adesso?" $true) { Restart-Computer -Force }
@@ -156,9 +162,17 @@ if ($nuovaInstallazione) {
     Scrivi-Env "NTFY_TOPIC" $ntfy $script:EnvFile
 }
 
-foreach ($chiave in @("RADARR_API_KEY", "PROWLARR_API_KEY", "SONARR_API_KEY")) {
+foreach ($chiave in @("RADARR_API_KEY", "PROWLARR_API_KEY", "SONARR_API_KEY", "LIDARR_API_KEY")) {
     if (-not (Leggi-Env $chiave $script:EnvFile)) { Scrivi-Env $chiave (Nuova-ChiaveCasuale) $script:EnvFile }
 }
+
+if ($WithSonarr) { Scrivi-Env "WITH_SONARR" "si" $script:EnvFile }
+if ($WithAnime) { Scrivi-Env "WITH_ANIME" "si" $script:EnvFile }
+if ($WithLidarr) { Scrivi-Env "WITH_LIDARR" "si" $script:EnvFile }
+
+# Cosa guardi? (solo la prima volta; dopo si cambia con "mediabox impostazioni")
+Costruisci-Configuratore
+if ($nuovaInstallazione) { [void](Mostra-MenuImpostazioni -PrimaVolta) }
 
 # Cartella dei film: il disco con più spazio libero
 if ($nuovaInstallazione) {
@@ -184,7 +198,6 @@ Scrivi-Env "PUID" "1000" $script:EnvFile
 Scrivi-Env "PGID" "1000" $script:EnvFile
 Scrivi-Env "VAAPI" "no" $script:EnvFile
 Scrivi-Env "DVB" "no" $script:EnvFile
-if ($WithSonarr) { Scrivi-Env "WITH_SONARR" "si" $script:EnvFile }
 $ip = Trova-IpLocale
 Scrivi-Env "HOST_IP" $ip $script:EnvFile
 Scrivi-Info "Su Windows la transcodifica usa il processore e i tuner USB non sono supportati (limiti di Docker Desktop)."

@@ -53,6 +53,10 @@ def pagine(imp: Impostazioni) -> list[tuple[str, str, bool]]:
     ]
     if imp.sonarr:
         elenco.append(("Sonarr", "/sonarr/", True))
+    if imp.lidarr:
+        elenco.append(("Lidarr", "/lidarr/", True))
+    if imp.bazarr:
+        elenco.append(("Bazarr", "/bazarr/", True))
     if imp.dvb:
         elenco.append(("TVHeadend", "/tv/", True))
     return elenco
@@ -81,7 +85,13 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
     titolo("Cosa è attivo")
     attivi = ["Jellyfin", "Cerca", "qBittorrent (upload ridotto al minimo)", "Radarr", "Prowlarr", "Homepage"]
     if imp.sonarr:
-        attivi.append("Sonarr")
+        attivi.append("Sonarr (serie" + (" e anime)" if imp.anime else ")"))
+    if imp.lidarr:
+        attivi.append("Lidarr (musica)")
+    if imp.bazarr:
+        attivi.append("Bazarr (sottotitoli: " + ", ".join(imp.lingue_sottotitoli) + ")")
+    if imp.flaresolverr:
+        attivi.append("FlareSolverr (indexer protetti da Cloudflare)")
     if imp.dvb:
         attivi.append("TVHeadend (tuner USB)")
     if imp.hdhomerun:

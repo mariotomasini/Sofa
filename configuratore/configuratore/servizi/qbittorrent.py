@@ -12,7 +12,7 @@ from ..rete import attendi, controlla
 
 INDIRIZZO = "http://qbittorrent:8080"
 
-CATEGORIE = ["radarr", "cerca", "manuale", "sonarr"]
+CATEGORIE = ["radarr", "cerca", "manuale", "sonarr", "lidarr"]
 
 # Un torrent di un film non contiene mai programmi: questi file non vengono
 # nemmeno scaricati (protegge da torrent falsi con virus).
@@ -86,9 +86,8 @@ def configura(imp: Impostazioni, esito) -> None:
         ok("Upload limitato a 1 KiB/s, rapporto 0 con torrent fermato, UPnP spento")
 
         esistenti = client.get("/torrents/categories").json()
-        for nome in CATEGORIE:
-            if nome == "sonarr" and not imp.sonarr:
-                continue
+        attive = [c for c in CATEGORIE if (c != "sonarr" or imp.sonarr) and (c != "lidarr" or imp.lidarr)]
+        for nome in attive:
             percorso = f"/data/downloads/{nome}"
             dati = {"category": nome, "savePath": percorso}
             if nome in esistenti:
@@ -96,4 +95,4 @@ def configura(imp: Impostazioni, esito) -> None:
                     controlla(client.post("/torrents/editCategory", data=dati), f"aggiornare la categoria {nome}")
             else:
                 controlla(client.post("/torrents/createCategory", data=dati), f"creare la categoria {nome}")
-        ok("Categorie: " + ", ".join(c for c in CATEGORIE if c != "sonarr" or imp.sonarr))
+        ok("Categorie: " + ", ".join(attive))
