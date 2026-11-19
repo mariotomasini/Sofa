@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titolo %}Download{% endblock %}
+{% block contenuto %}
+<h1>Download</h1>
+<p class="sottotitolo">La pagina si aggiorna da sola. Quando un film è "Pronto in Jellyfin" lo trovi nella libreria Film.</p>
+<div id="elenco-download" class="elenco-download"><p class="caricamento">Carico…</p></div>
+
+<dialog id="dialogo-associa">
+  <form method="dialog" class="modulo">
+    <h2>Di che film si tratta?</h2>
+    <p id="associa-nome" class="sottotitolo"></p>
+    <div class="cerca-film">
+      <input id="associa-cerca" type="search" placeholder="Titolo del film…" autocomplete="off">
+      <button type="button" id="associa-bottone" class="secondario">Cerca</button>
+    </div>
+    <div id="associa-scelte" class="scelte"></div>
+    <button value="annulla" class="secondario">Chiudi</button>
+  </form>
+</dialog>
+{% endblock %}
+{% block script %}<script>avviaDownload({ soloAttivi: false });</script>{% endblock %}

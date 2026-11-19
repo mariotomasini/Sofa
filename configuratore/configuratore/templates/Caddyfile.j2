@@ -1,0 +1,83 @@
+# -----------------------------------------------------------------------------
+#  FILE GENERATO DA MEDIABOX — non modificarlo a mano.
+# -----------------------------------------------------------------------------
+{
+	admin off
+	auto_https off
+}
+
+(pannello) {
+	basic_auth {
+		{{ ADMIN_USER }} {{ hash_password }}
+	}
+}
+
+:80 {
+	# Solo rete di casa e Tailscale: chiunque altro riceve un rifiuto.
+	@fuori not remote_ip private_ranges 100.64.0.0/10
+	handle @fuori {
+		respond "mediabox è raggiungibile solo dalla rete di casa o da Tailscale." 403
+	}
+
+	encode gzip
+
+	# --- Cerca -----------------------------------------------------------
+	redir /cerca /cerca/
+	handle_path /cerca/* {
+		reverse_proxy cerca:8000
+	}
+
+	# --- Jellyfin (base URL /jellyfin impostato dentro Jellyfin) ---------
+	redir /jellyfin /jellyfin/
+	handle /jellyfin/* {
+		reverse_proxy jellyfin:8096
+	}
+
+	# --- qBittorrent -----------------------------------------------------
+	redir /qbit /qbit/
+	handle_path /qbit/* {
+		import pannello
+		reverse_proxy qbittorrent:8080
+	}
+
+	# --- Radarr / Prowlarr / Sonarr (base URL impostato nei servizi) -----
+	handle /radarr* {
+		import pannello
+		reverse_proxy radarr:7878
+	}
+	handle /prowlarr* {
+		import pannello
+		reverse_proxy prowlarr:9696
+	}
+{%- if sonarr %}
+	handle /sonarr* {
+		import pannello
+		reverse_proxy sonarr:8989
+	}
+{%- endif %}
+{%- if dvb %}
+
+	# --- TVHeadend (http_root /tv) ---------------------------------------
+	handle /tv* {
+		import pannello
+		reverse_proxy tvheadend:9981
+	}
+{%- endif %}
+
+	# --- Pagina iniziale -------------------------------------------------
+	handle {
+		reverse_proxy homepage:3000 {
+			header_up Host localhost:3000
+		}
+	}
+
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		respond `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<body style="font-family:sans-serif;background:#111;color:#eee;padding:2em;font-size:1.3em">
+<h1>Questo servizio non risponde</h1>
+<p>Potrebbe essere ancora in avvio: aspetta un minuto e ricarica la pagina.</p>
+<p>Se il problema resta, sul PC di mediabox scrivi <code>mediabox status</code> e poi <code>mediabox restart</code>.</p>
+<p><a style="color:#8cf" href="/">Torna alla pagina iniziale</a></p></body>` {err.status_code}
+	}
+}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titolo %}Aggiungi torrent{% endblock %}
+{% block contenuto %}
+<h1>Aggiungi un torrent</h1>
+<p class="sottotitolo">Il torrent va in qBittorrent con l'upload ridotto al minimo. Quando è finito lo metto in Jellyfin.</p>
+
+<form id="form-torrent" class="modulo" enctype="multipart/form-data">
+  <label for="link">Link magnet o indirizzo del file .torrent</label>
+  <textarea id="link" name="link" rows="3" placeholder="magnet:?xt=urn:btih:…  oppure  https://…/file.torrent"></textarea>
+
+  <label for="file">…oppure carica un file .torrent</label>
+  <input id="file" name="file" type="file" accept=".torrent,application/x-bittorrent">
+
+  <fieldset>
+    <legend>Di che film si tratta? <small>(facoltativo)</small></legend>
+    <p class="sottotitolo">Se lo indichi, a fine download il film viene rinominato e messo in Jellyfin con la locandina.
+      Se non lo indichi provo a capirlo da solo, altrimenti te lo chiedo dopo.</p>
+    <div class="cerca-film">
+      <input id="cerca-film" type="search" placeholder="Titolo del film…" autocomplete="off">
+      <button type="button" id="bottone-cerca-film" class="secondario">Cerca</button>
+    </div>
+    <div id="scelte-film" class="scelte"></div>
+    <input type="hidden" name="tmdb_id" id="tmdb_id">
+  </fieldset>
+
+  <button type="submit">Aggiungi torrent</button>
+</form>
+{% endblock %}
+{% block script %}<script>avviaTorrent();</script>{% endblock %}

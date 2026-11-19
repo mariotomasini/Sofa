@@ -1,0 +1,104 @@
+"""qBittorrent: aggiunta torrent e controllo dell'avanzamento.
+
+Le richieste dalla rete interna di mediabox non chiedono login (lo ha
+impostato il configuratore); se servisse, Cerca accede con la password.
+"""
+
+from __future__ import annotations
+
+import httpx
+
+from .config import Config
+from .rete import ErroreServizio, non_raggiungibile
+
+STATI_FINITI = {"uploading", "stalledUP", "pausedUP", "stoppedUP", "queuedUP", "forcedUP", "checkingUP"}
+STATI_ERRORE = {"error", "missingFiles"}
+
+
+class QBittorrent:
+    def __init__(self, config: Config, client: httpx.AsyncClient) -> None:
+        self.config = config
+        self.client = client
+        self.base = f"{config.qbit_url}/api/v2"
+
+    async def _accedi(self) -> None:
+        r = await self.client.post(
+            f"{self.base}/auth/login",
+            data={"username": self.config.utente, "password": self.config.password},
+            headers={"Referer": self.config.qbit_url},
+        )
+        if r.text.strip() != "Ok.":
+            raise ErroreServizio(
+                "qBittorrent non accetta la password di amministrazione.",
+                "Esegui \"mediabox configura\" per reimpostarla.",
+            )
+
+    async def _richiesta(self, metodo: str, percorso: str, **kw) -> httpx.Response:
+        try:
+            r = await self.client.request(metodo, f"{self.base}/{percorso}", **kw)
+            if r.status_code in (401, 403):
+                await self._accedi()
+                r = await self.client.request(metodo, f"{self.base}/{percorso}", **kw)
+        except httpx.HTTPError as exc:
+            raise non_raggiungibile("qBittorrent", "/qbit") from exc
+        return r
+
+    async def aggiungi(
+        self,
+        *,
+        categoria: str,
+        etichetta: str,
+        magnet_o_url: str | None = None,
+        file_torrent: bytes | None = None,
+        cartella: str | None = None,
+    ) -> None:
+        dati = {"category": categoria, "tags": etichetta, "autoTMM": "false" if cartella else "true"}
+        if cartella:
+            dati["savepath"] = cartella
+        file = None
+        if file_torrent:
+            file = {"torrents": ("file.torrent", file_torrent, "application/x-bittorrent")}
+        elif magnet_o_url:
+            dati["urls"] = magnet_o_url
+        else:
+            raise ErroreServizio("Non hai indicato nessun torrent.", "Incolla un magnet o scegli un file .torrent.")
+        r = await self._richiesta("POST", "torrents/add", data=dati, files=file)
+        if r.status_code == 415 or r.text.strip() == "Fails.":
+            raise ErroreServizio(
+                "qBittorrent non riesce ad aprire questo torrent.",
+                "Controlla che il link o il file siano corretti (un magnet inizia con \"magnet:?\").",
+            )
+        if not r.is_success:
+            raise ErroreServizio(f"qBittorrent ha rifiutato il torrent (errore {r.status_code}).", "Riprova.")
+
+    async def per_etichetta(self, etichetta: str) -> dict | None:
+        r = await self._richiesta("GET", "torrents/info", params={"tag": etichetta})
+        elenco = r.json() if r.is_success else []
+        return elenco[0] if elenco else None
+
+    async def per_categoria(self, categoria: str) -> list[dict]:
+        r = await self._richiesta("GET", "torrents/info", params={"category": categoria})
+        return r.json() if r.is_success else []
+
+    async def file(self, hash_torrent: str) -> list[dict]:
+        r = await self._richiesta("GET", "torrents/files", params={"hash": hash_torrent})
+        return r.json() if r.is_success else []
+
+    async def priorita_file(self, hash_torrent: str, indici: list[int], priorita: int) -> None:
+        if not indici:
+            return
+        await self._richiesta(
+            "POST",
+            "torrents/filePrio",
+            data={"hash": hash_torrent, "id": "|".join(map(str, indici)), "priority": str(priorita)},
+        )
+
+    async def aggiungi_etichetta(self, hash_torrent: str, etichetta: str) -> None:
+        await self._richiesta("POST", "torrents/addTags", data={"hashes": hash_torrent, "tags": etichetta})
+
+    async def elimina(self, hash_torrent: str, con_file: bool) -> None:
+        await self._richiesta(
+            "POST",
+            "torrents/delete",
+            data={"hashes": hash_torrent, "deleteFiles": "true" if con_file else "false"},
+        )

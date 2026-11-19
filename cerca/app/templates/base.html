@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>{% block titolo %}Cerca{% endblock %} · mediabox</title>
+  <link rel="stylesheet" href="{{ base }}/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+</head>
+<body>
+  <header class="testata">
+    <a class="logo" href="{{ base }}/">🎬 Cerca</a>
+    <nav>
+      <a href="{{ base }}/download">Download</a>
+      <a href="{{ base }}/torrent">Aggiungi torrent</a>
+      <a href="/">mediabox</a>
+    </nav>
+  </header>
+  <main>
+    {% if errore %}
+    <div class="errore" role="alert">
+      <strong>{{ errore.cosa }}</strong>
+      {% if errore.cosa_fare %}<p>{{ errore.cosa_fare }}</p>{% endif %}
+    </div>
+    {% endif %}
+    {% block contenuto %}{% endblock %}
+  </main>
+  <footer class="piede">
+    Dati dei film da <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>.
+    Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
+  </footer>
+  <div id="avviso" class="avviso" role="status" hidden></div>
+  <script>window.BASE = "{{ base }}";</script>
+  <script src="{{ base }}/static/app.js"></script>
+  {% block script %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+ "metadata": {"identifier": "solo_bassa_qualita", "title": "Film sintetico"},
+ "files": [
+  {"name": "film_512kb.mp4", "source": "derivative", "format": "512Kb MPEG4", "size": "300000000", "height": "240", "width": "320", "length": "1:30:00", "original": "film.iso"},
+  {"name": "film.iso", "source": "original", "format": "ISO Image", "size": "4000000000"}
+ ]
+}

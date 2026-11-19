@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titolo %}{{ film.titolo if film else "Film" }}{% endblock %}
+{% block contenuto %}
+{% if film %}
+<article class="film" data-tmdb="{{ film.id }}">
+  <div class="film-testa{{ '' if film.poster else ' senza-locandina' }}">
+    {% if film.poster %}<img class="poster" src="{{ film.poster }}" alt="Locandina di {{ film.titolo }}">{% endif %}
+    <div>
+      <h1>{{ film.titolo }} {% if film.anno %}<span class="anno">({{ film.anno }})</span>{% endif %}</h1>
+      {% if film.titolo_originale != film.titolo %}<p class="originale">{{ film.titolo_originale }}</p>{% endif %}
+      <p class="dettagli">
+        {% if film.durata %}{{ film.durata }} minuti · {% endif %}{{ film.generi | join(', ') }}
+        {% if film.voto %} · ★ {{ film.voto }}{% endif %}
+      </p>
+      <p class="trama">{{ film.trama or "Trama non disponibile in italiano." }}</p>
+      <button id="avvisami" class="secondario" data-attivo="{{ 'si' if avvisami else 'no' }}">
+        {{ "✓ Ti avviserò se diventa gratis" if avvisami else "🔔 Avvisami se diventa disponibile gratis" }}
+      </button>
+    </div>
+  </div>
+
+  <section class="blocco" id="provider">
+    <h2>Dove vederlo legalmente in Italia</h2>
+    <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+    <p class="attribuzione">Dati sulla disponibilità forniti da
+      <a href="https://www.justwatch.com/it" target="_blank" rel="noopener"><strong>JustWatch</strong></a>.</p>
+  </section>
+
+  <section class="blocco" id="archive">
+    <h2>Internet Archive <small>molti film sono di pubblico dominio: controlla la licenza nella pagina dell'item</small></h2>
+    <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+  </section>
+
+  <section class="blocco" id="prowlarr">
+    <h2>Indexer (Prowlarr)</h2>
+    <div class="contenuto"><p class="caricamento">Cerco… (può richiedere fino a un minuto)</p></div>
+  </section>
+</article>
+{% endif %}
+{% endblock %}
+{% block script %}{% if film %}<script>avviaFilm({{ film.id }});</script>{% endif %}{% endblock %}

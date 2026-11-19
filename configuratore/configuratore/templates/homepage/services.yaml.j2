@@ -1,0 +1,36 @@
+# FILE GENERATO DA MEDIABOX — non modificarlo a mano.
+- Inizia da qui:
+    - Cerca un film:
+        href: /cerca/
+        icon: mdi-movie-search
+        description: Cerca qualsiasi film, guarda dove vederlo e scaricalo
+    - Jellyfin:
+        href: /jellyfin/
+        icon: jellyfin.png
+        description: Guarda film, serie{% if tv %} e TV in diretta{% endif %}
+
+- Amministrazione:
+    - qBittorrent:
+        href: /qbit/
+        icon: qbittorrent.png
+        description: Download in corso
+    - Radarr:
+        href: /radarr/
+        icon: radarr.png
+        description: Archivio dei film
+    - Prowlarr:
+        href: /prowlarr/
+        icon: prowlarr.png
+        description: Fonti di ricerca (indexer)
+{%- if sonarr %}
+    - Sonarr:
+        href: /sonarr/
+        icon: sonarr.png
+        description: Archivio delle serie
+{%- endif %}
+{%- if dvb %}
+    - TVHeadend:
+        href: /tv/
+        icon: tvheadend.png
+        description: Tuner TV e canali
+{%- endif %}

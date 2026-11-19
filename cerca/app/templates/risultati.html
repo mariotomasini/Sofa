@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titolo %}{{ q or "Cerca" }}{% endblock %}
+{% block contenuto %}
+<form class="ricerca" action="{{ base }}/cerca" method="get">
+  <label for="q" class="nascosto">Titolo del film</label>
+  <input id="q" name="q" type="search" value="{{ q }}" placeholder="Scrivi il titolo di un film…" autocomplete="off" required>
+  <button type="submit">Cerca</button>
+</form>
+
+{% if q and not film and not errore %}
+<div class="vuoto">
+  <p>Nessun film trovato per "<strong>{{ q }}</strong>".</p>
+  <p>Prova a scrivere il titolo in un altro modo, o in inglese.</p>
+</div>
+{% endif %}
+
+{% if film %}
+<h2>Quale film intendi?</h2>
+<div class="griglia">
+  {% for f in film %}
+  <a class="scheda" href="{{ base }}/film/{{ f.id }}">
+    {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<div class="senza-poster">🎬</div>{% endif %}
+    <span class="titolo">{{ f.titolo }}</span>
+    <span class="anno">{{ f.anno or "anno sconosciuto" }}{% if f.titolo_originale and f.titolo_originale != f.titolo %} · {{ f.titolo_originale }}{% endif %}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
