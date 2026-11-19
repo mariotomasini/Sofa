@@ -8,7 +8,6 @@ from .config import Config
 from .db import Archivio
 from .rete import ErroreServizio, Limitatore
 
-API = "https://api.themoviedb.org/3"
 IMMAGINI = "https://image.tmdb.org/t/p"
 
 # TMDB oggi tollera circa 50 richieste al secondo: restiamo molto sotto.
@@ -91,7 +90,8 @@ class TMDB:
         intestazioni, auth = self._autenticazione()
         await _limitatore.attendi()
         try:
-            r = await self.client.get(f"{API}{percorso}", params={**parametri, **auth}, headers=intestazioni)
+            url = f"{self.config.tmdb_api}{percorso}"
+            r = await self.client.get(url, params={**parametri, **auth}, headers=intestazioni)
         except httpx.HTTPError as exc:
             raise ErroreServizio(
                 "Non riesco a contattare TMDB.",

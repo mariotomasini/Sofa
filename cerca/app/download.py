@@ -16,6 +16,7 @@ import httpx
 
 from .config import Config
 from .db import Archivio
+from .jellyfin import Jellyfin
 from .qbittorrent import STATI_ERRORE, STATI_FINITI, QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio
@@ -80,6 +81,7 @@ class GestoreDownload:
         qbit: QBittorrent,
         radarr: Radarr,
         tmdb: TMDB,
+        jellyfin: Jellyfin,
     ) -> None:
         self.config = config
         self.archivio = archivio
@@ -87,6 +89,7 @@ class GestoreDownload:
         self.qbit = qbit
         self.radarr = radarr
         self.tmdb = tmdb
+        self.jellyfin = jellyfin
         self._compiti: dict[int, asyncio.Task] = {}
         self._importazioni: set[int] = set()
 
@@ -354,7 +357,9 @@ class GestoreDownload:
                 voce = self.archivio.download(id_download)
             self.archivio.aggiorna_download(id_download, stato="importazione", messaggio="")
             film_radarr = await self.radarr.aggiungi_film(voce["tmdb_id"])
-            await self.radarr.importa(voce["percorso"], film_radarr["id"])
+            cartella_film = await self.radarr.importa(voce["percorso"], film_radarr["id"])
+            if cartella_film:
+                await self.jellyfin.avvisa_nuovo(cartella_film)
             if voce["tipo"] == "torrent" and voce.get("hash"):
                 # Il torrent è già fermo (rapporto 0): togliamo gli avanzi
                 with contextlib.suppress(ErroreServizio):

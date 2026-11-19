@@ -21,6 +21,7 @@ FILE_DA_GENERARE = {
     "homepage/services.yaml.j2": "homepage/services.yaml",
     "homepage/settings.yaml.j2": "homepage/settings.yaml",
     "homepage/widgets.yaml.j2": "homepage/widgets.yaml",
+    "homepage/bookmarks.yaml.j2": "homepage/bookmarks.yaml",
 }
 
 

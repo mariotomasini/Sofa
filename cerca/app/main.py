@@ -21,6 +21,7 @@ from .avvisami import Avvisami
 from .config import Config
 from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
+from .jellyfin import Jellyfin
 from .prowlarr import Prowlarr
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
@@ -55,7 +56,10 @@ class Servizi:
         self.prowlarr = Prowlarr(config, self.archivio, client)
         self.qbit = QBittorrent(config, client)
         self.radarr = Radarr(config, client)
-        self.download = GestoreDownload(config, self.archivio, client, self.qbit, self.radarr, self.tmdb)
+        self.jellyfin = Jellyfin(config, client)
+        self.download = GestoreDownload(
+            config, self.archivio, client, self.qbit, self.radarr, self.tmdb, self.jellyfin
+        )
         self.avvisami = Avvisami(config, self.archivio, self.tmdb, client)
 
 

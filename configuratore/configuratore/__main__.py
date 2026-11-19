@@ -55,9 +55,15 @@ def main(argv: list[str] | None = None) -> int:
     sotto.add_parser("riepilogo")
     sotto.add_parser("indirizzi")
     sotto.add_parser("backup")
+    sotto.add_parser("hdhomerun")
     rip = sotto.add_parser("ripristina")
     rip.add_argument("file")
     args = parser.parse_args(argv)
+
+    if args.comando == "hdhomerun":
+        from .hdhomerun import main as cerca_hdhomerun
+
+        return cerca_hdhomerun()
 
     try:
         imp = Impostazioni.carica()

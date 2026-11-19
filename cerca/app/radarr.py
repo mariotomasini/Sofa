@@ -37,8 +37,12 @@ class Radarr:
                 "Radarr rifiuta la chiave API.", "Esegui \"mediabox restart\" e poi \"mediabox configura\"."
             )
         if not r.is_success:
+            try:
+                dettaglio = r.json().get("message", "") if isinstance(r.json(), dict) else ""
+            except ValueError:
+                dettaglio = r.text[:200]
             raise ErroreServizio(
-                f"Radarr ha risposto con un errore ({r.status_code}): {r.text[:200]}",
+                f"Radarr ha risposto con un errore ({r.status_code}): {dettaglio}",
                 "Apri Radarr dalla pagina iniziale per vedere i dettagli, poi riprova.",
             )
         return r.json() if r.content else None
@@ -63,13 +67,13 @@ class Radarr:
         )
         return await self._r("POST", "movie", json=dati)
 
-    async def importa(self, percorso: str, id_film: int) -> None:
+    async def importa(self, percorso: str, id_film: int) -> str:
         """Importa (spostando) il video principale trovato in `percorso`."""
         cartella = percorso if os.path.isdir(percorso) else os.path.dirname(percorso)
         candidati = await self._r(
             "GET",
             "manualimport",
-            params={"folder": cartella, "movieId": id_film, "filterExistingFiles": "false"},
+            params={"folder": cartella, "filterExistingFiles": "false"},
         )
         if os.path.isfile(percorso):
             candidati = [c for c in candidati if c.get("path") == percorso]
@@ -105,6 +109,7 @@ class Radarr:
                 "Radarr non è riuscito a importare il film.",
                 "Apri Radarr → Attività → Coda o Sistema → Eventi per vedere il motivo.",
             )
+        return film.get("path", "")
 
     async def analizza_titolo(self, titolo: str) -> dict:
         """Chiede a Radarr di capire titolo e anno dal nome di un file."""

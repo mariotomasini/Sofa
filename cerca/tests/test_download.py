@@ -71,3 +71,10 @@ def test_archivio(tmp_path):
     assert a.cache_leggi("k") == {"x": 1}
     a.cache_scrivi("scaduta", 1, -1)
     assert a.cache_leggi("scaduta") is None
+
+
+def test_percorso_per_jellyfin():
+    from app.jellyfin import percorso_per_jellyfin
+
+    assert percorso_per_jellyfin("/data/media/film/X (2000)") == "/data/film/X (2000)"
+    assert percorso_per_jellyfin("/altro/x") == "/altro/x"

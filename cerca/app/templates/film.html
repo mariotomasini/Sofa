@@ -3,7 +3,7 @@
 {% block contenuto %}
 {% if film %}
 <article class="film" data-tmdb="{{ film.id }}">
-  <div class="film-testa">
+  <div class="film-testa{{ '' if film.poster else ' senza-locandina' }}">
     {% if film.poster %}<img class="poster" src="{{ film.poster }}" alt="Locandina di {{ film.titolo }}">{% endif %}
     <div>
       <h1>{{ film.titolo }} {% if film.anno %}<span class="anno">({{ film.anno }})</span>{% endif %}</h1>
