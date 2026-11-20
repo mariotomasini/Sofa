@@ -152,6 +152,9 @@ body.in-impostazioni .passo h1 { font-size: 1.6rem; }
 .scelta input:checked + .interruttore, .interruttore.acceso { background: var(--accento); }
 .scelta input:checked + .interruttore::after, .interruttore.acceso::after { transform: translateX(20px); background: var(--su-accento); }
 .lingue { margin-top: .4rem; }
+.avviso-memoria { display: grid; gap: .3rem; margin: 0 0 1.2rem; padding: 1rem 1.2rem; border-radius: var(--raggio); background: #3a321d; color: var(--testo-2); border: 1px solid #5a4a24; }
+.avviso-memoria strong { color: #ffd166; }
+.pesante { font-style: normal; font-size: .75rem; font-weight: 700; letter-spacing: .03em; background: #3a321d; color: #ffd166; padding: .1rem .5rem; border-radius: 6px; margin-left: .4rem; vertical-align: middle; }
 
 /* dischi */
 .dischi { display: grid; gap: .7rem; margin-top: 1rem; }

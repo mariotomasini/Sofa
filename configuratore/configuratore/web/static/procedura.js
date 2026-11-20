@@ -76,7 +76,7 @@ function datiModulo() {
   };
 }
 
-function aggiornaDipendenze() {
+function aggiornaDipendenze(ev) {
   const bazarr = document.querySelector('[data-voce="WITH_BAZARR"]');
   $("blocco-lingue").hidden = bazarr && !bazarr.checked;
   $("blocco-ntfy").hidden = !$("usa-ntfy").checked;
@@ -85,6 +85,12 @@ function aggiornaDipendenze() {
   if (anime && sonarr && anime.checked && !sonarr.checked) {
     sonarr.checked = true;
     messaggio("msg-scelte", "Gli anime passano da Sonarr: ho acceso anche le Serie TV.", "info");
+  }
+  // su un PC con poca memoria, chi accende un programma pesante viene avvisato
+  const scelte = STATO.scelte || {};
+  if (scelte.poca_memoria && ev && ev.target && ev.target.dataset && ev.target.dataset.memoria && ev.target.checked) {
+    messaggio("msg-scelte", `Attenzione: questo PC ha ${String(scelte.memoria_gb).replace(".", ",")} GB di memoria e questo programma ne usa circa ` +
+      `${ev.target.dataset.memoria} MB. Se tutto diventa lento, spegnilo di nuovo.`, "info");
   }
   const lunga = $("password").value.length >= 8;
   const caratteri = !/["\\]/.test($("password").value);

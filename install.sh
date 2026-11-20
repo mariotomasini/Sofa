@@ -152,6 +152,9 @@ else
 fi
 
 configuratore_costruisci
+# Memoria del PC: sotto i 6 GB si accendono solo i programmi che ci stanno (modalità leggera)
+scrivi_env MEMORIA_GB "$(awk '/^MemTotal:/ {printf "%.1f", $2 / 1048576}' /proc/meminfo)" "$ENV_FILE"
+"${DOCKER[@]}" run --rm --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" mediabox/configuratore:locale leggero
 hdhomerun="$(cerca_hdhomerun)"
 if [[ -n "$hdhomerun" ]]; then
   scrivi_env HDHOMERUN_IP "$hdhomerun" "$ENV_FILE"
