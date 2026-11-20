@@ -1,24 +1,22 @@
 {% extends "base.html" %}
-{% from "_mondi.html" import selettore, ricerca %}
 {% block titolo %}{{ piattaforma.nome if piattaforma else "Piattaforme" }}{% endblock %}
 {% block contenuto %}
-{{ selettore(mondo, base, mondi, kids) }}
-{{ ricerca(mondo, base, mondi, autofocus=false) }}
-
 {% if piattaforma %}
-<div class="genere-testa">
-  <div class="piattaforma-testa">
-    {% if piattaforma.logo %}<img class="logo-piattaforma grande" src="{{ piattaforma.logo }}" alt="" width="64" height="64">{% endif %}
-    <div>
-      <p class="etichetta-maiuscola">{{ mondi[mondo].nome }}</p>
-      <h1>Su {{ piattaforma.nome }}</h1>
-      <p class="sottotitolo">I più visti in Italia, inclusi nell'abbonamento o gratis.</p>
-    </div>
-  </div>
+<div class="vista-testa">
+  <a class="indietro" href="{{ base }}{{ mondi[mondo].url }}" aria-label="Indietro">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg>
+  </a>
+  <h1>{{ piattaforma.nome }}</h1>
 </div>
-
-<div id="griglia-genere" class="griglia" aria-live="polite"><p class="caricamento">Carico…</p></div>
-<div class="centrato"><button id="altri" class="secondario" type="button" hidden>Mostra altri</button></div>
+<nav class="chip-vista" aria-label="Cosa guardare su {{ piattaforma.nome }}">
+  <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=serie"{% if mondo == "serie" %} aria-current="page"{% endif %}>Serie</a>
+  <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=film"{% if mondo == "film" %} aria-current="page"{% endif %}>Film</a>
+  <details class="chip chip-menu">
+    <summary>Categorie <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
+    <div class="menu-categorie" id="menu-categorie"></div>
+  </details>
+</nav>
+<div id="vista" class="righe vista" aria-busy="true"><p class="caricamento">Carico {{ piattaforma.nome }}…</p></div>
 {% endif %}
 {% endblock %}
-{% block script %}{% if piattaforma %}<script>avviaGriglia(`/api/piattaforma/{{ piattaforma.id }}?mondo={{ mondo }}`);</script>{% endif %}{% endblock %}
+{% block script %}{% if piattaforma %}<script>avviaVista({{ piattaforma.id }}, "{{ mondo }}");</script>{% endif %}{% endblock %}

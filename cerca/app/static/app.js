@@ -398,8 +398,9 @@ function htmlScheda(f) {
     link = "/jellyfin/";
     sotto = `${esc(f.sottotitolo)}${f.pronto ? ' · <span class="pronto">pronto</span>' : ""}`;
   }
-  return `<a class="scheda" href="${link}"${dati}>` +
+  return `<a class="scheda" href="${link}"${dati}><span class="poster">` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
+    htmlEtichette(f) + "</span>" +
     `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${sotto}</span></a>`;
 }
 
@@ -438,8 +439,9 @@ async function avviaGeneri() {
 function htmlTop(f, i) {
   const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}` : `${BASE}/film/${f.id}`;
   return `<a class="scheda-top" href="${link}"${f.serie ? attrSerie(f) : ""} aria-label="${i + 1}. ${esc(f.titolo)}">` +
-    `<span class="numero" aria-hidden="true">${i + 1}</span>` +
-    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) + "</a>";
+    `<span class="numero" aria-hidden="true">${i + 1}</span><span class="poster-top">` +
+    (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
+    (f.nuovo ? '<span class="nastro">Aggiunto di recente</span>' : "") + "</span></a>";
 }
 
 // Jellyfin non ha l'immagine: al suo posto il segnaposto con il titolo
@@ -464,7 +466,7 @@ function htmlRiga(r, mondo) {
   if (r.genere) tutti = `${BASE}/genere/${r.genere}?mondo=${encodeURIComponent(mondo)}`;
   if (r.piattaforma) tutti = `${BASE}/piattaforma/${r.piattaforma}?mondo=${encodeURIComponent(mondo)}`;
   const link = tutti ? `<a class="link-accento" href="${tutti}">Vedi tutti →</a>` : "";
-  const id = `riga-${r.tipo}-${r.genere || r.piattaforma || ""}`;
+  const id = r.ancora || `riga-${r.tipo}-${r.genere || r.piattaforma || ""}`;
   const logo = r.logo ? `<img class="logo-piattaforma" src="${esc(r.logo)}" alt="" width="36" height="36" onerror="this.remove()">` : "";
   return `<section class="riga riga-${esc(r.tipo)}" aria-labelledby="${id}">` +
     `<div class="riga-testa"><h2 id="${id}">${logo}${esc(r.titolo)}</h2>${link}</div>` +
@@ -474,17 +476,114 @@ function htmlRiga(r, mondo) {
 async function avviaHome(mondo = "film") {
   const contenitore = document.getElementById("righe");
   if (!contenitore) return;
-  contenitore.innerHTML = '<p class="caricamento">Carico i consigli…</p>';
-  try {
-    const d = await chiama(`/api/home?mondo=${encodeURIComponent(mondo)}`);
-    contenitore.innerHTML = d.righe.map((r) => htmlRiga(r, mondo)).join("") +
+  avviaChipPiattaforme(mondo);
+  const disegna = (d) => {
+    const top = (d.righe.find((r) => r.tipo === "top10") || {}).elementi || [];
+    contenitore.innerHTML = (top.length ? htmlInEvidenza({ ...top[0], top10: 1 }, mondo, "") : "") +
+      d.righe.map((r) => htmlRiga(r, mondo)).join("") +
       (d.errore && !d.righe.length ? htmlErrore(d.errore) : "") +
       `<div class="centrato"><button type="button" class="secondario" id="scegli-piattaforme">Scegli le tue piattaforme</button></div>`;
     document.getElementById("scegli-piattaforme").addEventListener("click", () => apriScegliPiattaforme(mondo));
-  } catch (e) {
+    contenitore.removeAttribute("aria-busy");
+  };
+  await conMemoria(`home:${mondo}`, `/api/home?mondo=${encodeURIComponent(mondo)}`, disegna, (e) => {
     contenitore.innerHTML = htmlErrore(e);
+    contenitore.removeAttribute("aria-busy");
+  }, "Carico i consigli…", contenitore);
+}
+
+// --- memoria della pagina: si vede subito l'ultima versione, poi si aggiorna solo se è cambiata ----
+const FRESCA = 10 * 60 * 1000;  // per 10 minuti non si chiede niente
+
+function leggiMemoria(chiave) {
+  try { return JSON.parse(localStorage.getItem("cerca:" + chiave) || "null"); } catch (e) { return null; }
+}
+
+function scriviMemoria(chiave, dati) {
+  try { localStorage.setItem("cerca:" + chiave, JSON.stringify({ quando: Date.now(), dati })); } catch (e) { /* memoria piena */ }
+}
+
+async function conMemoria(chiave, percorso, disegna, errore, attesa, contenitore) {
+  const salvata = leggiMemoria(chiave);
+  if (salvata && salvata.dati) disegna(salvata.dati);
+  else if (contenitore) contenitore.innerHTML = `<p class="caricamento">${esc(attesa)}</p>`;
+  if (salvata && Date.now() - salvata.quando < FRESCA) return;
+  try {
+    const d = await chiama(percorso);
+    const nuova = JSON.stringify(d);
+    if (!salvata || JSON.stringify(salvata.dati) !== nuova) disegna(d);
+    if (!d.errore) scriviMemoria(chiave, d);
+  } catch (e) {
+    if (!salvata) errore(e);  // con la versione salvata sulla pagina, un errore di rete non si vede
   }
-  contenitore.removeAttribute("aria-busy");
+}
+
+// --- riquadro in evidenza, etichette, piattaforme ---------------------------------------------------
+const NOMI_GENERI = {
+  28: "Azione", 12: "Avventura", 16: "Animazione", 35: "Commedia", 80: "Crime", 99: "Documentario", 18: "Dramma",
+  10751: "Famiglia", 14: "Fantasy", 36: "Storia", 27: "Horror", 10402: "Musica", 9648: "Mistero", 10749: "Romantico",
+  878: "Fantascienza", 53: "Thriller", 10752: "Guerra", 37: "Western",
+};
+
+function htmlEtichette(f) {
+  return (f.top10 ? '<span class="etichetta-top" aria-label="Top 10">TOP<b>10</b></span>' : "") +
+    (f.nuovo ? '<span class="nastro">Aggiunto di recente</span>' : "");
+}
+
+function grande(url, misura) {
+  return (url || "").replace("/s332/", `/${misura}/`).replace("/w342/", "/w780/");
+}
+
+function htmlInEvidenza(f, mondo, dove) {
+  if (!f || !f.poster) return "";
+  const generi = [f.serie ? "Serie" : "Film", ...(f.genre_ids || []).map((g) => NOMI_GENERI[g]).filter(Boolean).slice(0, 2)];
+  const sonarr = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
+  const azioni = f.serie
+    ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">+</span> Segui la serie</a>`
+    : `<a class="bottone bianco" href="${BASE}/film/${f.id}"><span aria-hidden="true">▶</span> Scarica</a>` +
+      `<a class="bottone grigio" href="${BASE}/film/${f.id}"><span aria-hidden="true">ⓘ</span> Scheda</a>`;
+  const top = f.top10 ? `<p class="vetrina-top">${htmlEtichette({ top10: 1 })} N° ${f.top10} oggi ${dove ? "su " + esc(dove) : (f.serie ? "tra le serie" : "tra i film")}</p>` : "";
+  return `<section class="vetrina" aria-label="In evidenza: ${esc(f.titolo)}">` +
+    `<picture>${f.sfondo ? `<source media="(min-width: 900px)" srcset="${esc(f.sfondo)}">` : ""}` +
+    `<img src="${esc(grande(f.poster, "s718"))}" alt=""></picture>` +
+    `<div class="vetrina-testo"><h2>${esc(f.titolo)}</h2>${top}` +
+    `<p class="vetrina-generi">${generi.map(esc).join('<span aria-hidden="true"> • </span>')}</p>` +
+    `<div class="vetrina-azioni">${azioni}</div></div></section>`;
+}
+
+async function avviaChipPiattaforme(mondo) {
+  const contenitore = document.getElementById("righe");
+  if (!contenitore || document.getElementById("chip-piattaforme")) return;
+  const nav = document.createElement("nav");
+  nav.id = "chip-piattaforme";
+  nav.className = "chip-piattaforme";
+  nav.setAttribute("aria-label", "Piattaforme");
+  // subito sotto ricerca e generi: si vede senza scorrere
+  const generi = document.getElementById("generi");
+  if (generi) generi.after(nav); else contenitore.before(nav);
+  await conMemoria(`piattaforme:${mondo}`, `/api/piattaforme?mondo=${encodeURIComponent(mondo)}`, (d) => {
+    nav.innerHTML = d.tutte.map((p) =>
+      `<a class="chip" href="${BASE}/piattaforma/${p.id}?mondo=${encodeURIComponent(mondo)}">${esc(p.nome)}</a>`).join("");
+  }, () => nav.remove(), "", null);
+}
+
+// La "home" di una piattaforma: in evidenza, Top 10, novità e una riga per genere
+async function avviaVista(id, mondo) {
+  const contenitore = document.getElementById("vista");
+  const menu = document.getElementById("menu-categorie");
+  const disegna = (d) => {
+    const nome = d.piattaforma.nome;
+    contenitore.innerHTML = htmlInEvidenza(d.in_evidenza, mondo, nome) +
+      (d.righe.length ? d.righe.map((r, i) => htmlRiga({ ...r, ancora: `riga-${i}` }, mondo)).join("")
+        : `<p>Nessun titolo trovato su ${esc(nome)}.</p>`);
+    menu.innerHTML = d.righe.map((r, i) => `<a href="#riga-${i}">${esc(r.titolo)}</a>`).join("");
+    contenitore.removeAttribute("aria-busy");
+  };
+  await conMemoria(`vista:${id}:${mondo}`, `/api/vista/${id}?mondo=${encodeURIComponent(mondo)}`, disegna, (e) => {
+    contenitore.innerHTML = htmlErrore(e);
+    contenitore.removeAttribute("aria-busy");
+  }, "Carico…", contenitore);
+  menu.addEventListener("click", (ev) => { if (ev.target.closest("a")) ev.target.closest("details").open = false; });
 }
 
 // Pagine di un genere o di una piattaforma: griglia con "Mostra altri"

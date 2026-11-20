@@ -310,3 +310,44 @@ def test_serie_senza_reality_e_kids_per_bambini():
     assert c["variables"]["filtro"]["excludeGenres"] == [*justwatch.NO_KIDS, "rly"]
     assert justwatch.corpo(serie=True)["variables"]["filtro"]["excludeGenres"] == ["rly"]
     assert "excludeGenres" not in justwatch.corpo(serie=False)["variables"]["filtro"]
+
+
+def test_vista_di_una_piattaforma_in_una_sola_richiesta():
+    import json as _json
+
+    richieste = []
+
+    def gestore(r: httpx.Request) -> httpx.Response:
+        dati = _json.loads(r.content)
+        richieste.append(dati)
+        risposta = {}
+        import re as _re
+
+        for nome in _re.findall(r"(\w+): popularTitles", dati["query"]):
+            if nome == "top":
+                nodi = [nodo_jw(1, "Primo"), nodo_jw(2, "Secondo")]
+                nodi[0]["node"]["content"]["backdrops"] = [{"backdropUrl": "/backdrop/1/{profile}/x.{format}"}]
+            elif nome == "nuovi":
+                nodi = [nodo_jw(2, "Secondo"), nodo_jw(3, "Terzo")]
+            elif nome == "g_drm":
+                nodi = [nodo_jw(i, f"Dramma {i}") for i in (1, 3, 4, 5)]
+            else:
+                nodi = [nodo_jw(9, "Solo uno")]  # troppo pochi: la riga non si mostra
+            risposta[nome] = {"edges": nodi}
+        return httpx.Response(200, json={"data": risposta})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(gestore))
+    c = CatalogoLibero(Config(radarr_url="http://radarr", radarr_chiave="r", tmdb_chiave=""), ArchivioFinto(), client)
+    v = asyncio.run(c.vista_piattaforma("movie", 8, oggi=dt.date(2026, 11, 20)))
+    assert len(richieste) == 1  # tutte le righe insieme
+    filtri = richieste[0]["variables"]
+    assert all(filtri[k]["packages"] == ["nfx"] for k in filtri if k.startswith("f"))
+    assert v["piattaforma"] == {"id": 8, "nome": "Netflix"}
+    assert v["in_evidenza"]["id"] == 1 and v["in_evidenza"]["top10"] == 1
+    assert v["in_evidenza"]["sfondo"] == "https://images.justwatch.com/backdrop/1/s1440/x.webp"
+    assert [r["titolo"] for r in v["righe"]] == ["Top 10 dei film su Netflix oggi", "Novità su Netflix", "Film drammatici"]
+    dramma = {f["id"]: f for f in v["righe"][2]["elementi"]}
+    assert dramma[1]["top10"] == 1 and "nuovo" not in dramma[1]  # in classifica
+    assert dramma[3]["nuovo"] and "top10" not in dramma[3]  # appena arrivato
+    serie = asyncio.run(c.vista_piattaforma("tv", 8, oggi=dt.date(2026, 11, 20)))
+    assert serie["righe"][0]["titolo"] == "Top 10 delle serie su Netflix oggi"

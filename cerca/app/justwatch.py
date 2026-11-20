@@ -14,19 +14,22 @@ IMMAGINI = "https://images.justwatch.com"
 # Le piattaforme: id TMDB (così le scelte valgono anche con la chiave), nome, codice JustWatch
 PIATTAFORME = [
     (8, "Netflix", "nfx"),
-    (119, "Amazon Prime Video", "prv"),
-    (337, "Disney Plus", "dnp"),
+    (119, "Prime Video", "prv"),
+    (337, "Disney+", "dnp"),
+    (1899, "HBO Max", "mxx"),
     (39, "NOW", "ntv"),
+    (29, "Sky Go", "skg"),
     (350, "Apple TV+", "atp"),
-    (531, "Paramount Plus", "pmp"),
-    (109, "TIMvision", "tvi"),
+    (531, "Paramount+", "pmp"),
+    (283, "Crunchyroll", "cru"),
     (222, "RaiPlay", "rai"),
     (359, "Mediaset Infinity", "msp"),
-    (283, "Crunchyroll", "cru"),
+    (109, "TIMvision", "tvi"),
+    (524, "discovery+", "dpe"),
 ]
 CODICI = {i: codice for i, _, codice in PIATTAFORME}
 # Le piattaforme in abbonamento più diffuse: da qui vengono Top 10 e novità
-PRINCIPALI = ["nfx", "prv", "dnp", "ntv", "atp", "pmp", "tvi", "rai", "msp"]
+PRINCIPALI = ["nfx", "prv", "dnp", "mxx", "ntv", "skg", "atp", "pmp", "tvi", "rai", "msp"]
 
 # Generi: id TMDB → codice JustWatch (JustWatch unisce azione e avventura)
 GENERI = {
@@ -40,22 +43,30 @@ DA_CODICE = {"act": 28, "ani": 16, "cmy": 35, "crm": 80, "doc": 99, "drm": 18, "
 NO_KIDS = ["hrr", "trl", "crm", "war"]
 REALITY = "rly"  # reality e talent (X Factor…): non sono le serie che si cercano qui
 
+CAMPI = """edges { node { objectType content(country: $paese, language: $lingua) {
+      title originalTitle originalReleaseYear posterUrl shortDescription runtime
+      genres { shortName } scoring { imdbScore } externalIds { tmdbId imdbId }%s
+    } } }"""
 DOMANDA = """
 query Titoli($paese: Country!, $lingua: Language!, $quanti: Int!, $filtro: TitleFilter, $ordine: PopularTitlesSorting!) {
   popularTitles(country: $paese, first: $quanti, filter: $filtro, sortBy: $ordine) {
-    edges { node { objectType content(country: $paese, language: $lingua) {
-      title originalTitle originalReleaseYear posterUrl shortDescription runtime
-      genres { shortName } scoring { imdbScore } externalIds { tmdbId imdbId }
-    } } }
+    %s
   }
 }
-"""
+""" % (CAMPI % "")
 
 
 def corpo(*, serie: bool, ordine: str = "TRENDING", quanti: int = 40, piattaforme: list[str] | None = None,
           generi: list[str] | None = None, escludi: list[str] | None = None, dal_anno: int | None = None,
           paese: str = "IT", lingua: str = "it") -> dict:
     """La richiesta per JustWatch: solo titoli in abbonamento, gratis o con pubblicità."""
+    filtro = _filtro(serie=serie, piattaforme=piattaforme, generi=generi, escludi=escludi, dal_anno=dal_anno)
+    return {"query": DOMANDA, "variables": {"paese": paese, "lingua": lingua, "quanti": quanti,
+                                            "filtro": filtro, "ordine": ordine}}
+
+
+def _filtro(*, serie: bool, piattaforme: list[str] | None = None, generi: list[str] | None = None,
+            escludi: list[str] | None = None, dal_anno: int | None = None) -> dict:
     filtro: dict = {
         "objectTypes": ["SHOW" if serie else "MOVIE"],
         "monetizationTypes": ["FLATRATE", "FREE", "ADS"],
@@ -68,8 +79,31 @@ def corpo(*, serie: bool, ordine: str = "TRENDING", quanti: int = 40, piattaform
         filtro["excludeGenres"] = escludi
     if dal_anno:
         filtro["releaseYear"] = {"min": dal_anno}
-    return {"query": DOMANDA, "variables": {"paese": paese, "lingua": lingua, "quanti": quanti,
-                                            "filtro": filtro, "ordine": ordine}}
+    return filtro
+
+
+def corpo_vista(sezioni: dict[str, dict], *, paese: str = "IT", lingua: str = "it") -> dict:
+    """Tante righe in una sola richiesta (una "vista" di piattaforma): ogni sezione ha il suo nome.
+
+    sezioni: {"top": {"serie": False, "piattaforme": ["nfx"], "quanti": 10}, ...}
+    La prima sezione porta anche le immagini grandi (per il riquadro in evidenza).
+    """
+    definizioni = ["$paese: Country!", "$lingua: Language!"]
+    variabili: dict = {"paese": paese, "lingua": lingua}
+    parti = []
+    for i, (nome, opzioni) in enumerate(sezioni.items()):
+        opzioni = dict(opzioni)
+        quanti, ordine = opzioni.pop("quanti", 20), opzioni.pop("ordine", "TRENDING")
+        definizioni += [f"$f{i}: TitleFilter", f"$o{i}: PopularTitlesSorting!", f"$q{i}: Int!"]
+        variabili.update({f"f{i}": _filtro(**opzioni), f"o{i}": ordine, f"q{i}": quanti})
+        campi = CAMPI % (" backdrops { backdropUrl }" if i == 0 else "")
+        parti.append(f"{nome}: popularTitles(country: $paese, first: $q{i}, filter: $f{i}, sortBy: $o{i}) {{ {campi} }}")
+    return {"query": f"query Vista({', '.join(definizioni)}) {{ {' '.join(parti)} }}", "variables": variabili}
+
+
+def titoli_vista(risposta: dict) -> dict[str, list[dict]]:
+    dati = (risposta or {}).get("data") or {}
+    return {nome: titoli({"data": {"popularTitles": blocco}}) for nome, blocco in dati.items() if blocco}
 
 
 def immagine(percorso: str | None, misura: str = "s332") -> str:
@@ -102,6 +136,7 @@ def riassunto(nodo: dict) -> dict | None:
         "voto": round(float(voto), 1),
         "genre_ids": [DA_CODICE[x] for x in codici if x in DA_CODICE],
         **({"serie": True} if serie else {}),
+        **({"sfondo": immagine(c["backdrops"][0].get("backdropUrl"), "s1440")} if c.get("backdrops") else {}),
     }
 
 
