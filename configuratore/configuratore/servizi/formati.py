@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 
+from ..messaggi import ErroreMediabox
 from .arr import Arr
 
 NOME_PROFILO = "Migliore disponibile"
@@ -122,7 +123,11 @@ def assicura_formati(arr: Arr, definiti: dict[str, tuple[int, list[Condizione]]]
     esistenti = {f["name"]: f for f in arr.get("customformat")}
     for nome in OBSOLETI:
         if nome in esistenti:
-            arr._r("DELETE", f"customformat/{esistenti.pop(nome)['id']}", f"togliere il vecchio formato \"{nome}\"")
+            try:
+                arr._r("DELETE", f"customformat/{esistenti[nome]['id']}", f"togliere il vecchio formato \"{nome}\"")
+                esistenti.pop(nome)
+            except ErroreMediabox:
+                pass  # resta, ma con punteggio 0 non conta più
     for nome, (_, condizioni) in definiti.items():
         nuovo = costruisci_formato(schemi, nome, condizioni)
         if nome in esistenti:

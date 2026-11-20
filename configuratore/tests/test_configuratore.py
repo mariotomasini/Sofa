@@ -336,6 +336,17 @@ def test_genera_con_tgarr(cartella):
     assert leggi_env(env)["TGARR_API_KEY"] == chiavi["TGARR_API_KEY"]
 
 
+def test_indexer_scartati_si_riprovano_dopo_una_settimana(tmp_path):
+    import time as t
+
+    from configuratore.servizi.prowlarr import leggi_scartati, salva_scartati
+
+    f = tmp_path / "s.json"
+    salva_scartati({"vecchio": t.time() - 8 * 24 * 3600, "recente": t.time()}, f)
+    assert list(leggi_scartati(f)) == ["recente"]
+    assert leggi_scartati(tmp_path / "manca.json") == {}
+
+
 def test_indexer_pubblici_aperti():
     from configuratore.servizi.prowlarr import e_pubblico_aperto, priorita_pubblico
 
