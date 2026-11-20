@@ -143,52 +143,6 @@ function htmlProvider(d) {
   return html;
 }
 
-function htmlArchive(d) {
-  if (!d.versioni.length) {
-    return d.item_trovati
-      ? "<p>Ho trovato qualcosa su Internet Archive, ma nessun file sembra il film completo.</p>"
-      : "<p>Nessuna versione su Internet Archive.</p>";
-  }
-  let html = '<ul class="risultati">';
-  d.versioni.slice(0, 5).forEach((v, i) => {
-    const migliore = i === 0;
-    const dettagli = [v.altezza ? `${v.altezza}p` : "risoluzione sconosciuta", dimensione(v.dimensione)];
-    if (v.originale) dettagli.push("originale");
-    const dati = `data-identificativo="${esc(v.identificativo)}" data-nome="${esc(v.nome)}"`;
-    html += `<li class="${migliore ? "migliore" : ""}">` +
-      `<div class="descrizione">${migliore ? '<span class="badge">La migliore</span>' : ""}` +
-      `<strong>${esc(v.titolo_item || v.identificativo)}</strong>` +
-      `<span class="sottotitolo">${dettagli.map(esc).join(" · ")}` +
-      ` · <a href="${esc(v.pagina)}" target="_blank" rel="noopener">pagina e licenza</a>` +
-      `<span class="file"> · ${esc(v.nome)}</span></span></div>` +
-      `<div class="azioni">` +
-      `<button ${migliore ? "" : 'class="secondario" '}${dati} data-modo="http">Scarica</button>` +
-      `<button class="${migliore ? "contorno" : "testo"}" ${dati} data-modo="torrent">Via torrent</button>` +
-      "</div></li>";
-  });
-  return html + "</ul>";
-}
-
-function htmlProwlarr(d) {
-  if (d.avviso) {
-    return `<div class="nota"><strong>${esc(d.avviso)}</strong><p>${esc(d.cosa_fare || "")}</p></div>`;
-  }
-  if (!d.risultati.length) return `<p>Nessun risultato negli indexer (${d.indexer} attivi).</p>`;
-  const italiani = d.risultati.filter((r) => r.italiano);
-  const altri = d.risultati.filter((r) => !r.italiano);
-  // prima solo quelli in italiano; gli altri si aprono a richiesta
-  if (!italiani.length) {
-    return '<div class="nota"><strong>Nessun torrent in italiano per questo film.</strong>' +
-      "<p>Questi sono in altre lingue (di solito inglese).</p></div>" + listaTorrent(altri);
-  }
-  let html = listaTorrent(italiani);
-  if (altri.length) {
-    html += `<details class="altre-lingue"><summary>Mostra anche ${altri.length} in altre lingue</summary>` +
-      listaTorrent(altri) + "</details>";
-  }
-  return html;
-}
-
 function listaTorrent(elenco) {
   let html = '<ul class="risultati">';
   for (const r of elenco.slice(0, 25)) {
