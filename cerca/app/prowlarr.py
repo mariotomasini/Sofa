@@ -2,15 +2,54 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import re
 
 import httpx
 
+from .archive import normalizza
 from .config import Config
 from .db import Archivio
 from .rete import ErroreServizio, non_raggiungibile
 
 DIECI_MINUTI = 600
+ARTICOLI = {"the", "a", "an", "il", "lo", "la", "i", "gli", "le", "l", "un", "una", "uno"}
+
+
+def _senza_articolo(titolo: str) -> str:
+    parole = titolo.split()
+    return " ".join(parole[1:]) if len(parole) > 1 and parole[0] in ARTICOLI else titolo
+
+
+PAROLE_ITALIANO = {"ita", "italian", "italiano", "itaeng", "itaen", "iteng"}
+
+
+def e_italiano(nome: str) -> bool:
+    """Vero se il nome del torrent dice che c'è l'audio italiano (ITA, iTALiAN, ITA-ENG...)."""
+    return bool(set(normalizza(nome).split()) & PAROLE_ITALIANO)
+
+
+def corrisponde(nome: str, titoli: list[str], anno: str) -> bool:
+    """Vero se il nome del torrent parla proprio di questo film.
+
+    Gli indexer rispondono anche con risultati a caso (parole sparse, altri film):
+    il titolo (italiano o originale, anche senza articolo) deve comparire intero nel
+    nome, e se il nome ha un anno deve essere quello del film (±1).
+    """
+    testo = f" {normalizza(nome)} "
+    normali = [n for t in titoli if (n := normalizza(t))]
+    varianti = {v for n in normali for v in (n, _senza_articolo(n))}
+    if not any(f" {v} " in testo for v in varianti):
+        return False
+    anni = [int(a) for a in re.findall(r"\b(19\d\d|20\d\d)\b", testo)]
+    if anno.isdigit() and anni:
+        # un anno nel titolo stesso ("Blade Runner 2049") non conta come anno di uscita
+        anni_titolo = {int(a) for v in varianti for a in re.findall(r"\b(19\d\d|20\d\d)\b", v)}
+        anni = [a for a in anni if a not in anni_titolo]
+        if anni and not any(abs(a - int(anno)) <= 1 for a in anni):
+            return False
+    return True
 
 
 def id_risultato(r: dict) -> str:
@@ -30,12 +69,14 @@ def riassunto(r: dict) -> dict:
         "protocollo": r.get("protocol", ""),
         "pagina": r.get("infoUrl") or "",
         "data": (r.get("publishDate") or "")[:10],
+        "italiano": e_italiano(r.get("title", "")),
     }
 
 
 def ordina(risultati: list[dict]) -> list[dict]:
-    """Prima i torrent con più seed (scaricano prima e meglio)."""
-    return sorted(risultati, key=lambda r: (r["protocollo"] == "torrent", r["seed"] or 0), reverse=True)
+    """Prima quelli in italiano, poi i torrent con più seed (scaricano prima e meglio)."""
+    return sorted(risultati, key=lambda r: (r.get("italiano", False), r["protocollo"] == "torrent", r["seed"] or 0),
+                  reverse=True)
 
 
 class Prowlarr:
@@ -76,8 +117,25 @@ class Prowlarr:
                 "cosa_fare": "Apri Prowlarr dalla pagina iniziale (tessera Prowlarr) e aggiungi i tuoi indexer: "
                 "Indexer → Aggiungi indexer.",
             }
-        titolo = film.get("titolo_originale") or film.get("titolo")
-        testo = f"{titolo} {film.get('anno', '')}".strip()
+        anno = str(film.get("anno") or "")
+        # gli indexer italiani usano il titolo italiano, gli altri quello originale: li cerchiamo tutti e due
+        titoli = list(dict.fromkeys(t for t in (film.get("titolo_originale"), film.get("titolo")) if t))
+        risposte = await asyncio.gather(*(self._cerca_testo(f"{t} {anno}".strip()) for t in titoli))
+        grezzi = list({id_risultato(r): r for risposta in risposte for r in risposta}.values())
+        # Teniamo i risultati completi per poter avviare il download dopo
+        self.archivio.cache_scrivi(f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
+        torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
+        coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, anno)]
+        risultati = ordina([riassunto(r) for r in coerenti])
+        risposta = {"risultati": risultati[:60], "indexer": len(attivi), "scartati": len(torrent) - len(coerenti)}
+        if not risultati and torrent:
+            risposta.update(
+                avviso="Gli indexer hanno risposto, ma con torrent di altri film.",
+                cosa_fare="Questo film forse non c'è sui tuoi indexer: prova ad aggiungerne altri in Prowlarr.",
+            )
+        return risposta
+
+    async def _cerca_testo(self, testo: str) -> list[dict]:
         chiave_cache = f"prowlarr:{testo}"
         grezzi = self.archivio.cache_leggi(chiave_cache)
         if grezzi is None:
@@ -87,10 +145,7 @@ class Prowlarr:
                 timeout=90,
             )
             self.archivio.cache_scrivi(chiave_cache, grezzi, DIECI_MINUTI)
-        # Teniamo i risultati completi per poter avviare il download dopo
-        self.archivio.cache_scrivi(f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
-        risultati = ordina([riassunto(r) for r in grezzi if r.get("protocol") == "torrent"])
-        return {"risultati": risultati[:60], "indexer": len(attivi)}
+        return grezzi
 
     def risultato_originale(self, tmdb_id: int, id_ris: str) -> dict:
         grezzi = self.archivio.cache_leggi(f"prowlarr:film:{tmdb_id}") or []
