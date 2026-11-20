@@ -28,6 +28,7 @@ from .config import Config
 from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
 from .jellyfin import Jellyfin
+from .justwatch import CODICI as CODICI_PIATTAFORME
 from .musica import Musica
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
@@ -326,7 +327,9 @@ async def pagina_piattaforma(request: Request, piattaforma: int, mondo: str = "f
         return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=None, errore=exc)
     if trovata is None:
         return RedirectResponse(f"{s.config.root_path}{MONDI[mondo]['url']}", status_code=303)
-    return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=trovata)
+    # ogni piattaforma ha i suoi colori (solo i colori: niente loghi né nomi di marchi)
+    return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=trovata,
+                  tema=CODICI_PIATTAFORME.get(piattaforma, ""))
 
 
 @app.get("/diagnosi", response_class=HTMLResponse)

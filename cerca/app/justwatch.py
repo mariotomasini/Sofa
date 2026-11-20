@@ -14,19 +14,22 @@ IMMAGINI = "https://images.justwatch.com"
 # Le piattaforme: id TMDB (così le scelte valgono anche con la chiave), nome, codice JustWatch
 PIATTAFORME = [
     (8, "Netflix", "nfx"),
-    (119, "Amazon Prime Video", "prv"),
-    (337, "Disney Plus", "dnp"),
+    (119, "Prime Video", "prv"),
+    (337, "Disney+", "dnp"),
+    (1899, "HBO Max", "mxx"),
     (39, "NOW", "ntv"),
+    (29, "Sky Go", "skg"),
     (350, "Apple TV+", "atp"),
-    (531, "Paramount Plus", "pmp"),
-    (109, "TIMvision", "tvi"),
+    (531, "Paramount+", "pmp"),
+    (283, "Crunchyroll", "cru"),
     (222, "RaiPlay", "rai"),
     (359, "Mediaset Infinity", "msp"),
-    (283, "Crunchyroll", "cru"),
+    (109, "TIMvision", "tvi"),
+    (524, "discovery+", "dpe"),
 ]
 CODICI = {i: codice for i, _, codice in PIATTAFORME}
 # Le piattaforme in abbonamento più diffuse: da qui vengono Top 10 e novità
-PRINCIPALI = ["nfx", "prv", "dnp", "ntv", "atp", "pmp", "tvi", "rai", "msp"]
+PRINCIPALI = ["nfx", "prv", "dnp", "mxx", "ntv", "skg", "atp", "pmp", "tvi", "rai", "msp"]
 
 # Generi: id TMDB → codice JustWatch (JustWatch unisce azione e avventura)
 GENERI = {

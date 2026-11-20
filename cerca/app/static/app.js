@@ -536,13 +536,13 @@ function grande(url, misura) {
 
 function htmlInEvidenza(f, mondo, dove) {
   if (!f || !f.poster) return "";
-  const generi = [f.serie ? "Serie" : "Film", ...(f.genre_ids || []).map((g) => NOMI_GENERI[g]).filter(Boolean).slice(0, 3)];
+  const generi = [f.serie ? "Serie" : "Film", ...(f.genre_ids || []).map((g) => NOMI_GENERI[g]).filter(Boolean).slice(0, 2)];
   const sonarr = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
   const azioni = f.serie
     ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">+</span> Segui la serie</a>`
     : `<a class="bottone bianco" href="${BASE}/film/${f.id}"><span aria-hidden="true">▶</span> Scarica</a>` +
       `<a class="bottone grigio" href="${BASE}/film/${f.id}"><span aria-hidden="true">ⓘ</span> Scheda</a>`;
-  const top = f.top10 ? `<p class="vetrina-top">${htmlEtichette({ top10: 1 })} Oggi al n° ${f.top10} tra ${f.serie ? "le serie" : "i film"}${dove ? " su " + esc(dove) : ""}</p>` : "";
+  const top = f.top10 ? `<p class="vetrina-top">${htmlEtichette({ top10: 1 })} N° ${f.top10} oggi ${dove ? "su " + esc(dove) : (f.serie ? "tra le serie" : "tra i film")}</p>` : "";
   return `<section class="vetrina" aria-label="In evidenza: ${esc(f.titolo)}">` +
     `<picture>${f.sfondo ? `<source media="(min-width: 900px)" srcset="${esc(f.sfondo)}">` : ""}` +
     `<img src="${esc(grande(f.poster, "s718"))}" alt=""></picture>` +
