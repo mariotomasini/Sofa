@@ -1,8 +1,10 @@
 """Radarr: aggiunta del film e importazione dei file scaricati.
 
-Cerca non lascia che Radarr cerchi il film da solo (searchForMovie: false):
-gli passa il file già scaricato con un'importazione manuale, così Radarr lo
-rinomina e lo sposta nella cartella dei film, e Jellyfin lo trova.
+Due strade:
+- "Scarica" (un clic): Radarr cerca da solo la release migliore con il profilo
+  di mediabox (audio italiano prima di tutto), la scarica e la importa;
+- scelta manuale di una fonte: Cerca scarica il file e lo passa a Radarr con
+  un'importazione manuale, così Radarr lo rinomina e Jellyfin lo trova.
 """
 
 from __future__ import annotations
@@ -66,6 +68,16 @@ class Radarr:
             addOptions={"searchForMovie": False},
         )
         return await self._r("POST", "movie", json=dati)
+
+    async def scarica_da_solo(self, tmdb_id: int) -> dict:
+        """Un clic e basta: Radarr segue il film, sceglie la release migliore (ITA prima)
+        con il profilo di mediabox, la scarica con qBittorrent e la mette in Jellyfin.
+        Se poi esce una versione italiana migliore, la sostituisce da solo."""
+        film = await self.aggiungi_film(tmdb_id)
+        if not film.get("monitored"):
+            await self._r("PUT", "movie/editor", json={"movieIds": [film["id"]], "monitored": True})
+        await self._r("POST", "command", json={"name": "MoviesSearch", "movieIds": [film["id"]]})
+        return film
 
     async def importa(self, percorso: str, id_film: int) -> str:
         """Importa (spostando) il video principale trovato in `percorso`."""

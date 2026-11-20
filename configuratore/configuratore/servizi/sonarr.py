@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..impostazioni import Impostazioni
 from ..messaggi import ok
 from .arr import Arr, campi_qbittorrent
+from .formati import NOME_PROFILO, assicura_profilo
 
 CARTELLA_SERIE = "/data/media/serie"
 CARTELLA_ANIME = "/data/media/anime"
@@ -21,6 +22,13 @@ NOMI = {
 }
 
 
+def qualita_ammessa(qualita: dict) -> bool:
+    """SD, 720p e 1080p sì; 4K, remux e file grezzi no."""
+    if qualita.get("source", "") not in {"television", "web", "webRip", "bluray", "dvd"}:
+        return False
+    return 0 < qualita.get("resolution", 0) <= 1080
+
+
 def sonarr(imp: Impostazioni) -> Arr:
     return Arr("Sonarr", "http://sonarr:8989/sonarr", imp.obbligatorio("SONARR_API_KEY"))
 
@@ -34,7 +42,11 @@ def configura(imp: Impostazioni, esito) -> None:
         arr.assicura_root_folder(CARTELLA_ANIME)
         ok(f"Cartella degli anime: {CARTELLA_ANIME} (quando aggiungi un anime scegli questa cartella e tipo \"Anime\")")
     arr.aggiorna_config("naming", NOMI)
-    arr.aggiorna_config("mediamanagement", {"copyUsingHardlinks": True, "deleteEmptyFolders": True})
+    # "doNotPrefer": una PROPER inglese non deve passare davanti a una release ITA
+    arr.aggiorna_config(
+        "mediamanagement",
+        {"copyUsingHardlinks": True, "deleteEmptyFolders": True, "downloadPropersAndRepacks": "doNotPrefer"},
+    )
     ok("Rinomina attiva, nomi compatibili con Jellyfin")
     arr.assicura_da_schema(
         "downloadclient",
@@ -44,3 +56,8 @@ def configura(imp: Impostazioni, esito) -> None:
         extra={"removeCompletedDownloads": True, "removeFailedDownloads": True, "priority": 1},
     )
     ok("qBittorrent collegato (categoria \"sonarr\")")
+    profilo = assicura_profilo(arr, qualita_ammessa)
+    da_spostare = [x["id"] for x in arr.get("series") if x.get("qualityProfileId") != profilo]
+    if da_spostare:
+        arr.put("series/editor", {"seriesIds": da_spostare, "qualityProfileId": profilo}, "aggiornare le serie seguite")
+    ok(f"Profilo qualità \"{NOME_PROFILO}\": audio italiano prima di tutto, poi 1080p, 720p, SD")

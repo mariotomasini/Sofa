@@ -25,6 +25,13 @@ FILE_CONFIG = Path("/volumi/bazarr_config/config/config.yaml")
 # Fonti di sottotitoli che non chiedono un account
 FONTI = ["embeddedsubtitles", "yifysubtitles", "subtitlecat", "subf2m", "gestdown", "animetosho"]
 
+def fonti(imp: Impostazioni) -> list[str]:
+    """Con l'account gratuito di opensubtitles.com (la fonte con più sottotitoli italiani) lo usa per primo."""
+    if imp.get("OPENSUBTITLES_UTENTE") and imp.get("OPENSUBTITLES_PASSWORD"):
+        return ["opensubtitlescom", *FONTI]
+    return list(FONTI)
+
+
 NOMI_LINGUE = {"it": "italiano", "en": "inglese", "es": "spagnolo", "fr": "francese", "de": "tedesco", "ja": "giapponese"}
 
 
@@ -101,7 +108,7 @@ def modulo_impostazioni(imp: Impostazioni) -> dict:
         "settings-radarr-ssl": "false",
         "settings-radarr-apikey": imp.obbligatorio("RADARR_API_KEY"),
         "settings-radarr-only_monitored": "false",
-        "settings-general-enabled_providers": FONTI,
+        "settings-general-enabled_providers": fonti(imp),
         "languages-enabled": lingue,
         "languages-profiles": json.dumps(profilo_lingue(lingue)),
         "settings-general-serie_default_enabled": "true",
@@ -114,7 +121,15 @@ def modulo_impostazioni(imp: Impostazioni) -> dict:
         "settings-general-subfolder": "current",
         "settings-analytics-enabled": "false",
         "settings-backup-frequency": "Weekly",
+        # ricerca adattiva e soglie più basse:
+        # perché i sottotitoli italiani sono meno e spesso con nomi diversi dal file
+        "settings-general-adaptive_searching": "true",
+        "settings-general-minimum_score": "75",
+        "settings-general-minimum_score_movie": "60",
     }
+    if imp.get("OPENSUBTITLES_UTENTE") and imp.get("OPENSUBTITLES_PASSWORD"):
+        modulo["settings-opensubtitlescom-username"] = imp.get("OPENSUBTITLES_UTENTE")
+        modulo["settings-opensubtitlescom-password"] = imp.get("OPENSUBTITLES_PASSWORD")
     if imp.sonarr:
         modulo.update({
             "settings-general-use_sonarr": "true",
@@ -158,7 +173,10 @@ def configura(imp: Impostazioni, esito) -> None:
         if not trova_indirizzo(chiave).endswith(BASE_URL):
             esito.da_fare("Bazarr: esegui \"mediabox restart bazarr\" per attivare l'indirizzo /bazarr.")
     ok("Bazarr risponde su /bazarr")
+    if "opensubtitlescom" in fonti(imp):
+        ok("opensubtitles.com collegato")
+        return
     esito.nota(
         "Sottotitoli: per trovarne di più in italiano crea un account gratuito su opensubtitles.com "
-        "e aggiungilo in Bazarr → Impostazioni → Fornitori."
+        "e scrivi OPENSUBTITLES_UTENTE e OPENSUBTITLES_PASSWORD nel file .env, poi \"mediabox configura\"."
     )

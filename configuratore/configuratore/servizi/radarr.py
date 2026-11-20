@@ -5,9 +5,9 @@ from __future__ import annotations
 from ..impostazioni import Impostazioni
 from ..messaggi import ok
 from .arr import Arr, campi_qbittorrent
+from .formati import NOME_PROFILO, assicura_profilo
 
 CARTELLA_FILM = "/data/media/film"
-NOME_PROFILO = "Migliore disponibile"
 
 # Nomi compatibili con Jellyfin: la cartella contiene l'id TMDB, così
 # Jellyfin riconosce sempre il film giusto.
@@ -38,38 +38,6 @@ def qualita_ammessa(qualita: dict) -> bool:
     return 0 < risoluzione <= 1080
 
 
-def costruisci_profilo(schema: dict, id_lingua: int | None) -> dict:
-    profilo = dict(schema)
-    cutoff = None
-    for elemento in profilo["items"]:
-        if elemento.get("quality"):
-            elemento["allowed"] = qualita_ammessa(elemento["quality"])
-            if elemento["quality"].get("name") == "Bluray-1080p":
-                cutoff = elemento["quality"]["id"]
-        else:
-            ammessi = [qualita_ammessa(i["quality"]) for i in elemento.get("items", [])]
-            elemento["allowed"] = bool(ammessi) and all(ammessi)
-            for i in elemento.get("items", []):
-                i["allowed"] = elemento["allowed"]
-    if cutoff is None:
-        ammessi = [e for e in profilo["items"] if e.get("allowed")]
-        ultimo = ammessi[-1]
-        cutoff = ultimo["quality"]["id"] if ultimo.get("quality") else ultimo["id"]
-    profilo.update({"name": NOME_PROFILO, "upgradeAllowed": True, "cutoff": cutoff})
-    if id_lingua is not None and "language" in profilo:
-        profilo["language"] = {"id": id_lingua, "name": "Any"}
-    return profilo
-
-
-def assicura_profilo(arr: Arr) -> int:
-    esistente = next((p for p in arr.get("qualityprofile") if p["name"] == NOME_PROFILO), None)
-    if esistente:
-        return esistente["id"]
-    profilo = costruisci_profilo(arr.get("qualityprofile/schema"), arr.id_lingua("Any"))
-    creato = arr.post("qualityprofile", profilo, "creare il profilo qualità")
-    return creato["id"]
-
-
 def configura(imp: Impostazioni, esito) -> None:
     arr = radarr(imp)
     arr.attendi()
@@ -90,6 +58,8 @@ def configura(imp: Impostazioni, esito) -> None:
             "importExtraFiles": True,
             "extraFileExtensions": "srt,sub,idx,ass,ssa",
             "deleteEmptyFolders": True,
+            # una PROPER inglese non deve passare davanti a una release ITA
+            "downloadPropersAndRepacks": "doNotPrefer",
         },
     )
     ok("Rinomina attiva, nomi compatibili con Jellyfin")
@@ -103,5 +73,10 @@ def configura(imp: Impostazioni, esito) -> None:
     )
     ok("qBittorrent collegato (categoria \"radarr\")")
 
-    assicura_profilo(arr)
-    ok(f"Profilo qualità \"{NOME_PROFILO}\" (preferisce 1080p, accetta 720p e SD)")
+    qualsiasi = arr.id_lingua("Any")
+    profilo = assicura_profilo(arr, qualita_ammessa, {"id": qualsiasi, "name": "Any"} if qualsiasi is not None else None)
+    da_spostare = [m["id"] for m in arr.get("movie") if m.get("qualityProfileId") != profilo]
+    if da_spostare:
+        arr.put("movie/editor", {"movieIds": da_spostare, "qualityProfileId": profilo}, "aggiornare i film")
+    ok(f"Profilo qualità \"{NOME_PROFILO}\": audio italiano prima di tutto, poi 1080p, 720p, SD")
+    ok("Se non c'è l'italiano scarica la versione migliore e la sostituisce appena esce quella ITA")

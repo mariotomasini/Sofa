@@ -15,7 +15,7 @@ from .rete import ErroreServizio, non_raggiungibile
 
 log = logging.getLogger("cerca.serie")
 
-PROFILI_PREFERITI = ("HD - 720p/1080p", "HD-1080p", "HD-720p")
+PROFILI_PREFERITI = ("Migliore disponibile", "HD - 720p/1080p", "HD-1080p", "HD-720p")
 
 
 def scegli_profilo(profili: list[dict]) -> int:

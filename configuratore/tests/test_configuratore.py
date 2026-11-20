@@ -19,7 +19,8 @@ from configuratore.prepara import (
     prepara_jellyfin,
     verifica_hash_qbittorrent,
 )
-from configuratore.servizi.radarr import costruisci_profilo, qualita_ammessa
+from configuratore.servizi.formati import costruisci_profilo
+from configuratore.servizi.radarr import qualita_ammessa
 
 RADICE = Path(__file__).parents[2]
 FIXTURE = Path(__file__).parent / "fixtures"
@@ -132,16 +133,53 @@ def test_base_url_jellyfin(cartella, tmp_path):
 
 def test_profilo_qualita_radarr():
     schema = json.loads((FIXTURE / "radarr_qualityprofile_schema.json").read_text())
-    profilo = costruisci_profilo(schema, -1)
-    ammessi = set()
-    for e in profilo["items"]:
-        if e.get("allowed"):
-            ammessi |= {e["quality"]["name"]} if e.get("quality") else {i["quality"]["name"] for i in e["items"]}
+    formati = {"ITA · Audio italiano": 1, "Qualità · 1080p": 2, "Formato dell'utente": 3}
+    profilo = costruisci_profilo(schema, qualita_ammessa, formati, {"id": -1, "name": "Any"})
+    gruppo = profilo["items"][-1]
+    assert gruppo["allowed"] and profilo["cutoff"] == gruppo["id"] >= 1000
+    ammessi = {i["quality"]["name"] for i in gruppo["items"]}
     assert {"Bluray-1080p", "WEBDL-1080p", "HDTV-720p", "DVD", "SDTV"} <= ammessi
     assert not ammessi & {"Remux-1080p", "Bluray-2160p", "CAM", "BR-DISK", "WEBDL-2160p"}
-    assert profilo["cutoff"] == 7  # Bluray-1080p
-    assert profilo["name"] == "Migliore disponibile"
+    assert not any(e.get("allowed") for e in profilo["items"][:-1])
+    punti = {f["name"]: f["score"] for f in profilo["formatItems"]}
+    assert punti == {"ITA · Audio italiano": 10000, "Qualità · 1080p": 200, "Formato dell'utente": 0}
+    assert profilo["minFormatScore"] == 0 and profilo["cutoffFormatScore"] == 10200
+    assert profilo["name"] == "Migliore disponibile" and profilo["upgradeAllowed"]
     assert profilo["language"]["id"] == -1
+
+
+@pytest.mark.parametrize("nome, ita, sub", [
+    ("Dune.Parte.Due.2024.iTALiAN.ENG.AC3.1080p.WEB-DL.x264", True, False),
+    ("Oppenheimer 2023 ITA-ENG 1080p BluRay", True, False),
+    ("Film.2023.AC3.ITA.ENG.Sub.Ita.Eng.1080p", True, True),
+    ("Film.2023.1080p.WEB-DL.ENG.Sub.ITA", False, True),
+    ("Film.2023.1080p.SUBITA", False, True),
+    ("Capitalism.2023.1080p.WEB-DL.ENG", False, False),
+])
+def test_regex_italiano(nome, ita, sub):
+    from configuratore.servizi.formati import RE_AUDIO_ITA, RE_SUB_ITA
+    assert bool(re.search(RE_AUDIO_ITA.removeprefix("(?i)"), nome, re.I)) is ita
+    assert bool(re.search(RE_SUB_ITA.removeprefix("(?i)"), nome, re.I)) is sub
+
+
+def test_leggi_indexer_e_torznab():
+    from configuratore.servizi.prowlarr import leggi_indexer, leggi_torznab
+    assert leggi_indexer("1337x, Il Corsaro Blu|apikey=abc ,\n") == [("1337x", {}), ("Il Corsaro Blu", {"apikey": "abc"})]
+    assert leggi_torznab("Indexarr|http://indexarr:8080/torznab/api|k1; Altro|https://x.y/z") == [
+        ("Indexarr", "http://indexarr:8080/torznab", "/api", "k1"),
+        ("Altro", "https://x.y/z", "/api", ""),
+    ]
+
+
+def test_prepara_indexer_usa_il_primo_indirizzo():
+    from configuratore.servizi.prowlarr import prepara_indexer, trova_schema
+    schemi = [{"definitionName": "torrentgalaxy", "name": "TorrentGalaxy", "indexerUrls": ["https://tg.example/"],
+               "fields": [{"name": "baseUrl", "value": None}, {"name": "apikey", "value": ""}]}]
+    schema = trova_schema(schemi, "Torrent Galaxy")
+    dati = prepara_indexer(schema, "TorrentGalaxy", {"apikey": "x"}, 1, 25, [7])
+    campi = {c["name"]: c["value"] for c in dati["fields"]}
+    assert campi == {"baseUrl": "https://tg.example/", "apikey": "x"}
+    assert dati["appProfileId"] == 1 and dati["tags"] == [7] and dati["enable"]
 
 
 def test_qualita_ammessa():
