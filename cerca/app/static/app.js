@@ -289,6 +289,45 @@ function htmlDownload(d, compatto = false) {
     `</div><div class="azioni">${azioni}</div></div>`;
 }
 
+// Download di Radarr/Sonarr: la lingua sempre in vista, in giallo se non è quella preferita
+function etichettaLingua(x) {
+  if (x.preferita) return `<span class="lingua">${esc(x.lingua)}</span>`;
+  return `<span class="lingua altra">⚠ ${esc(x.lingua)} · non in ${esc(x.lingua_preferita.toLowerCase())}</span>`;
+}
+
+function htmlAutomatico(x, inCorso) {
+  const avanzamento = inCorso ? `${Math.round(x.percentuale)}%${x.stato ? " · " + esc(x.stato) : ""}` : "";
+  const nota = !x.preferita
+    ? `<span class="sottotitolo">Lo sostituisco da solo appena esce in ${esc(x.lingua_preferita.toLowerCase())}.</span>` : "";
+  return `<article class="download${x.preferita ? "" : " non-preferita"}"><div class="descrizione">` +
+    `<strong>${etichettaLingua(x)} ${esc(x.titolo)}</strong>` +
+    `<span class="sottotitolo">${esc(x.dettaglio)}${avanzamento ? " · " + avanzamento : ""}</span>${nota}</div></article>`;
+}
+
+function avviaAutomatici() {
+  const coda = document.getElementById("elenco-automatici");
+  const attesa = document.getElementById("elenco-attesa");
+  if (!coda) return;
+  async function aggiorna() {
+    try {
+      const d = await chiama("/api/automatici");
+      document.getElementById("sezione-automatici").hidden = !d.coda.length;
+      coda.innerHTML = d.coda.map((x) => htmlAutomatico(x, true)).join("");
+      document.getElementById("sezione-attesa").hidden = !d.attesa.length;
+      document.getElementById("titolo-attesa").textContent =
+        `In attesa della versione in ${d.lingua_preferita.toLowerCase()} (${d.attesa.length})`;
+      attesa.innerHTML = d.attesa.map((x) => htmlAutomatico(x, false)).join("");
+    } catch (e) { /* Radarr spento: restano i download di Cerca */ }
+  }
+  aggiorna();
+  setInterval(aggiorna, 10000);
+  document.getElementById("cerca-ora").addEventListener("click", async (ev) => {
+    ev.target.disabled = true;
+    try { avviso((await chiama("/api/automatici/cerca", { method: "POST" })).messaggio); }
+    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); ev.target.disabled = false; }
+  });
+}
+
 function avviaDownload({ soloAttivi }) {
   const contenitore = document.getElementById(soloAttivi ? "elenco-attivi" : "elenco-download");
   const sezione = document.getElementById("attivi");
@@ -307,6 +346,7 @@ function avviaDownload({ soloAttivi }) {
   }
   aggiorna();
   setInterval(aggiorna, 4000);
+  if (!soloAttivi) avviaAutomatici();
 
   contenitore.addEventListener("click", async (ev) => {
     const b = ev.target.closest("button");

@@ -913,3 +913,7 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
 
 /* Scheda film: un solo grande tasto Download */
 .scarica-grande { width: 100%; font-size: 1.25rem; padding: 1rem; }
+
+/* lingua non preferita: si vede subito */
+.lingua.altra { background: var(--giallo); color: #1a1400; }
+.download.non-preferita { border-left: 4px solid var(--giallo); }

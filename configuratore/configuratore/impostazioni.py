@@ -105,6 +105,15 @@ class Impostazioni:
         return _si(self.get("WITH_FLARESOLVERR", "si"))
 
     @property
+    def lingue_audio(self) -> list[str]:
+        """Lingue dell'audio in ordine di preferenza (LINGUE_AUDIO=it,es,en)."""
+        from .servizi.formati import LINGUE, LINGUE_PREDEFINITE
+
+        scelte = [x.strip().lower() for x in self.get("LINGUE_AUDIO", "it,es,en").split(",")]
+        valide = list(dict.fromkeys(c for c in scelte if c in LINGUE))
+        return valide or list(LINGUE_PREDEFINITE)
+
+    @property
     def dimensione_max_gb(self) -> float:
         """Peso massimo di un film 1080p di 2 ore (le serie in proporzione alla durata)."""
         try:

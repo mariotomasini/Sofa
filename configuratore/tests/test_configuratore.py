@@ -133,8 +133,9 @@ def test_base_url_jellyfin(cartella, tmp_path):
 
 def test_profilo_qualita_radarr():
     schema = json.loads((FIXTURE / "radarr_qualityprofile_schema.json").read_text())
-    formati = {"ITA · Audio italiano": 1, "Qualità · 1080p": 2, "Formato dell'utente": 3}
-    profilo = costruisci_profilo(schema, qualita_ammessa, formati, {"id": -1, "name": "Any"})
+    ids = {"Lingua · Italiano": 1, "Lingua · Spagnolo": 4, "Lingua · Inglese": 5, "Lingua · Tedesco": 6,
+           "Qualità · 1080p": 2, "Formato dell'utente": 3}
+    profilo = costruisci_profilo(schema, qualita_ammessa, ids, ["it", "es", "en"], {"id": -1, "name": "Any"})
     gruppo = profilo["items"][-1]
     assert gruppo["allowed"] and profilo["cutoff"] == gruppo["id"] >= 1000
     ammessi = {i["quality"]["name"] for i in gruppo["items"]}
@@ -142,7 +143,8 @@ def test_profilo_qualita_radarr():
     assert not ammessi & {"Remux-1080p", "Bluray-2160p", "CAM", "BR-DISK", "WEBDL-2160p"}
     assert not any(e.get("allowed") for e in profilo["items"][:-1])
     punti = {f["name"]: f["score"] for f in profilo["formatItems"]}
-    assert punti == {"ITA · Audio italiano": 10000, "Qualità · 1080p": 200, "Formato dell'utente": 0}
+    assert punti == {"Lingua · Italiano": 10000, "Lingua · Spagnolo": 5000, "Lingua · Inglese": 2500,
+                     "Lingua · Tedesco": 0, "Qualità · 1080p": 200, "Formato dell'utente": 0}
     assert profilo["minFormatScore"] == 0 and profilo["cutoffFormatScore"] == 10200
     assert profilo["name"] == "Migliore disponibile" and profilo["upgradeAllowed"]
     assert profilo["language"]["id"] == -1
@@ -360,3 +362,34 @@ def test_dimensione_max_gb():
     assert Impostazioni({"DIMENSIONE_MAX_GB": "8,5"}).dimensione_max_gb == 8.5
     assert Impostazioni({}).dimensione_max_gb == 10.0
     assert Impostazioni({"DIMENSIONE_MAX_GB": "boh"}).dimensione_max_gb == 10.0
+
+
+@pytest.mark.parametrize("nome, lingua", [
+    ("Film.2023.iTALiAN.1080p.WEB-DL", "it"),
+    ("Film.2023.SPANISH.1080p.WEB-DL", "es"),
+    ("Film 2023 Castellano 1080p", "es"),
+    ("Film.2023.1080p.WEB-DL.x264", "en"),
+    ("Film.2023.1080p.ENG.Sub.ITA", "en"),
+    ("Film.2023.1080p.ENG.SPA", "es"),
+])
+def test_lingue_release(nome, lingua):
+    from configuratore.servizi.formati import formati, nome_lingua
+
+    trovate = set()
+    for codice in ("it", "es", "en"):
+        _, condizioni = formati(["it", "es", "en"])[nome_lingua(codice)]
+        esiti = []
+        for _, valore, negata, _ in condizioni:
+            presente = bool(re.search(valore.removeprefix("(?i)"), nome, re.I))
+            esiti.append(presente != negata)
+        if all(esiti):
+            trovate.add(codice)
+    assert lingua in trovate
+    if lingua != "en":
+        assert "en" not in trovate
+
+
+def test_lingue_audio():
+    assert Impostazioni({}).lingue_audio == ["it", "es", "en"]
+    assert Impostazioni({"LINGUE_AUDIO": "es, it ,xx,es"}).lingue_audio == ["es", "it"]
+    assert Impostazioni({"LINGUE_AUDIO": "zz"}).lingue_audio == ["it", "es", "en"]

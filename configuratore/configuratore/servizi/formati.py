@@ -1,13 +1,13 @@
-"""Formati personalizzati e profilo qualità "italiano prima di tutto".
+"""Formati personalizzati e profilo qualità "prima la lingua che preferisci".
 
 Valgono per Radarr e per Sonarr (stessa API v3). L'idea:
 
 - tutte le qualità ammesse (SD → 1080p) stanno in un unico gruppo, così Radarr
   e Sonarr non scelgono per qualità ma per punteggio dei formati;
-- l'audio italiano vale molto più di qualsiasi differenza di qualità:
-  un 720p ITA batte sempre un 1080p solo inglese;
-- se non c'è niente in italiano scarica comunque la versione migliore, e appena
-  esce una versione ITA la sostituisce da solo (aggiornamento per punteggio).
+- la lingua dell'audio vale molto più di qualsiasi differenza di qualità, nell'ordine
+  di LINGUE_AUDIO (predefinito: italiano, poi spagnolo, poi inglese);
+- se non c'è la prima lingua scarica comunque la versione migliore, e appena
+  esce nella lingua preferita la sostituisce da solo (aggiornamento per punteggio).
 """
 
 from __future__ import annotations
@@ -19,28 +19,77 @@ from .arr import Arr
 NOME_PROFILO = "Migliore disponibile"
 NOME_GRUPPO = "SD-1080p (decide il punteggio)"
 ID_GRUPPO = 1001
+PREFISSO_LINGUA = "Lingua · "
 
-# "ITA", "iTALiAN", "Italiano", "ITA-ENG"… ma non "Sub ITA" (solo sottotitoli)
-RE_AUDIO_ITA = r"(?i)(?<!\bsub)(?<!\bsub[ ._-])(?<!\bsubs[ ._-])\b(ita|italian|italiano|itaeng|iteng)\b"
+
+def audio(parole: str) -> str:
+    """La parola nel nome della release, ma non dopo "sub" (quelli sono solo sottotitoli)."""
+    return rf"(?i)(?<!\bsub)(?<!\bsub[ ._-])(?<!\bsubs[ ._-])\b({parole})\b"
+
+
+# codice → (nome, parole nel titolo della release). L'inglese spesso non è scritto:
+# vale "inglese" una release senza nessun'altra lingua indicata.
+LINGUE: dict[str, tuple[str, str | None]] = {
+    "it": ("Italiano", "ita|italian|italiano|itaeng|iteng"),
+    "es": ("Spagnolo", "spa|spanish|español|espanol|castellano|latino|esp"),
+    "fr": ("Francese", "french|truefrench|vff|vfq|vf2|vfi|fre"),
+    "de": ("Tedesco", "german|ger|deutsch"),
+    "pt": ("Portoghese", "portuguese|por|pt-?br|dublado"),
+    "en": ("Inglese", None),
+}
+# altre lingue frequenti: se ci sono, la release non è "solo inglese"
+ALTRE_LINGUE = "rus|russian|hindi|hin|tamil|telugu|kor|korean|jap|japanese|chi|chinese|tur|turkish|pol|polish|multi|dual"
+LINGUE_PREDEFINITE = ["it", "es", "en"]
+
+RE_AUDIO_ITA = audio(LINGUE["it"][1])
 RE_SUB_ITA = r"(?i)\b(subs?|subbed|sottotitol[a-z]*)[ ._-]*(ita|italian|italiano)\b"
 RE_MULTI = r"(?i)\b(multi|dual)\b"
-# Audio preso dal cinema (MD = mic dubbed, LD = line dubbed): ITA sì, ma scarso
+RE_STRANIERO = audio("|".join([p for _, p in LINGUE.values() if p] + [ALTRE_LINGUE]))
+# Audio preso dal cinema (MD = mic dubbed, LD = line dubbed): la lingua c'è, ma scarsa
 RE_AUDIO_CINEMA = r"(?i)\b(md|ld|mic[ ._-]?dubbed|line[ ._-]?dubbed)\b"
 RE_3D = r"(?i)\b(3d|sbs|half[ ._-]?ou)\b"
 
-PUNTI_ITA = 10000
+PUNTI_LINGUA = [10000, 5000, 2500, 1250, 600, 300]
 PUNTI_1080P = 200
+# nomi usati dalle versioni precedenti di mediabox: si tolgono
+OBSOLETI = ("ITA · Audio italiano", "ITA · MULTI", "ITA · Sottotitoli italiani")
 
-# nome → (punti, condizioni). Ogni condizione: (tipo, valore, negata, obbligatoria)
-FORMATI: dict[str, tuple[int, list[tuple[str, object, bool, bool]]]] = {
-    "ITA · Audio italiano": (PUNTI_ITA, [("titolo", RE_AUDIO_ITA, False, False)]),
-    "ITA · MULTI": (2000, [("titolo", RE_MULTI, False, False)]),
-    "ITA · Sottotitoli italiani": (300, [("titolo", RE_SUB_ITA, False, False)]),
-    "Qualità · 1080p": (PUNTI_1080P, [("risoluzione", 1080, False, True)]),
-    "Qualità · 720p": (100, [("risoluzione", 720, False, True)]),
-    "Scarto · Audio dal cinema (MD/LD)": (-5000, [("titolo", RE_AUDIO_CINEMA, False, False)]),
-    "Scarto · 3D": (-20000, [("titolo", RE_3D, False, False)]),
-}
+Condizione = tuple[str, object, bool, bool]  # (tipo, valore, negata, obbligatoria)
+
+
+def nome_lingua(codice: str) -> str:
+    return PREFISSO_LINGUA + LINGUE[codice][0]
+
+
+def nomi_lingue(lingue: list[str]) -> str:
+    return " → ".join(LINGUE[c][0].lower() for c in lingue)
+
+
+def condizioni_lingua(codice: str) -> list[Condizione]:
+    parole = LINGUE[codice][1]
+    if parole is None:  # inglese: nessun'altra lingua nel nome
+        return [("titolo", RE_STRANIERO, True, True)]
+    return [("titolo", audio(parole), False, False)]
+
+
+def formati(lingue: list[str]) -> dict[str, tuple[int, list[Condizione]]]:
+    """nome → (punti, condizioni). Tutte le lingue esistono; quelle non scelte valgono 0."""
+    elenco: dict[str, tuple[int, list[Condizione]]] = {}
+    for codice in LINGUE:
+        posto = lingue.index(codice) if codice in lingue else None
+        punti = PUNTI_LINGUA[min(posto, len(PUNTI_LINGUA) - 1)] if posto is not None else 0
+        elenco[nome_lingua(codice)] = (punti, condizioni_lingua(codice))
+    elenco.update({
+        "Lingua · MULTI": (1000, [("titolo", RE_MULTI, False, False)]),
+        "Sottotitoli · Italiano": (300 if "it" in lingue else 0, [("titolo", RE_SUB_ITA, False, False)]),
+        "Qualità · 1080p": (PUNTI_1080P, [("risoluzione", 1080, False, True)]),
+        "Qualità · 720p": (100, [("risoluzione", 720, False, True)]),
+        # -3000: una prima lingua dal cinema batte ancora una seconda lingua pulita
+        "Scarto · Audio dal cinema (MD/LD)": (-3000, [("titolo", RE_AUDIO_CINEMA, False, False)]),
+        "Scarto · 3D": (-20000, [("titolo", RE_3D, False, False)]),
+    })
+    return elenco
+
 
 IMPLEMENTAZIONI = {"titolo": "ReleaseTitleSpecification", "risoluzione": "ResolutionSpecification"}
 
@@ -56,8 +105,7 @@ def condizione(schemi: list[dict], nome: str, tipo: str, valore, negata: bool, o
     return spec
 
 
-def costruisci_formato(schemi: list[dict], nome: str) -> dict:
-    _, condizioni = FORMATI[nome]
+def costruisci_formato(schemi: list[dict], nome: str, condizioni: list[Condizione]) -> dict:
     return {
         "name": nome,
         "includeCustomFormatWhenRenaming": False,
@@ -68,12 +116,15 @@ def costruisci_formato(schemi: list[dict], nome: str) -> dict:
     }
 
 
-def assicura_formati(arr: Arr) -> dict[str, int]:
+def assicura_formati(arr: Arr, definiti: dict[str, tuple[int, list[Condizione]]]) -> dict[str, int]:
     """Crea o aggiorna i formati di mediabox; restituisce nome → id di tutti i formati."""
     schemi = arr.get("customformat/schema")
     esistenti = {f["name"]: f for f in arr.get("customformat")}
-    for nome in FORMATI:
-        nuovo = costruisci_formato(schemi, nome)
+    for nome in OBSOLETI:
+        if nome in esistenti:
+            arr._r("DELETE", f"customformat/{esistenti.pop(nome)['id']}", f"togliere il vecchio formato \"{nome}\"")
+    for nome, (_, condizioni) in definiti.items():
+        nuovo = costruisci_formato(schemi, nome, condizioni)
         if nome in esistenti:
             nuovo["id"] = esistenti[nome]["id"]
             arr.put(f"customformat/{nuovo['id']}", nuovo, f"aggiornare il formato \"{nome}\"")
@@ -90,8 +141,11 @@ def foglie(items: list[dict]):
             yield from (i["quality"] for i in e.get("items", []) if i.get("quality"))
 
 
-def costruisci_profilo(schema: dict, ammessa, formati: dict[str, int], lingua: dict | None = None) -> dict:
-    """Profilo con tutte le qualità ammesse in un solo gruppo e i punteggi ITA."""
+def costruisci_profilo(schema: dict, ammessa, ids: dict[str, int], lingue: list[str] | None = None,
+                       lingua: dict | None = None) -> dict:
+    """Profilo con tutte le qualità ammesse in un solo gruppo e i punteggi delle lingue."""
+    lingue = lingue or LINGUE_PREDEFINITE
+    punti = {n: p for n, (p, _) in formati(lingue).items()}
     profilo = copy.deepcopy(schema)
     qualita = list(foglie(profilo["items"]))
     scartate = [{"quality": q, "items": [], "allowed": False} for q in qualita if not ammessa(q)]
@@ -102,15 +156,13 @@ def costruisci_profilo(schema: dict, ammessa, formati: dict[str, int], lingua: d
         "items": [{"quality": q, "items": [], "allowed": True} for q in qualita if ammessa(q)],
     }
     profilo["items"] = [*scartate, gruppo]  # l'ultimo è il preferito
-    profilo["formatItems"] = [
-        {"format": i, "name": n, "score": FORMATI[n][0] if n in FORMATI else 0} for n, i in formati.items()
-    ]
+    profilo["formatItems"] = [{"format": i, "name": n, "score": punti.get(n, 0)} for n, i in ids.items()]
     profilo.update({
         "name": NOME_PROFILO,
         "upgradeAllowed": True,
         "cutoff": ID_GRUPPO,
-        "minFormatScore": 0,  # se non c'è l'italiano scarica comunque
-        "cutoffFormatScore": PUNTI_ITA + PUNTI_1080P,  # smette di cercare con ITA 1080p
+        "minFormatScore": 0,  # se non c'è la lingua preferita scarica comunque
+        "cutoffFormatScore": PUNTI_LINGUA[0] + PUNTI_1080P,  # si ferma con prima lingua + 1080p
         "minUpgradeFormatScore": 1,
     })
     if lingua is not None and "language" in profilo:
@@ -118,9 +170,9 @@ def costruisci_profilo(schema: dict, ammessa, formati: dict[str, int], lingua: d
     return profilo
 
 
-def assicura_profilo(arr: Arr, ammessa, lingua: dict | None = None) -> int:
-    formati = assicura_formati(arr)
-    profilo = costruisci_profilo(arr.get("qualityprofile/schema"), ammessa, formati, lingua)
+def assicura_profilo(arr: Arr, ammessa, lingue: list[str], lingua: dict | None = None) -> int:
+    ids = assicura_formati(arr, formati(lingue))
+    profilo = costruisci_profilo(arr.get("qualityprofile/schema"), ammessa, ids, lingue, lingua)
     esistente = next((p for p in arr.get("qualityprofile") if p["name"] == NOME_PROFILO), None)
     if esistente:
         profilo["id"] = esistente["id"]
