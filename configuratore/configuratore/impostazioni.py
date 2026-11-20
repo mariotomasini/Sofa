@@ -105,6 +105,11 @@ class Impostazioni:
         return _si(self.get("WITH_FLARESOLVERR", "si"))
 
     @property
+    def tgarr(self) -> bool:
+        """Telegram come fonte di download (tgarr)."""
+        return _si(self.get("WITH_TGARR", "no"))
+
+    @property
     def beszel(self) -> bool:
         return _si(self.get("WITH_BESZEL", "no"))
 

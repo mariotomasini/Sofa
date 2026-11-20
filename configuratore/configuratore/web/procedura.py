@@ -35,6 +35,7 @@ ESITO = "generato/esito.json"
 # Come raggruppare le voci nella pagina
 GRUPPI = {
     "WITH_SONARR": "guardi", "WITH_ANIME": "guardi", "WITH_LIDARR": "guardi", "WITH_BAZARR": "guardi",
+    "WITH_TGARR": "guardi",
     "PULIZIA_VISTI": "pc", "AGGIORNAMENTI_AUTOMATICI": "pc", "WITH_BESZEL": "pc", "WITH_FLARESOLVERR": "pc",
 }
 TITOLI_VOCI = {
@@ -43,6 +44,8 @@ TITOLI_VOCI = {
     "WITH_LIDARR": ("Musica da scaricare",
                     "Lidarr cerca gli album e li ordina per artista. La musica che hai già si ascolta comunque."),
     "WITH_BAZARR": ("Sottotitoli automatici", "Bazarr cerca i sottotitoli nelle lingue che scegli."),
+    "WITH_TGARR": ("Telegram come fonte",
+                   "tgarr cerca film e serie nei canali e nei gruppi del tuo account Telegram, anche privati."),
     "PULIZIA_VISTI": ("Pulizia quando il disco è pieno",
                       "Toglie i film e gli episodi già visti da più di 30 giorni. Mai i preferiti."),
     "AGGIORNAMENTI_AUTOMATICI": ("Aggiornamenti automatici", "Di notte installa le nuove versioni di mediabox."),

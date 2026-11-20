@@ -319,6 +319,12 @@ Alcuni siti mostrano un controllo "Sei un robot?" che blocca Prowlarr. mediabox 
 
 Se il PC ha meno di 6 GB di memoria, l'installer spegne da solo i programmi più pesanti: *Aiuto per i siti protetti* (FlareSolverr), *Musica da scaricare* (Lidarr), *Sottotitoli automatici* (Bazarr) e *Grafici del PC* (Beszel). Lo fa una volta sola e lo scrive nella finestra. Nella configurazione e nelle impostazioni quei programmi mostrano quanta memoria usano: puoi riaccenderli, ma il PC potrebbe rallentare molto e alcuni programmi potrebbero non partire. Su un PC così mediabox serve bene per cercare, scaricare e guardare film in casa; la conversione dei video al volo invece non è possibile.
 
+### Fonti di download automatiche
+
+- **Scarica (un clic)**: nella scheda del film Radarr sceglie da solo la versione migliore, prima quella con audio italiano (ITA/MULTI), la scarica e la mette in Jellyfin. Se più avanti esce in italiano, la sostituisce.
+- **Indexer pubblici**: con `PROWLARR_PUBLICI=si` (predefinito) mediabox prova tutti gli indexer pubblici senza account che Prowlarr conosce e tiene quelli che funzionano; quelli in italiano sono usati per primi. Altri indexer (anche con account) si scrivono in `PROWLARR_INDEXER`, quelli Torznab in `INDEXER_TORZNAB`.
+- **Telegram (tgarr)**: con `WITH_TGARR=si` mediabox installa [tgarr](https://tgarr.me) e lo collega a Prowlarr, Radarr e Sonarr. Apri `http://mediabox.local:8765`, entra con la password di amministrazione e collega il tuo account Telegram (QR o numero + codice; `TG_API_ID`, `TG_API_HASH` e `TG_PHONE` nel file `.env` sono facoltativi). Per i **gruppi privati** basta iscrivere quell'account ai gruppi: tgarr li indicizza da solo. Meglio un account Telegram dedicato.
+
 ## Cambiare le scelte dopo l'installazione
 
 Apri **`http://mediabox.local/impostazioni`**: la trovi anche nella pagina iniziale, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Premi **Salva e applica**: mediabox installa, configura o spegne quello che serve, e la pagina mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.

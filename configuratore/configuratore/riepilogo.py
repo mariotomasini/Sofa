@@ -114,6 +114,8 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
         attivi.append("Bazarr (sottotitoli: " + ", ".join(imp.lingue_sottotitoli) + ")")
     if imp.flaresolverr:
         attivi.append("FlareSolverr (indexer protetti da Cloudflare)")
+    if imp.tgarr:
+        attivi.append(f"tgarr (Telegram come fonte, pagina sulla porta {imp.get('TGARR_PORT', '8765')})")
     if imp.beszel:
         attivi.append("Beszel (grafici e avvisi del PC)")
     if imp.dvb:

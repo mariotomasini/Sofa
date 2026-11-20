@@ -628,6 +628,18 @@ async def api_scarica_archive(request: Request, dati: RichiestaArchive):
     return {"id": id_download, "messaggio": "Download avviato: lo trovi nella pagina Download."}
 
 
+class RichiestaAuto(BaseModel):
+    tmdb_id: int
+
+
+@app.post("/api/scarica/auto")
+async def api_scarica_auto(request: Request, dati: RichiestaAuto):
+    s = servizi(request)
+    film = await s.radarr.scarica_da_solo(dati.tmdb_id)
+    gia = " (il file c'è già: cerco solo una versione migliore)" if film.get("hasFile") else ""
+    return {"messaggio": f"Fatto! Radarr cerca la versione migliore, prima in italiano, e la mette in Jellyfin{gia}."}
+
+
 class RichiestaProwlarr(BaseModel):
     tmdb_id: int
     id: str

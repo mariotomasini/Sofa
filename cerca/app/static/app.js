@@ -95,6 +95,16 @@ function avviaFilm(tmdbId) {
       })
       .catch((e) => { sezione("prowlarr").innerHTML = htmlErrore(e); riassunto.textContent = e.errore || "Errore"; });
 
+    const auto = document.getElementById("scarica-auto");
+    if (auto) auto.addEventListener("click", async () => {
+      auto.disabled = true;
+      try {
+        const r = await inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId });
+        avviso(r.messaggio);
+        auto.textContent = "✓ In download";
+      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); auto.disabled = false; }
+    });
+
     document.getElementById("archive").addEventListener("click", async (ev) => {
       const b = ev.target.closest("button[data-identificativo]");
       if (!b) return;

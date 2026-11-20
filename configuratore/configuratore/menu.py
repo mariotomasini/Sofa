@@ -22,6 +22,7 @@ VOCI = [
     ("WITH_ANIME", "Anime (libreria separata in Jellyfin, gestiti da Sonarr)", "SONARR_API_KEY"),
     ("WITH_LIDARR", "Musica con Lidarr (scarica e ordina per artista e album)", "LIDARR_API_KEY"),
     ("WITH_BAZARR", "Sottotitoli automatici (Bazarr)", ""),
+    ("WITH_TGARR", "Telegram come fonte di download (tgarr: canali e gruppi del tuo account)", ""),
     ("WITH_FLARESOLVERR", "FlareSolverr (aiuta gli indexer protetti da Cloudflare)", ""),
     ("PULIZIA_VISTI", "Pulizia automatica dei film ed episodi già visti quando il disco è quasi pieno", ""),
     ("WITH_BESZEL", "Beszel (grafici di processore, memoria, dischi e temperatura, con avvisi)", ""),
@@ -29,6 +30,7 @@ VOCI = [
 ]
 PREDEFINITI = {
     "WITH_SONARR": "no", "WITH_ANIME": "no", "WITH_LIDARR": "no", "WITH_BAZARR": "si",
+    "WITH_TGARR": "si",
     "WITH_FLARESOLVERR": "si", "WITH_BESZEL": "no", "AGGIORNAMENTI_AUTOMATICI": "si", "PULIZIA_VISTI": "no",
 }
 
