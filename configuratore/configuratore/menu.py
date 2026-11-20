@@ -12,6 +12,7 @@ import secrets
 from pathlib import Path
 
 from .impostazioni import leggi_env
+from .messaggi import SPUNTA
 
 NESSUNA_MODIFICA = 3
 
@@ -86,7 +87,7 @@ def _stampa(scelte: dict[str, str], prima_volta: bool) -> None:
         print("  Impostazioni di mediabox")
     print()
     for i, (chiave, descrizione, _) in enumerate(VOCI, 1):
-        segno = "✔" if attivo(scelte, chiave) else " "
+        segno = SPUNTA if attivo(scelte, chiave) else " "
         print(f"   [{segno}] {i}. {descrizione}")
     print()
     print(f"       l. Lingue dei sottotitoli: {scelte.get('LINGUE_SOTTOTITOLI', 'it,en')}")
@@ -148,5 +149,5 @@ def menu(cartella: Path, prima_volta: bool = False) -> int:
     if spenti:
         print("  I servizi disattivati vengono spenti, ma le loro impostazioni restano salvate:")
         print("  se li riattivi ritrovi tutto com'era.")
-    print("  ✔ Scelte salvate")
+    print(f"  {SPUNTA} Scelte salvate")
     return 0

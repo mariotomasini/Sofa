@@ -10,11 +10,39 @@ import httpx
 from .messaggi import ErroreMediabox, info
 
 
+def minuti(secondi: float) -> str:
+    secondi = int(secondi)
+    return f"{secondi // 60}:{secondi % 60:02d}"
+
+
+class AvvisoAttesa:
+    """Mentre si aspetta un servizio, ogni 20 secondi dice da quanto e fino a quando.
+
+    Così chi guarda (nel terminale o nella pagina di avanzamento) vede che non è bloccato."""
+
+    OGNI = 20
+
+    def __init__(self, nome: str, timeout: float) -> None:
+        self.nome = nome
+        self.timeout = timeout
+        self.inizio = time.monotonic()
+        self.ultimo: float | None = None
+
+    def ogni_tanto(self) -> None:
+        adesso = time.monotonic()
+        if self.ultimo is None:
+            info(f"Attendo che {self.nome} sia pronto… (la prima accensione può richiedere qualche minuto)")
+            self.ultimo = adesso
+        elif adesso - self.ultimo >= self.OGNI:
+            info(f"Attendo che {self.nome} sia pronto… {minuti(adesso - self.inizio)} (al massimo {minuti(self.timeout)})")
+            self.ultimo = adesso
+
+
 def attendi(
     nome: str,
     url: str,
     *,
-    timeout: float = 300,
+    timeout: float = 600,  # sui PC lenti la prima accensione di Radarr & co. supera i 5 minuti
     accetta: Callable[[httpx.Response], bool] | None = None,
     pausa: float = 3,
 ) -> httpx.Response:
@@ -22,7 +50,7 @@ def attendi(
     accetta = accetta or (lambda r: r.status_code < 500)
     scadenza = time.monotonic() + timeout
     ultimo_errore = ""
-    annunciato = False
+    attesa = AvvisoAttesa(nome, timeout)
     while time.monotonic() < scadenza:
         try:
             risposta = httpx.get(url, timeout=10, follow_redirects=True)
@@ -31,9 +59,7 @@ def attendi(
             ultimo_errore = f"risposta {risposta.status_code}"
         except httpx.HTTPError as exc:
             ultimo_errore = type(exc).__name__
-        if not annunciato:
-            info(f"Attendo che {nome} sia pronto…")
-            annunciato = True
+        attesa.ogni_tanto()
         time.sleep(pausa)
     raise ErroreMediabox(
         f"{nome} non si è avviato in tempo ({ultimo_errore}).",

@@ -250,3 +250,30 @@ def test_percorso_valido():
     assert percorso_valido('"E:\\Film"', True) == "E:/Film"
     assert percorso_valido("D:", True) is None
     assert percorso_valido("/linux", True) is None
+
+
+def test_avviso_di_attesa(monkeypatch, capsys):
+    from configuratore import rete
+
+    orologio = iter([0, 0, 5, 21, 30, 45])
+    monkeypatch.setattr(rete.time, "monotonic", lambda: next(orologio))
+    attesa = rete.AvvisoAttesa("Radarr", 600)
+    for _ in range(5):
+        attesa.ogni_tanto()
+    righe = capsys.readouterr().out.splitlines()
+    assert righe == [
+        "  · Attendo che Radarr sia pronto… (la prima accensione può richiedere qualche minuto)",
+        "  · Attendo che Radarr sia pronto… 0:21 (al massimo 10:00)",
+        "  · Attendo che Radarr sia pronto… 0:45 (al massimo 10:00)",
+    ]
+
+
+def test_un_servizio_che_non_risponde_non_ferma_gli_altri():
+    import httpx
+
+    from configuratore.__main__ import errore_imprevisto
+
+    lento = errore_imprevisto("Lidarr", httpx.ReadTimeout("timed out"))
+    assert lento.cosa == "Lidarr risponde troppo lentamente." and "mediabox configura" in lento.cosa_fare
+    assert "ConnectError" in errore_imprevisto("Radarr", httpx.ConnectError("no")).cosa
+    assert "KeyError" in errore_imprevisto("Jellyfin", KeyError("Id")).cosa

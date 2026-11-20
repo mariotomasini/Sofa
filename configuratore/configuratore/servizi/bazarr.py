@@ -16,6 +16,7 @@ import httpx
 
 from ..impostazioni import Impostazioni
 from ..messaggi import ErroreMediabox, info, ok
+from ..rete import AvvisoAttesa
 
 INDIRIZZO = "http://bazarr:6767"
 BASE_URL = "/bazarr"
@@ -37,13 +38,15 @@ def leggi_chiave(testo: str) -> str:
     return ""
 
 
-def attendi_chiave(timeout: float = 180) -> str:
+def attendi_chiave(timeout: float = 600, attesa: AvvisoAttesa | None = None) -> str:
     scadenza = time.monotonic() + timeout
     while time.monotonic() < scadenza:
         if FILE_CONFIG.exists():
             chiave = leggi_chiave(FILE_CONFIG.read_text(encoding="utf-8", errors="replace"))
             if chiave:
                 return chiave
+        if attesa:
+            attesa.ogni_tanto()
         time.sleep(3)
     raise ErroreMediabox(
         "Bazarr non ha ancora creato la sua configurazione.",
@@ -51,10 +54,12 @@ def attendi_chiave(timeout: float = 180) -> str:
     )
 
 
-def trova_indirizzo(chiave: str, timeout: float = 180) -> str:
+def trova_indirizzo(chiave: str, timeout: float = 600, attesa: AvvisoAttesa | None = None) -> str:
     """Restituisce l'indirizzo dell'API, con o senza /bazarr davanti."""
     scadenza = time.monotonic() + timeout
     while time.monotonic() < scadenza:
+        if attesa:
+            attesa.ogni_tanto()
         for prefisso in (BASE_URL, ""):
             try:
                 r = httpx.get(f"{INDIRIZZO}{prefisso}/api/system/status", headers={"X-API-KEY": chiave}, timeout=10)
@@ -124,9 +129,10 @@ def modulo_impostazioni(imp: Impostazioni) -> dict:
 
 
 def configura(imp: Impostazioni, esito) -> None:
-    info("Attendo che Bazarr sia pronto…")
-    chiave = attendi_chiave()
-    indirizzo = trova_indirizzo(chiave)
+    attesa = AvvisoAttesa("Bazarr", 600)
+    attesa.ogni_tanto()
+    chiave = attendi_chiave(attesa=attesa)
+    indirizzo = trova_indirizzo(chiave, attesa=attesa)
     r = httpx.post(
         f"{indirizzo}/api/system/settings",
         data=modulo_impostazioni(imp),

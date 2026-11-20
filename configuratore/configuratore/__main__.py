@@ -19,6 +19,27 @@ from .impostazioni import CARTELLA_MEDIABOX, Impostazioni
 from .messaggi import ErroreMediabox, avviso, titolo
 
 
+def errore_imprevisto(nome: str, exc: Exception) -> ErroreMediabox:
+    """Trasforma un errore tecnico (es. httpx.ReadTimeout) in un messaggio comprensibile."""
+    import httpx
+
+    if isinstance(exc, httpx.TimeoutException):
+        return ErroreMediabox(
+            f"{nome} risponde troppo lentamente.",
+            "Il PC è molto carico: aspetta qualche minuto e riprova con \"mediabox configura\". "
+            "Se succede spesso, spegni dalle impostazioni i servizi che non usi (FlareSolverr, Beszel, Lidarr).",
+        )
+    if isinstance(exc, httpx.HTTPError):
+        return ErroreMediabox(
+            f"{nome} non risponde ({type(exc).__name__}).",
+            f"Guarda i messaggi con \"mediabox logs {nome.lower()}\", poi riprova con \"mediabox configura\".",
+        )
+    return ErroreMediabox(
+        f"Errore imprevisto con {nome}: {type(exc).__name__}: {exc}",
+        "Riprova con \"mediabox configura\". Se si ripete, manda questo messaggio a chi ti aiuta con mediabox.",
+    )
+
+
 def _configura(imp: Impostazioni) -> int:
     from .riepilogo import Esito, stampa_riepilogo
     from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tvheadend
@@ -41,14 +62,18 @@ def _configura(imp: Impostazioni) -> int:
         passi.append(("Beszel", beszel.configura))
     passi.append(("Jellyfin", jellyfin.configura))
 
-    for nome, funzione in passi:
-        titolo(f"Configuro {nome}")
+    for numero, (nome, funzione) in enumerate(passi, 1):
+        titolo(f"Configuro {nome} ({numero} di {len(passi)})")
         try:
             funzione(imp, esito)
             esito.ok(nome)
         except ErroreMediabox as exc:
             exc.mostra()
             esito.fallito(nome, exc)
+        except Exception as exc:  # noqa: BLE001 — un servizio che non va non deve fermare gli altri
+            problema = errore_imprevisto(nome, exc)
+            problema.mostra()
+            esito.fallito(nome, problema)
     stampa_riepilogo(imp, esito)
     esito.salva(CARTELLA_MEDIABOX / "generato" / "esito.json")
     return 1 if esito.falliti else 0

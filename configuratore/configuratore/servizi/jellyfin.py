@@ -13,7 +13,7 @@ import httpx
 
 from ..impostazioni import Impostazioni
 from ..messaggi import ErroreMediabox, avviso, info, ok
-from ..rete import controlla
+from ..rete import AvvisoAttesa, controlla
 
 INDIRIZZO = "http://jellyfin:8096"
 BASE_URL = "/jellyfin"
@@ -55,13 +55,13 @@ class Jellyfin:
         self.token = ""
 
     # --- connessione -------------------------------------------------------
-    def attendi(self, timeout: float = 300) -> dict:
+    def attendi(self, timeout: float = 600) -> dict:
         """Attende Jellyfin sull'indirizzo /jellyfin.
 
         Durante l'avvio Jellyfin può rispondere per qualche secondo anche senza
         /jellyfin: in quel caso continuiamo ad aspettare."""
         scadenza = time.monotonic() + timeout
-        annunciato = False
+        attesa = AvvisoAttesa("Jellyfin", timeout)
         senza_prefisso: dict | None = None
         while time.monotonic() < scadenza:
             for prefisso in (BASE_URL, ""):
@@ -74,9 +74,7 @@ class Jellyfin:
                         self.prefisso = prefisso
                         return r.json()
                     senza_prefisso = r.json()
-            if not annunciato:
-                info("Attendo che Jellyfin sia pronto…")
-                annunciato = True
+            attesa.ogni_tanto()
             time.sleep(3)
         if senza_prefisso is not None:
             self.prefisso = ""

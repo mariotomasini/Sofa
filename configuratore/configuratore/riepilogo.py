@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .impostazioni import Impostazioni
-from .messaggi import ErroreMediabox, titolo
+from .messaggi import CROCE, SPUNTA, ErroreMediabox, titolo
 
 
 @dataclass
@@ -121,11 +121,11 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
     if imp.hdhomerun:
         attivi.append(f"HDHomeRun ({imp.hdhomerun})")
     for a in attivi:
-        print(f"  ✔ {a}")
+        print(f"  {SPUNTA} {a}")
     if not imp.dvb and not imp.hdhomerun:
         print("  – TV in diretta: nessun tuner trovato, saltata. Se ne colleghi uno, rilancia l'installer.")
-    print(f"  {'✔' if imp.vaapi else '–'} Transcodifica hardware {'attiva' if imp.vaapi else 'non disponibile'}")
-    print(f"  {'✔' if imp.get('NTFY_TOPIC') else '–'} Notifiche sul telefono (ntfy)"
+    print(f"  {SPUNTA if imp.vaapi else '–'} Transcodifica hardware {'attiva' if imp.vaapi else 'non disponibile'}")
+    print(f"  {SPUNTA if imp.get('NTFY_TOPIC') else '–'} Notifiche sul telefono (ntfy)"
           + (f": argomento \"{imp.get('NTFY_TOPIC')}\"" if imp.get("NTFY_TOPIC") else ": non impostate"))
 
     for n in esito.note:
@@ -134,7 +134,7 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
     if esito.falliti:
         titolo("Cosa non è andato")
         for nome, errore in esito.falliti:
-            print(f"  ✘ {nome}: {errore.cosa}")
+            print(f"  {CROCE} {nome}: {errore.cosa}")
             if errore.cosa_fare:
                 print(f"      Cosa fare: {errore.cosa_fare}")
 

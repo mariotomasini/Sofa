@@ -234,12 +234,15 @@ function disegnaAvanzamento(s) {
   $("av-etichetta").textContent = STATO.configurato && !seguoPrimaInstallazione ? "Impostazioni" : "Installazione";
   $("av-passi").innerHTML = (a.passi || []).map(htmlPasso).join("") ||
     '<li class="in_corso"><span class="pallino" aria-hidden="true"></span><span>Preparo tutto…</span></li>';
-  const sc = a.scarico;
-  const scaricando = sc && a.stato === "in_corso";
-  $("av-scarico").hidden = !scaricando;
-  if (scaricando) {
-    $("av-barra").style.width = `${Math.round((sc.n / sc.di) * 100)}%`;
-    $("av-scarico-testo").textContent = `Scarico ${sc.nome} (${sc.n} di ${sc.di})`;
+  // una barra sola: prima i download, poi la configurazione dei programmi
+  const sc = a.scarico, cf = a.configurazione;
+  const barra = a.stato === "in_corso" && (sc || cf);
+  $("av-scarico").hidden = !barra;
+  if (barra) {
+    const [n, di, testo] = sc ? [sc.n, sc.di, `Scarico ${sc.nome} (${sc.n} di ${sc.di})`]
+      : [cf.n - 1, cf.di, `Configuro ${cf.nome} (${cf.n} di ${cf.di})`];
+    $("av-barra").style.width = `${Math.max(3, Math.round((n / di) * 100))}%`;
+    $("av-scarico-testo").textContent = testo;
   }
   $("av-ultima").textContent = a.stato === "in_corso" ? (a.ultima_riga || "") : "";
   const finito = a.stato === "fatto" || a.stato === "errore";
