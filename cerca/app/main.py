@@ -387,12 +387,20 @@ async def api_novita(request: Request, mondo: str = "film"):
     return risposta
 
 
+HOME_PRONTE: dict[tuple, tuple[float, dict]] = {}
+DURATA_HOME = 600  # la home già pronta vale 10 minuti: aprire Cerca non rifà tutto ogni volta
+
+
 @app.get("/api/home")
 async def api_home(request: Request, mondo: str = "film"):
     """Le righe della home in stile Netflix di Film e Serie TV."""
     s = servizi(request)
     if in_kids(request) or mondo not in ("film", "serie"):
         return {"righe": []}
+    chiave = (mondo, tuple(piattaforme_scelte(s) or ()))
+    pronta = HOME_PRONTE.get(chiave)
+    if pronta and pronta[0] > time.monotonic():
+        return pronta[1]
     risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo), piattaforme_scelte(s))
     if mondo == "serie" and s.config.sonarr_url:
         try:
@@ -401,7 +409,24 @@ async def api_home(request: Request, mondo: str = "film"):
             episodi = []
         if episodi:
             risposta["righe"].append({"tipo": "episodi", "titolo": "Nuovi episodi delle tue serie", "elementi": episodi})
+    if risposta.get("righe") and not risposta.get("errore"):
+        HOME_PRONTE[chiave] = (time.monotonic() + DURATA_HOME, risposta)
     return risposta
+
+
+@app.get("/api/vista/{piattaforma}")
+async def api_vista(request: Request, piattaforma: int, mondo: str = "film"):
+    """La home di una piattaforma (Netflix, Prime Video…): in evidenza, Top 10, novità e generi."""
+    s = servizi(request)
+    tipo = tipo_tmdb("serie" if mondo == "serie" else "film")
+    if hasattr(s.tmdb, "vista_piattaforma"):
+        return await s.tmdb.vista_piattaforma(tipo, piattaforma)
+    # con la chiave TMDB: una riga sola con i più visti
+    nome = next((p["nome"] for p in await s.tmdb.piattaforme(tipo) if p["id"] == piattaforma), "")
+    elenco = await s.tmdb.su_piattaforma(tipo, piattaforma)
+    return {"piattaforma": {"id": piattaforma, "nome": nome}, "tipo": tipo,
+            "in_evidenza": elenco[0] if elenco else None,
+            "righe": [{"tipo": "genere", "titolo": f"I più visti su {nome}", "elementi": elenco}] if elenco else []}
 
 
 def piattaforme_scelte(s: Servizi) -> list[int] | None:

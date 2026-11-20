@@ -206,6 +206,19 @@ MEMORIA_SECONDI = 300  # le risposte già lette restano in memoria 5 minuti
 MEMORIA_MASSIMA = 400
 
 
+# Le righe per genere della vista di una piattaforma (codici JustWatch)
+VISTA_GENERI_FILM = [
+    ("drm", "Film drammatici"), ("act", "Film d'azione"), ("cmy", "Film commedia"), ("fml", "Film per famiglie"),
+    ("trl", "Thriller"), ("rma", "Film romantici"), ("scf", "Fantascienza"), ("hrr", "Horror"),
+    ("ani", "Animazione"), ("crm", "Crime"), ("doc", "Documentari"),
+]
+VISTA_GENERI_SERIE = [
+    ("drm", "Serie drammatiche"), ("crm", "Serie crime"), ("cmy", "Serie commedia"), ("act", "Azione e avventura"),
+    ("scf", "Fantascienza e fantasy"), ("trl", "Thriller e misteri"), ("ani", "Animazione e anime"),
+    ("fml", "Per tutta la famiglia"), ("doc", "Documentari"),
+]
+
+
 class CatalogoLibero:
     def __init__(self, config: Config, archivio: Archivio, client: httpx.AsyncClient) -> None:
         self.config = config
@@ -583,6 +596,50 @@ class CatalogoLibero:
         )
         ids = list(dict.fromkeys(int(r["tmdb"]) for r in righe if r.get("tmdb", "").isdigit()))
         return await self._da_id(ids[:24])
+
+    async def vista_piattaforma(self, tipo: str, piattaforma: int, oggi: dt.date | None = None) -> dict:
+        """La "home" di una piattaforma: in evidenza, Top 10, novità e una riga per genere.
+
+        Tutto con una sola richiesta a JustWatch (salvata 6 ore): si apre in un attimo.
+        """
+        voce = next((p for p in justwatch.PIATTAFORME if p[0] == piattaforma), None)
+        if voce is None:
+            raise ErroreServizio("Piattaforma sconosciuta.", "Torna indietro e scegline un'altra.")
+        _, nome, codice = voce
+        serie = tipo == "tv"
+        oggi = oggi or dt.date.today()
+        generi = VISTA_GENERI_SERIE if serie else VISTA_GENERI_FILM
+        base = {"serie": serie, "piattaforme": [codice]}
+        sezioni = {"top": {**base, "quanti": 12}, "nuovi": {**base, "dal_anno": oggi.year - 1, "quanti": 24}}
+        for codice_genere, _titolo in generi:
+            sezioni[f"g_{codice_genere}"] = {**base, "generi": [codice_genere], "quanti": 24}
+        dati = await self._json(
+            justwatch.INDIRIZZO, {}, 6 * 3600, corpo=justwatch.corpo_vista(sezioni, paese=self.config.paese),
+            intestazioni={"User-Agent": AGENTE}, limitatore=_justwatch, nome="JustWatch",
+            snellisci=justwatch.titoli_vista,
+        )
+        top = (dati.get("top") or [])[:10]
+        posizioni = {t["id"]: i + 1 for i, t in enumerate(top)}
+        nuovi = {t["id"] for t in dati.get("nuovi") or []}
+
+        def etichette(elenco: list[dict]) -> list[dict]:
+            return [{**t, **({"top10": posizioni[t["id"]]} if t["id"] in posizioni else {}),
+                     **({"nuovo": True} if t["id"] in nuovi else {})} for t in elenco]
+
+        parola = "delle serie" if serie else "dei film"
+        righe = []
+        if top:
+            righe.append({"tipo": "top10", "titolo": f"Top 10 {parola} su {nome} oggi", "elementi": etichette(top)})
+        if dati.get("nuovi"):
+            righe.append({"tipo": "nuovi", "titolo": f"Novità su {nome}", "elementi": etichette(dati["nuovi"])})
+        for codice_genere, titolo in generi:
+            elenco = dati.get(f"g_{codice_genere}") or []
+            if len(elenco) >= 4:
+                righe.append({"tipo": "genere", "titolo": titolo, "codice": codice_genere, "elementi": etichette(elenco)})
+        in_evidenza = next((t for t in top if t.get("sfondo")), top[0] if top else None)
+        return {"piattaforma": {"id": piattaforma, "nome": nome}, "tipo": tipo,
+                "in_evidenza": {**in_evidenza, "top10": posizioni.get(in_evidenza["id"])} if in_evidenza else None,
+                "righe": righe}
 
     async def provider(self, tmdb_id: int, durata_cache: float = 12 * 3600) -> dict:
         """Senza chiave TMDB non sappiamo dove si guarda: rimandiamo alla ricerca di JustWatch."""

@@ -249,6 +249,13 @@ qBittorrent è impostato in modo fisso così:
 
 ---
 
+
+### Le piattaforme (Netflix, Prime Video, Disney+, NOW…)
+
+Sotto la ricerca trovi una fila con le piattaforme. Toccane una: si apre la sua "home", con in alto il titolo più visto di oggi, la **Top 10** con i numeri grandi, le **novità** e una riga per genere (drammatici, azione, commedia, famiglie…). In alto scegli **Serie** o **Film**, e da **Categorie** salti direttamente a un genere. Le etichette **TOP 10** e **Aggiunto di recente** dicono cosa è in classifica e cosa è appena arrivato. I titoli vengono da JustWatch e sono quelli che si guardano adesso in Italia su quella piattaforma.
+
+Cerca si ricorda l'ultima home che hai visto: quando la riapri compare subito, e si aggiorna in sottofondo solo se nel frattempo è cambiato qualcosa (al massimo ogni 10 minuti).
+
 ## Serie, anime e musica
 
 ### Serie TV

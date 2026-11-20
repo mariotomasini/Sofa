@@ -686,3 +686,188 @@ button:disabled { background: var(--pannello-2); color: var(--tenue); opacity: 1
 
 #dialogo-serie { max-height: 92vh; max-height: 92dvh; overflow: auto; }
 .serie-puntate { max-height: 45vh; overflow: auto; }
+
+/* =============================================================================
+   Tema "streaming": nero, un solo rosso, locandine in primo piano.
+   Si appoggia sopra lo stile di base: colori, forme e componenti della home.
+   ============================================================================= */
+:root {
+  --sfondo: #000;
+  --pannello: #141414;
+  --pannello-2: #262626;
+  --pannello-3: #0b0b0b;
+  --pannello-caldo: #1f1f1f;
+  --bordo: #3a3a3a;
+  --bordo-caldo: #4a4a4a;
+  --linea: #1c1c1c;
+  --testo: #fff;
+  --testo-2: #e5e5e5;
+  --tenue: #b3b3b3;
+  --segnaposto: #8c8c8c;
+  --rosso-vivo: #e50914;
+  --accento-film: var(--rosso-vivo);
+  --accento-serie: var(--rosso-vivo);
+  --accento-musica: var(--rosso-vivo);
+  --accento: var(--rosso-vivo);
+  --su-accento: #fff;
+  --raggio-s: 6px;
+  --raggio: 6px;
+  --raggio-l: 12px;
+  --font: "Helvetica Neue", Helvetica, Arial, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+body[data-mondo="serie"], body[data-mondo="musica"] { --accento: var(--rosso-vivo); }
+body { background: var(--sfondo); letter-spacing: .005em; }
+
+/* testata trasparente sopra le locandine */
+.testata { background: linear-gradient(rgb(0 0 0 / .92), rgb(0 0 0 / .75)); backdrop-filter: blur(10px); border-bottom: 0; }
+.logo-segno { color: var(--rosso-vivo); }
+.nav-voce:hover { background: rgb(255 255 255 / .08); }
+.nav-voce[aria-current="page"] { background: transparent; color: #fff; text-decoration: underline 2px var(--rosso-vivo); text-underline-offset: 8px; }
+.nav-voce[aria-current="page"] .contatore { background: var(--rosso-vivo); color: #fff; }
+
+/* pulsanti: rosso pieno, bianco per l'azione principale delle locandine, grigio per le secondarie */
+button, .bottone { border-radius: var(--raggio); }
+button.secondario, .bottone.secondario { background: rgb(109 109 110 / .7); color: #fff; }
+button.contorno, .bottone.contorno { border-color: rgb(255 255 255 / .35); }
+.bottone.bianco { background: #fff; color: #000; }
+.bottone.grigio { background: rgb(109 109 110 / .7); color: #fff; }
+.bottone.bianco:hover, .bottone.grigio:hover { filter: brightness(.9); }
+
+/* chip: mondi, generi, piattaforme */
+.mondo, .genere, .chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: .35rem; min-height: 40px; padding: 0 1rem;
+  background: rgb(255 255 255 / .06); border: 1px solid rgb(255 255 255 / .32); border-radius: var(--raggio-pill);
+  color: #fff; text-decoration: none; font-size: .95rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.mondo .pallino { display: none; }
+.mondo:hover, .genere:hover, .chip:hover { background: rgb(255 255 255 / .14); border-color: rgb(255 255 255 / .6); color: #fff; }
+.mondo[aria-current="page"], .genere[aria-current="page"], .chip[aria-current="page"] { background: #fff; border-color: #fff; color: #000; }
+.chip-piattaforme, .chip-vista { display: flex; gap: .5rem; overflow-x: auto; margin: .9rem -4px 0; padding: 4px; scrollbar-width: none; }
+.chip-piattaforme::-webkit-scrollbar, .chip-vista::-webkit-scrollbar { display: none; }
+.chip-vista { justify-content: center; overflow: visible; flex-wrap: wrap; margin-bottom: .4rem; }
+.chip-menu { position: relative; padding: 0; }
+.chip-menu summary { list-style: none; display: flex; align-items: center; gap: .3rem; min-height: 40px; padding: 0 1rem; }
+.chip-menu summary::-webkit-details-marker { display: none; }
+.chip-menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.menu-categorie {
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 25;
+  display: flex; flex-direction: column; min-width: 240px; max-height: 60vh; overflow-y: auto;
+  background: rgb(20 20 20 / .97); border: 1px solid #333; border-radius: var(--raggio-l); padding: .4rem;
+  box-shadow: 0 16px 40px rgb(0 0 0 / .7);
+}
+.menu-categorie a { color: #fff; text-decoration: none; padding: .7rem 1rem; border-radius: var(--raggio); font-weight: 400; }
+.menu-categorie a:hover { background: rgb(255 255 255 / .1); }
+
+/* ricerca */
+.ricerca input[type="search"] { background: #141414; border: 1px solid #333; border-radius: var(--raggio); color: #fff; }
+.ricerca input[type="search"]:focus { border-color: #fff; }
+.ricerca button { border-radius: var(--raggio); }
+
+/* righe di locandine */
+.riga-testa h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: .7rem; }
+.riga-testa .link-accento { color: var(--tenue); font-weight: 600; text-decoration: none; }
+.striscia { gap: 8px; }
+.scheda { position: relative; }
+.scheda > .poster { position: relative; display: block; border-radius: var(--raggio); overflow: hidden; }
+.scheda > .poster > img, .scheda > .poster > .senza-poster {
+  width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--raggio); background: #1a1a1a;
+  transition: transform .18s ease;
+}
+.scheda:hover > .poster > img { transform: scale(1.04); }
+.scheda:focus-visible > .poster { outline: var(--focus); outline-offset: 3px; }
+.scheda > img, .scheda > .senza-poster { border-bottom: 0; border-radius: var(--raggio); }
+/* nelle righe solo locandine (il titolo c'è già sopra); nei risultati e negli episodi resta */
+.striscia > .scheda > .titolo, .striscia > .scheda > .anno { display: none; }
+.riga-episodi .striscia > .scheda > .titolo, .riga-episodi .striscia > .scheda > .anno { display: block; }
+.senza-poster { background: #1f1f1f !important; border-color: #2a2a2a; }
+.senza-poster::after { background: var(--rosso-vivo); }
+
+/* etichette: "TOP 10" nell'angolo, "Aggiunto di recente" in fondo alla locandina */
+.etichetta-top {
+  position: absolute; top: 0; right: 0; z-index: 2; display: flex; flex-direction: column; align-items: center;
+  background: var(--rosso-vivo); color: #fff; font-weight: 800; font-size: 7px; line-height: 1; letter-spacing: .02em;
+  padding: 2px 3px 2px; border-radius: 0 var(--raggio) 0 3px;
+}
+.etichetta-top b { font-size: 12px; letter-spacing: -.03em; }
+.nastro {
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 2; white-space: nowrap;
+  background: var(--rosso-vivo); color: #fff; font-size: 8.5px; font-weight: 700; letter-spacing: -.01em; padding: 2px 4px;
+  border-radius: 3px 3px 0 0;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Top 10: numeri grandi neri con il bordo chiaro, locandina accanto */
+.striscia-top { gap: 4px; }
+.scheda-top .numero {
+  color: #000; -webkit-text-stroke: 2px rgb(255 255 255 / .85); paint-order: stroke;
+  font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif; font-weight: 900;
+}
+.scheda-top .poster-top { position: relative; z-index: 1; flex: 0 0 auto; width: var(--locandina); border-radius: var(--raggio); overflow: hidden; }
+.scheda-top .poster-top > img, .scheda-top .poster-top > .senza-poster {
+  width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: #1a1a1a; transition: transform .18s ease;
+}
+.scheda-top:hover .poster-top > img { transform: scale(1.04); }
+.scheda-top:focus-visible .poster-top { outline: var(--focus); outline-offset: 3px; }
+
+/* in evidenza: la locandina grande in cima alla home e alle piattaforme */
+.vetrina {
+  position: relative; margin: 1.1rem auto 2rem; max-width: 460px; border-radius: var(--raggio-l); overflow: hidden;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .14), 0 24px 60px rgb(0 0 0 / .7); background: #141414;
+}
+.vetrina picture, .vetrina img { display: block; width: 100%; }
+.vetrina img { aspect-ratio: 2 / 3; object-fit: cover; }
+.vetrina-testo {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 5rem 1.1rem 1.1rem; text-align: center;
+  background: linear-gradient(transparent, rgb(0 0 0 / .55) 35%, rgb(0 0 0 / .92));
+}
+.vetrina-testo h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.vetrina-top { display: flex; align-items: center; justify-content: center; gap: .55rem; margin: 0 0 .35rem; font-size: 1rem; font-weight: 600; }
+.vetrina-top .etichetta-top { position: static; border-radius: 3px; }
+.vetrina-generi { margin: 0 0 .9rem; font-size: .95rem; color: #fff; }
+.vetrina-azioni { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: .6rem; }
+.vetrina-azioni .bottone { min-height: 48px; font-size: 1.05rem; }
+@media (min-width: 900px) {
+  .vetrina { max-width: none; margin-top: 1.4rem; }
+  .vetrina img { aspect-ratio: 21 / 8; object-position: center 25%; }
+  .vetrina-testo { top: 0; right: auto; width: min(46%, 560px); padding: 2.4rem; text-align: left; display: flex; flex-direction: column; justify-content: flex-end;
+    background: linear-gradient(90deg, rgb(0 0 0 / .9), rgb(0 0 0 / .55) 65%, transparent); }
+  .vetrina-testo h2 { position: static; width: auto; height: auto; clip: auto; font-size: 2.6rem; margin-bottom: .7rem; }
+  .vetrina-top { justify-content: flex-start; }
+  .vetrina-azioni { grid-template-columns: repeat(2, max-content); }
+  .vetrina-azioni .bottone { padding: 0 1.8rem; }
+}
+
+/* testa della vista di una piattaforma */
+.vista-testa { position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; }
+.vista-testa h1 { font-size: 1.4rem; }
+.indietro {
+  position: absolute; left: 0; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / .3); color: #fff; background: rgb(255 255 255 / .05);
+}
+.indietro svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* pannelli, avvisi, finestre */
+.errore, .nota, .riquadro-download, dialog { background: #141414; border-color: #2a2a2a; }
+dialog { color: #fff; border: 1px solid #2a2a2a; border-radius: var(--raggio-l); }
+.piede { color: #737373; }
+.piede a { color: #a3a3a3; }
+
+/* barra in basso del telefono: una pillola scura sospesa */
+@media (max-width: 760px) {
+  :root { --locandina: 102px; }
+  .riga-testa h2 { font-size: 1.08rem; margin-bottom: .5rem; }
+  .righe h2 { margin-top: 1.5rem; }
+  .striscia-top { grid-auto-columns: calc(var(--locandina) * 1.55); }
+  .barra-basso {
+    left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); min-height: 66px; padding: .3rem;
+    border-radius: var(--raggio-pill); border: 1px solid rgb(255 255 255 / .08);
+    background: rgb(28 28 28 / .82); backdrop-filter: blur(20px) saturate(1.5); box-shadow: 0 10px 30px rgb(0 0 0 / .6);
+  }
+  .barra-basso > a, .barra-basso summary { color: #b3b3b3; font-weight: 500; min-height: 56px; border-radius: var(--raggio-pill); }
+  .barra-basso [aria-current="page"] { color: #fff; background: rgb(255 255 255 / .12); }
+  .barra-basso [aria-current="page"] .pillola { background: transparent; color: #fff; }
+  .barra-basso .punto { background: var(--rosso-vivo); }
+  .menu-altro { background: rgb(20 20 20 / .97); border-color: #333; border-radius: var(--raggio-l); }
+  body:not([data-kids]) { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .vetrina-azioni .bottone { min-height: 46px; font-size: 1rem; }
+}
