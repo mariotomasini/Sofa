@@ -3,6 +3,18 @@
 {% block contenuto %}
 <h1 class="titolo-pagina">Download</h1>
 <p class="sottotitolo">La pagina si aggiorna da sola. Quando un film è "Pronto in Jellyfin" lo trovi nella libreria Film.</p>
+<section id="sezione-automatici" hidden>
+  <h2>Scaricati in automatico</h2>
+  <div id="elenco-automatici" class="elenco-download"></div>
+</section>
+<section id="sezione-attesa" hidden>
+  <h2 id="titolo-attesa">In attesa della versione nella tua lingua</h2>
+  <p class="sottotitolo">Li hai già, ma in un'altra lingua: appena esce la versione nella lingua preferita
+    li sostituisco da solo. Ogni notte li ricerco tutti.</p>
+  <div id="elenco-attesa" class="elenco-download"></div>
+  <button type="button" class="secondario" id="cerca-ora">Cerca adesso</button>
+</section>
+<h2>Download da Cerca</h2>
 <div id="elenco-download" class="elenco-download"><p class="caricamento">Carico…</p></div>
 
 <dialog id="dialogo-associa" aria-labelledby="titolo-associa">

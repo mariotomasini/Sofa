@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..impostazioni import Impostazioni
 from ..messaggi import ok
 from .arr import Arr, campi_qbittorrent
-from .formati import NOME_PROFILO, assicura_profilo, imposta_dimensioni, preferisci_usenet
+from .formati import NOME_PROFILO, assicura_profilo, imposta_dimensioni, nomi_lingue, preferisci_usenet
 
 CARTELLA_SERIE = "/data/media/serie"
 CARTELLA_ANIME = "/data/media/anime"
@@ -56,11 +56,11 @@ def configura(imp: Impostazioni, esito) -> None:
         extra={"removeCompletedDownloads": True, "removeFailedDownloads": True, "priority": 1},
     )
     ok("qBittorrent collegato (categoria \"sonarr\")")
-    profilo = assicura_profilo(arr, qualita_ammessa)
+    profilo = assicura_profilo(arr, qualita_ammessa, imp.lingue_audio)
     da_spostare = [x["id"] for x in arr.get("series") if x.get("qualityProfileId") != profilo]
     if da_spostare:
         arr.put("series/editor", {"seriesIds": da_spostare, "qualityProfileId": profilo}, "aggiornare le serie seguite")
-    ok(f"Profilo qualità \"{NOME_PROFILO}\": audio italiano prima di tutto, poi 1080p, 720p, SD")
+    ok(f"Profilo qualità \"{NOME_PROFILO}\": lingue nell'ordine {nomi_lingue(imp.lingue_audio)}, poi 1080p, 720p, SD")
     max_gb = imp.dimensione_max_gb
     imposta_dimensioni(arr, max_gb)
     ok(f"Dimensione: film 1080p di 2 ore al massimo {max_gb:g} GB, preferiti intorno a {max_gb / 2:g} GB")

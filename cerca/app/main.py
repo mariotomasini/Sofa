@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from . import diagnosi
 from . import home as home_netflix
 from .archive import InternetArchive
+from .automatici import Automatici
 from .avvisami import Avvisami
 from .catalogo_libero import CatalogoLibero
 from .config import Config
@@ -81,6 +82,7 @@ class Servizi:
         self.download.notifica = self.avvisami.notifica
         self.serie = Serie(config, client)
         self.download.serie = self.serie
+        self.automatici = Automatici(config, self.radarr, self.serie)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
@@ -120,6 +122,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(60, servizi.disco.ciclo())),
             asyncio.create_task(dopo(300, manutenzione_cache(servizi.archivio))),
             asyncio.create_task(dopo(90, servizi.serie.sorveglia_importazioni(servizi.jellyfin))),
+            asyncio.create_task(servizi.automatici.ricerca_notturna()),
         ]
         log.info("Cerca è pronto")
         yield
@@ -721,6 +724,20 @@ async def api_download(request: Request):
 
 class RichiestaAssocia(BaseModel):
     tmdb_id: int
+
+
+@app.get("/api/automatici")
+async def api_automatici(request: Request):
+    """Cosa scaricano Radarr/Sonarr e cosa aspetta ancora la lingua preferita."""
+    s = servizi(request)
+    coda, attesa = await asyncio.gather(s.automatici.coda(), s.automatici.in_attesa())
+    return {"coda": coda, "attesa": attesa, "lingua_preferita": s.automatici.preferita}
+
+
+@app.post("/api/automatici/cerca")
+async def api_automatici_cerca(request: Request):
+    await servizi(request).automatici.cerca_tutto()
+    return {"messaggio": "Ricerca avviata: Radarr e Sonarr cercano le versioni migliori."}
 
 
 @app.post("/api/download/{id_download}/associa")

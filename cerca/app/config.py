@@ -32,6 +32,9 @@ class Config:
     jellyfin_url: str = field(default_factory=lambda: _env("JELLYFIN_URL", "http://jellyfin:8096/jellyfin"))
     lidarr_url: str = field(default_factory=lambda: _env("LIDARR_URL"))
     lidarr_chiave: str = field(default_factory=lambda: _env("LIDARR_API_KEY"))
+    lingue_audio: tuple[str, ...] = field(default_factory=lambda: tuple(
+        c.strip().lower() for c in (_env("LINGUE_AUDIO", "it,es,en") or "it,es,en").split(",") if c.strip()
+    ) or ("it", "es", "en"))
     sonarr_url: str = field(default_factory=lambda: _env("SONARR_URL"))
     sonarr_chiave: str = field(default_factory=lambda: _env("SONARR_API_KEY"))
     pulizia_visti: bool = field(default_factory=lambda: _env("PULIZIA_VISTI", "no").lower() in VERO)

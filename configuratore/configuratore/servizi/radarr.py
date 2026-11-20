@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..impostazioni import Impostazioni
 from ..messaggi import ok
 from .arr import Arr, campi_qbittorrent
-from .formati import NOME_PROFILO, assicura_profilo, imposta_dimensioni, preferisci_usenet
+from .formati import NOME_PROFILO, assicura_profilo, imposta_dimensioni, nomi_lingue, preferisci_usenet
 
 CARTELLA_FILM = "/data/media/film"
 
@@ -74,15 +74,16 @@ def configura(imp: Impostazioni, esito) -> None:
     ok("qBittorrent collegato (categoria \"radarr\")")
 
     qualsiasi = arr.id_lingua("Any")
-    profilo = assicura_profilo(arr, qualita_ammessa, {"id": qualsiasi, "name": "Any"} if qualsiasi is not None else None)
+    lingua = {"id": qualsiasi, "name": "Any"} if qualsiasi is not None else None
+    profilo = assicura_profilo(arr, qualita_ammessa, imp.lingue_audio, lingua)
     da_spostare = [m["id"] for m in arr.get("movie") if m.get("qualityProfileId") != profilo]
     if da_spostare:
         arr.put("movie/editor", {"movieIds": da_spostare, "qualityProfileId": profilo}, "aggiornare i film")
-    ok(f"Profilo qualità \"{NOME_PROFILO}\": audio italiano prima di tutto, poi 1080p, 720p, SD")
+    ok(f"Profilo qualità \"{NOME_PROFILO}\": lingue nell'ordine {nomi_lingue(imp.lingue_audio)}, poi 1080p, 720p, SD")
     max_gb = imp.dimensione_max_gb
     imposta_dimensioni(arr, max_gb)
     ok(f"Dimensione: film 1080p di 2 ore al massimo {max_gb:g} GB, preferiti intorno a {max_gb / 2:g} GB")
     if imp.tgarr:
         preferisci_usenet(arr)
         ok("A parità di lingua e qualità vince Telegram (tgarr)")
-    ok("Se non c'è l'italiano scarica la versione migliore e la sostituisce appena esce quella ITA")
+    ok("Se non c'è la prima lingua scarica la versione migliore e la sostituisce appena esce")

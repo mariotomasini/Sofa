@@ -143,64 +143,6 @@ function htmlProvider(d) {
   return html;
 }
 
-function htmlArchive(d) {
-  if (!d.versioni.length) {
-    return d.item_trovati
-      ? "<p>Ho trovato qualcosa su Internet Archive, ma nessun file sembra il film completo.</p>"
-      : "<p>Nessuna versione su Internet Archive.</p>";
-  }
-  let html = '<ul class="risultati">';
-  d.versioni.slice(0, 5).forEach((v, i) => {
-    const migliore = i === 0;
-    const dettagli = [v.altezza ? `${v.altezza}p` : "risoluzione sconosciuta", dimensione(v.dimensione)];
-    if (v.originale) dettagli.push("originale");
-    const dati = `data-identificativo="${esc(v.identificativo)}" data-nome="${esc(v.nome)}"`;
-    html += `<li class="${migliore ? "migliore" : ""}">` +
-      `<div class="descrizione">${migliore ? '<span class="badge">La migliore</span>' : ""}` +
-      `<strong>${esc(v.titolo_item || v.identificativo)}</strong>` +
-      `<span class="sottotitolo">${dettagli.map(esc).join(" · ")}` +
-      ` · <a href="${esc(v.pagina)}" target="_blank" rel="noopener">pagina e licenza</a>` +
-      `<span class="file"> · ${esc(v.nome)}</span></span></div>` +
-      `<div class="azioni">` +
-      `<button ${migliore ? "" : 'class="secondario" '}${dati} data-modo="http">Scarica</button>` +
-      `<button class="${migliore ? "contorno" : "testo"}" ${dati} data-modo="torrent">Via torrent</button>` +
-      "</div></li>";
-  });
-  return html + "</ul>";
-}
-
-function htmlProwlarr(d) {
-  if (d.avviso) {
-    return `<div class="nota"><strong>${esc(d.avviso)}</strong><p>${esc(d.cosa_fare || "")}</p></div>`;
-  }
-  if (!d.risultati.length) return `<p>Nessun risultato negli indexer (${d.indexer} attivi).</p>`;
-  const italiani = d.risultati.filter((r) => r.italiano);
-  const altri = d.risultati.filter((r) => !r.italiano);
-  // prima solo quelli in italiano; gli altri si aprono a richiesta
-  if (!italiani.length) {
-    return '<div class="nota"><strong>Nessun torrent in italiano per questo film.</strong>' +
-      "<p>Questi sono in altre lingue (di solito inglese).</p></div>" + listaTorrent(altri);
-  }
-  let html = listaTorrent(italiani);
-  if (altri.length) {
-    html += `<details class="altre-lingue"><summary>Mostra anche ${altri.length} in altre lingue</summary>` +
-      listaTorrent(altri) + "</details>";
-  }
-  return html;
-}
-
-function listaTorrent(elenco) {
-  let html = '<ul class="risultati">';
-  for (const r of elenco.slice(0, 25)) {
-    html += "<li>" +
-      `<div class="descrizione"><strong>${r.italiano ? '<span class="lingua">ITA</span> ' : ""}${esc(r.titolo)}</strong>` +
-      `<span class="sottotitolo">${dimensione(r.dimensione)} · seed ${r.seed ?? "?"} · peer ${r.peer ?? "?"} · ${esc(r.indexer)}` +
-      `${r.data ? " · " + esc(r.data) : ""}</span></div>` +
-      `<div class="azioni"><button class="secondario" data-risultato="${esc(r.id)}">Scarica</button></div></li>`;
-  }
-  return html + "</ul>";
-}
-
 // --- ricerca di un film da associare (torrent manuali) ------------------------
 function cercatoreFilm(campo, bottone, contenitore, quandoScelto) {
   async function cerca() {
@@ -289,6 +231,45 @@ function htmlDownload(d, compatto = false) {
     `</div><div class="azioni">${azioni}</div></div>`;
 }
 
+// Download di Radarr/Sonarr: la lingua sempre in vista, in giallo se non è quella preferita
+function etichettaLingua(x) {
+  if (x.preferita) return `<span class="lingua">${esc(x.lingua)}</span>`;
+  return `<span class="lingua altra">⚠ ${esc(x.lingua)} · non in ${esc(x.lingua_preferita.toLowerCase())}</span>`;
+}
+
+function htmlAutomatico(x, inCorso) {
+  const avanzamento = inCorso ? `${Math.round(x.percentuale)}%${x.stato ? " · " + esc(x.stato) : ""}` : "";
+  const nota = !x.preferita
+    ? `<span class="sottotitolo">Lo sostituisco da solo appena esce in ${esc(x.lingua_preferita.toLowerCase())}.</span>` : "";
+  return `<article class="download${x.preferita ? "" : " non-preferita"}"><div class="descrizione">` +
+    `<strong>${etichettaLingua(x)} ${esc(x.titolo)}</strong>` +
+    `<span class="sottotitolo">${esc(x.dettaglio)}${avanzamento ? " · " + avanzamento : ""}</span>${nota}</div></article>`;
+}
+
+function avviaAutomatici() {
+  const coda = document.getElementById("elenco-automatici");
+  const attesa = document.getElementById("elenco-attesa");
+  if (!coda) return;
+  async function aggiorna() {
+    try {
+      const d = await chiama("/api/automatici");
+      document.getElementById("sezione-automatici").hidden = !d.coda.length;
+      coda.innerHTML = d.coda.map((x) => htmlAutomatico(x, true)).join("");
+      document.getElementById("sezione-attesa").hidden = !d.attesa.length;
+      document.getElementById("titolo-attesa").textContent =
+        `In attesa della versione in ${d.lingua_preferita.toLowerCase()} (${d.attesa.length})`;
+      attesa.innerHTML = d.attesa.map((x) => htmlAutomatico(x, false)).join("");
+    } catch (e) { /* Radarr spento: restano i download di Cerca */ }
+  }
+  aggiorna();
+  setInterval(aggiorna, 10000);
+  document.getElementById("cerca-ora").addEventListener("click", async (ev) => {
+    ev.target.disabled = true;
+    try { avviso((await chiama("/api/automatici/cerca", { method: "POST" })).messaggio); }
+    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); ev.target.disabled = false; }
+  });
+}
+
 function avviaDownload({ soloAttivi }) {
   const contenitore = document.getElementById(soloAttivi ? "elenco-attivi" : "elenco-download");
   const sezione = document.getElementById("attivi");
@@ -307,6 +288,7 @@ function avviaDownload({ soloAttivi }) {
   }
   aggiorna();
   setInterval(aggiorna, 4000);
+  if (!soloAttivi) avviaAutomatici();
 
   contenitore.addEventListener("click", async (ev) => {
     const b = ev.target.closest("button");
@@ -511,7 +493,7 @@ function htmlInEvidenza(f, mondo, dove) {
   const generi = [f.serie ? "Serie" : "Film", ...(f.genre_ids || []).map((g) => NOMI_GENERI[g]).filter(Boolean).slice(0, 2)];
   const sonarr = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
   const azioni = f.serie
-    ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">+</span> Segui la serie</a>`
+    ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">⬇</span> Download</a>`
     : `<a class="bottone bianco" href="${BASE}/film/${f.id}"><span aria-hidden="true">▶</span> Scarica</a>` +
       `<a class="bottone grigio" href="${BASE}/film/${f.id}"><span aria-hidden="true">ⓘ</span> Scheda</a>`;
   const top = f.top10 ? `<p class="vetrina-top">${htmlEtichette({ top10: 1 })} N° ${f.top10} oggi ${dove ? "su " + esc(dove) : (f.serie ? "tra le serie" : "tra i film")}</p>` : "";
@@ -776,13 +758,11 @@ function dialogoSerie() {
   <div class="modulo">
     <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
     <p id="serie-trama" class="serie-trama"></p>
-    <p class="sottotitolo">Scarico tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono. Le trovi in Jellyfin.</p>
+    <button type="button" id="serie-segui" class="scarica-grande">⬇ Download</button>
+    <p class="sottotitolo">Scarica tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono:
+      sceglie da solo la versione migliore (prima in italiano) e le mette in Jellyfin con i sottotitoli.</p>
     <p id="serie-esito" class="messaggio-serie" role="status"></p>
-    <div id="serie-puntate" class="serie-puntate" hidden></div>
     <div class="azioni-riga">
-      <button type="button" id="serie-segui">Segui la serie</button>
-      <button type="button" id="serie-cerca" hidden>Cerca le puntate</button>
-      <a class="bottone secondario" id="serie-sonarr">Apri in Sonarr</a>
       <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
     </div>
   </div>
@@ -799,67 +779,15 @@ function dialogoSerie() {
       const s = JSON.parse(d.dataset.serie);
       const r = await inviaJSON("/api/serie/segui", { titolo: s.titolo, imdb: s.imdb, tvdb: s.tvdb, tmdb: s.tmdb });
       esito.className = "messaggio-serie ok";
-      esito.textContent = r.messaggio + (r.serie_id ? " Se Sonarr non le trova da solo, premi \"Cerca le puntate\"." : "");
-      b.textContent = "La segui";
-      if (r.serie_id) {
-        d.dataset.serieId = r.serie_id;
-        document.getElementById("serie-cerca").hidden = false;
-      }
+      esito.textContent = r.messaggio;
+      b.textContent = "✓ In download";
     } catch (e) {
       esito.className = "messaggio-serie errore";
       esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
       b.disabled = false;
     }
   });
-  document.getElementById("serie-cerca").addEventListener("click", () => cercaPuntate(d));
-  document.getElementById("serie-puntate").addEventListener("click", async (ev) => {
-    const bottone = ev.target.closest("button[data-puntata]");
-    if (!bottone) return;
-    bottone.disabled = true;
-    const s = JSON.parse(d.dataset.serie);
-    try {
-      const r = await inviaJSON("/api/serie/scarica", {
-        serie_id: Number(d.dataset.serieId), id: bottone.dataset.puntata, nome: s.nome, poster: s.poster,
-      });
-      bottone.textContent = "Avviato";
-      avviso(r.messaggio);
-    } catch (e) {
-      bottone.disabled = false;
-      avviso(`${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`, true);
-    }
-  });
   return d;
-}
-
-// Le puntate cercate da Cerca con il titolo italiano: Sonarr da solo usa quello inglese
-async function cercaPuntate(d) {
-  const box = document.getElementById("serie-puntate");
-  const s = JSON.parse(d.dataset.serie);
-  box.hidden = false;
-  box.innerHTML = '<p class="caricamento">Cerco le puntate sugli indexer… (anche un minuto)</p>';
-  try {
-    const r = await chiama(`/api/serie/${d.dataset.serieId}/torrent?nome=${encodeURIComponent(s.nome || "")}` +
-      `&originale=${encodeURIComponent(s.titolo || "")}`, { attesa: 120000 });
-    if (r.avviso) {
-      box.innerHTML = `<div class="nota"><strong>${esc(r.avviso)}</strong><p>${esc(r.cosa_fare || "")}</p></div>`;
-      return;
-    }
-    const italiani = r.risultati.filter((x) => x.italiano);
-    const altri = r.risultati.filter((x) => !x.italiano);
-    const riga = (x) => `<li><div class="descrizione"><strong>${x.italiano ? '<span class="lingua">ITA</span> ' : ""}` +
-      `${esc(x.contenuto || x.titolo)}</strong><span class="sottotitolo">${esc(x.contenuto ? x.titolo : "")}` +
-      `${x.contenuto ? " · " : ""}${dimensione(x.dimensione)} · seed ${x.seed ?? "?"}</span></div>` +
-      `<div class="azioni"><button class="secondario" data-puntata="${esc(x.id)}">Scarica</button></div></li>`;
-    let html = italiani.length ? `<ul class="risultati">${italiani.slice(0, 25).map(riga).join("")}</ul>`
-      : '<p class="sottotitolo">Nessuna puntata in italiano: queste sono in altre lingue.</p>';
-    if (altri.length) {
-      const lista = `<ul class="risultati">${altri.slice(0, 25).map(riga).join("")}</ul>`;
-      html += italiani.length ? `<details class="altre-lingue"><summary>Mostra anche ${altri.length} in altre lingue</summary>${lista}</details>` : lista;
-    }
-    box.innerHTML = html;
-  } catch (e) {
-    box.innerHTML = htmlErrore(e);
-  }
 }
 
 function apriSerie(dati, linkSonarr) {
@@ -872,13 +800,9 @@ function apriSerie(dati, linkSonarr) {
   document.getElementById("serie-anno").textContent =
     [dati.anno, dati.titolo !== dati.nome ? dati.titolo : ""].filter(Boolean).join(" · ");
   document.getElementById("serie-trama").textContent = dati.trama || "";
-  document.getElementById("serie-sonarr").href = linkSonarr;
   const b = document.getElementById("serie-segui");
   b.disabled = false;
-  b.textContent = "Segui la serie";
-  delete d.dataset.serieId;
-  document.getElementById("serie-cerca").hidden = true;
-  document.getElementById("serie-puntate").hidden = true;
+  b.textContent = "⬇ Download";
   document.getElementById("serie-esito").textContent = "";
   d.showModal();
 }
