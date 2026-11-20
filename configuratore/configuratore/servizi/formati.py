@@ -127,3 +127,43 @@ def assicura_profilo(arr: Arr, ammessa, lingua: dict | None = None) -> int:
         arr.put(f"qualityprofile/{esistente['id']}", profilo, "aggiornare il profilo qualità")
         return esistente["id"]
     return arr.post("qualityprofile", profilo, "creare il profilo qualità")["id"]
+
+
+# --- dimensione dei file ---------------------------------------------------------
+# Radarr e Sonarr misurano in MB per minuto. Riferimento: film di 2 ore.
+MINUTI_RIFERIMENTO = 120
+# quanto pesa ogni risoluzione rispetto al 1080p
+FATTORE_RISOLUZIONE = {1080: 1.0, 720: 0.6}
+FATTORE_SD = 0.35
+
+
+def limiti_dimensione(qualita: dict, max_gb: float) -> tuple[float, float] | None:
+    """(massimo, preferito) in MB/minuto per una qualità ammessa; None se 4K o non pertinente."""
+    risoluzione = qualita.get("resolution", 0)
+    if risoluzione > 1080:
+        return None
+    fattore = FATTORE_RISOLUZIONE.get(risoluzione, FATTORE_SD)
+    massimo = round(max_gb * 1024 / MINUTI_RIFERIMENTO * fattore, 1)
+    return massimo, round(massimo / 2, 1)  # preferisce file intorno a metà del massimo
+
+
+def imposta_dimensioni(arr: Arr, max_gb: float) -> None:
+    """Niente file enormi: un film 1080p di 2 ore al massimo `max_gb` GB, di solito la metà."""
+    definizioni = arr.get("qualitydefinition")
+    for d in definizioni:
+        limiti = limiti_dimensione(d.get("quality", {}), max_gb)
+        if limiti is None:
+            continue
+        massimo, preferito = limiti
+        d["maxSize"] = massimo
+        d["preferredSize"] = preferito
+        d["minSize"] = min(d.get("minSize") or 0, preferito)
+    arr.put("qualitydefinition/update", definizioni, "impostare le dimensioni massime")
+
+
+def preferisci_usenet(arr: Arr) -> None:
+    """A parità di punteggio (stessa lingua e qualità) vince la fonte Usenet/Telegram (tgarr)."""
+    for profilo in arr.get("delayprofile"):
+        if profilo.get("preferredProtocol") != "usenet":
+            profilo["preferredProtocol"] = "usenet"
+            arr.put(f"delayprofile/{profilo['id']}", profilo, "preferire Telegram (tgarr)")

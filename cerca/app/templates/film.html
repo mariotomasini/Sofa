@@ -26,38 +26,17 @@
   </header>
 
   <div class="film-corpo{% if kids %} solo-guarda{% endif %}">
+    {% if kids %}
     <section class="blocco dove-vederlo" id="provider" aria-labelledby="titolo-provider">
-      <h2 id="titolo-provider">Dove vederlo legalmente in Italia</h2>
+      <h2 id="titolo-provider">Dove vederlo</h2>
       <div class="contenuto"><p class="caricamento">Cerco…</p></div>
-      {% if con_tmdb %}
-      <p class="attribuzione">Dati sulla disponibilità forniti da
-        <a href="https://www.justwatch.com/it" target="_blank" rel="noopener"><strong>JustWatch</strong></a>.</p>
-      {% endif %}
     </section>
-
-    {% if not kids %}
-    <div class="colonna-scarica">
-      <section class="blocco" id="auto" aria-labelledby="titolo-auto">
-        <h2 id="titolo-auto">Scarica</h2>
-        <p class="sottotitolo">Un clic e basta: sceglie da solo la versione migliore (prima in italiano),
-          la scarica e la mette in Jellyfin con i sottotitoli. Se più avanti esce in italiano, la sostituisce.</p>
-        <button type="button" id="scarica-auto">⬇ Scarica</button>
-      </section>
-
-      <section class="blocco" id="archive" aria-labelledby="titolo-archive">
-        <h2 id="titolo-archive">Scarica da Internet Archive</h2>
-        <p class="sottotitolo">Molti film sono di pubblico dominio: controlla la licenza nella pagina dell'item.</p>
-        <div class="contenuto"><p class="caricamento">Cerco…</p></div>
-      </section>
-
-      <details class="blocco chiuso" id="prowlarr">
-        <summary>
-          <span><strong>Altre fonti (indexer)</strong><span class="sottotitolo" id="riassunto-prowlarr">Cerco… (può richiedere fino a un minuto)</span></span>
-          <span class="mostra" aria-hidden="true">Mostra ▾</span>
-        </summary>
-        <div class="contenuto"><p class="caricamento">Cerco…</p></div>
-      </details>
-    </div>
+    {% else %}
+    <section class="blocco" id="auto">
+      <button type="button" id="scarica-auto" class="scarica-grande">⬇ Download</button>
+      <p class="sottotitolo">Sceglie da solo la versione migliore (prima in italiano), la scarica e la mette
+        in Jellyfin con i sottotitoli.</p>
+    </section>
     {% endif %}
   </div>
 </article>

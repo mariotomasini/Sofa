@@ -74,61 +74,23 @@ function htmlSenzaPoster(titolo, anno) {
 
 // --- pagina del film ------------------------------------------------------
 function avviaFilm(tmdbId) {
-  const sezione = (id) => document.querySelector(`#${id} .contenuto`);
-
-  // Le ricerche partono insieme, ognuna riempie la sua sezione.
-  chiama(`/api/film/${tmdbId}/provider`)
-    .then((d) => { sezione("provider").innerHTML = htmlProvider(d); })
-    .catch((e) => { sezione("provider").innerHTML = htmlErrore(e); });
-
-  if (document.getElementById("archive")) {
-    chiama(`/api/film/${tmdbId}/archive`)
-      .then((d) => { sezione("archive").innerHTML = htmlArchive(d); })
-      .catch((e) => { sezione("archive").innerHTML = htmlErrore(e); });
-
-    const riassunto = document.getElementById("riassunto-prowlarr");
-    chiama(`/api/film/${tmdbId}/prowlarr`, { attesa: 120000 })
-      .then((d) => {
-        sezione("prowlarr").innerHTML = htmlProwlarr(d);
-        riassunto.textContent = d.avviso ? d.avviso
-          : `${d.risultati.filter((r) => r.italiano).length} in italiano su ${d.risultati.length}`;
-      })
-      .catch((e) => { sezione("prowlarr").innerHTML = htmlErrore(e); riassunto.textContent = e.errore || "Errore"; });
-
-    const auto = document.getElementById("scarica-auto");
-    if (auto) auto.addEventListener("click", async () => {
-      auto.disabled = true;
-      try {
-        const r = await inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId });
-        avviso(r.messaggio);
-        auto.textContent = "✓ In download";
-      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); auto.disabled = false; }
-    });
-
-    document.getElementById("archive").addEventListener("click", async (ev) => {
-      const b = ev.target.closest("button[data-identificativo]");
-      if (!b) return;
-      b.disabled = true;
-      try {
-        const r = await inviaJSON("/api/scarica/archive", {
-          tmdb_id: tmdbId, identificativo: b.dataset.identificativo, nome: b.dataset.nome, modo: b.dataset.modo,
-        });
-        avviso(r.messaggio);
-        b.textContent = "✓ Avviato";
-      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
-    });
-
-    document.getElementById("prowlarr").addEventListener("click", async (ev) => {
-      const b = ev.target.closest("button[data-risultato]");
-      if (!b) return;
-      b.disabled = true;
-      try {
-        const r = await inviaJSON("/api/scarica/prowlarr", { tmdb_id: tmdbId, id: b.dataset.risultato });
-        avviso(r.messaggio);
-        b.textContent = "✓ Avviato";
-      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
-    });
+  const provider = document.querySelector("#provider .contenuto");
+  if (provider) {
+    chiama(`/api/film/${tmdbId}/provider`)
+      .then((d) => { provider.innerHTML = htmlProvider(d); })
+      .catch((e) => { provider.innerHTML = htmlErrore(e); });
   }
+
+  // Un solo tasto: Radarr sceglie la versione migliore (prima ITA) e fa tutto da solo
+  const auto = document.getElementById("scarica-auto");
+  if (auto) auto.addEventListener("click", async () => {
+    auto.disabled = true;
+    try {
+      const r = await inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId });
+      avviso(r.messaggio);
+      auto.textContent = "✓ In download";
+    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); auto.disabled = false; }
+  });
 
   const avvisami = document.getElementById("avvisami");
   if (avvisami) avvisami.addEventListener("click", async () => {

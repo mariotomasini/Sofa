@@ -910,3 +910,6 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
   .vetrina-top { font-size: .9rem; margin-bottom: .2rem; }
   .vetrina-generi { font-size: .85rem; margin-bottom: .6rem; }
 }
+
+/* Scheda film: un solo grande tasto Download */
+.scarica-grande { width: 100%; font-size: 1.25rem; padding: 1rem; }
