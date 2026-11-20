@@ -14,7 +14,7 @@ def attendi(
     nome: str,
     url: str,
     *,
-    timeout: float = 300,
+    timeout: float = 600,  # sui PC lenti la prima accensione di Radarr & co. supera i 5 minuti
     accetta: Callable[[httpx.Response], bool] | None = None,
     pausa: float = 3,
 ) -> httpx.Response:

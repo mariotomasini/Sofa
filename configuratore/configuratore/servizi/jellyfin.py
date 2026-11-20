@@ -55,7 +55,7 @@ class Jellyfin:
         self.token = ""
 
     # --- connessione -------------------------------------------------------
-    def attendi(self, timeout: float = 300) -> dict:
+    def attendi(self, timeout: float = 600) -> dict:
         """Attende Jellyfin sull'indirizzo /jellyfin.
 
         Durante l'avvio Jellyfin può rispondere per qualche secondo anche senza

@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import os
+import re
 import sys
+from pathlib import Path
 
 _COLORE = sys.stdout.isatty()
+
+
+def _windows() -> bool:
+    """La console di Windows non ha ✔ e ✘ (si vedono quadratini): lì usiamo √ e ×."""
+    try:
+        testo = (Path(os.environ.get("MEDIABOX_DIR", "/mediabox")) / ".env").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    trovata = re.search(r"^PIATTAFORMA=(\S+)", testo, re.M)
+    return bool(trovata) and trovata.group(1).lower() == "windows"
+
+
+SPUNTA, CROCE = ("√", "×") if _windows() else ("✔", "✘")
 
 
 def _c(codice: str, testo: str) -> str:
@@ -20,7 +36,7 @@ def info(testo: str) -> None:
 
 
 def ok(testo: str) -> None:
-    print(_c("32", f"  ✔ {testo}"), flush=True)
+    print(_c("32", f"  {SPUNTA} {testo}"), flush=True)
 
 
 def avviso(testo: str) -> None:
@@ -28,7 +44,7 @@ def avviso(testo: str) -> None:
 
 
 def errore(testo: str) -> None:
-    print(_c("31", f"  ✘ {testo}"), file=sys.stderr, flush=True)
+    print(_c("31", f"  {CROCE} {testo}"), file=sys.stderr, flush=True)
 
 
 class ErroreMediabox(Exception):
