@@ -65,6 +65,8 @@ class Servizi:
         self.archivio = Archivio(config.cartella_dati / "cerca.db")
         # con la chiave TMDB il catalogo completo, senza le fonti gratuite (Radarr, Wikidata, TVmaze)
         self.tmdb = TMDB(config, self.archivio, client) if config.con_tmdb else CatalogoLibero(config, self.archivio, client)
+        # le vecchie risposte complete (diversi MB) occupavano l'archivio: si riscaricano snellite
+        self.archivio.cache_togli("libero:")
         self.archive = InternetArchive(self.archivio, client)
         self.prowlarr = Prowlarr(config, self.archivio, client)
         self.qbit = QBittorrent(config, client)
