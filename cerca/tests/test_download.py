@@ -78,3 +78,17 @@ def test_percorso_per_jellyfin():
 
     assert percorso_per_jellyfin("/data/media/film/X (2000)") == "/data/film/X (2000)"
     assert percorso_per_jellyfin("/altro/x") == "/altro/x"
+
+
+def test_torrent_coerenti_con_il_film():
+    from app.prowlarr import corrisponde
+
+    titoli = ["The Matrix", "Matrix"]
+    assert corrisponde("Matrix.1999.iTA.ENG.1080p.BluRay", titoli, "1999")
+    assert corrisponde("The Matrix (1999) [720p]", titoli, "1999")
+    assert corrisponde("Matrix [DVDRip] ITA", titoli, "1999")  # senza anno va bene
+    assert not corrisponde("Matrix Reloaded 2003 1080p", titoli, "1999")  # altro anno
+    assert not corrisponde("Il Padrino 1972 ITA", titoli, "1999")  # altro film
+    assert not corrisponde("Animatrix 2003", titoli, "1999")  # parola dentro un'altra
+    assert corrisponde("Blade Runner 2049 (2017) ITA", ["Blade Runner 2049"], "2017")
+    assert corrisponde("Il.Gladiatore.2000.iTA", ["Gladiator", "Il gladiatore"], "2000")
