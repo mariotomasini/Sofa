@@ -41,8 +41,8 @@ def _configura(imp: Impostazioni) -> int:
         passi.append(("Beszel", beszel.configura))
     passi.append(("Jellyfin", jellyfin.configura))
 
-    for nome, funzione in passi:
-        titolo(f"Configuro {nome}")
+    for numero, (nome, funzione) in enumerate(passi, 1):
+        titolo(f"Configuro {nome} ({numero} di {len(passi)})")
         try:
             funzione(imp, esito)
             esito.ok(nome)

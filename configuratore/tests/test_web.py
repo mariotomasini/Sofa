@@ -105,6 +105,18 @@ def test_lettura_del_registro():
     assert a.ultima_riga == "Creo le librerie"
 
 
+def test_avanzamento_della_configurazione():
+    a = p.leggi_log(
+        "== Scarico i programmi ==\n  · Scarico radarr:7 (12 di 12)\n== Avvio i servizi ==\n"
+        "== Configuro qBittorrent (1 di 9) ==\n  √ Pronto\n== Configuro Radarr (2 di 9) ==\n"
+        "  · Attendo che Radarr sia pronto… 1:40 (al massimo 10:00)\n"
+    )
+    assert a.configurazione == {"nome": "Radarr", "n": 2, "di": 9}
+    assert a.scarico is None
+    assert [x["testo"] for x in a.passi][-1] == "Configuro Radarr"
+    assert a.ultima_riga == "Attendo che Radarr sia pronto… 1:40 (al massimo 10:00)"
+
+
 def test_registro_di_windows():
     a = p.leggi_log("== Configuro Bazarr ==\n  √ Pronto\n== Configuro Jellyfin ==\n  × Jellyfin non risponde.\n")
     assert [x["stato"] for x in a.passi] == ["fatto", "errore"]

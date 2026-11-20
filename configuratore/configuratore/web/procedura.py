@@ -281,6 +281,7 @@ class Avanzamento:
     stato: str = "nessuna"  # nessuna | attesa | in_corso | fatto | errore
     passi: list[dict] = field(default_factory=list)
     scarico: dict | None = None
+    configurazione: dict | None = None  # "Configuro Radarr (2 di 9)"
     problemi: list[dict] = field(default_factory=list)
     da_fare: list[str] = field(default_factory=list)
     note: list[str] = field(default_factory=list)
@@ -304,6 +305,10 @@ def leggi_log(testo: str) -> Avanzamento:
         if titolo:
             t = titolo.group(1)
             nel_riepilogo = t in TITOLI_RIEPILOGO or nel_riepilogo
+            numeri = re.search(r"^Configuro (.+?) \((\d+) di (\d+)\)$", t)
+            if numeri and not nel_riepilogo:
+                a.configurazione = {"nome": numeri.group(1), "n": int(numeri.group(2)), "di": int(numeri.group(3))}
+                a.scarico = None
             if not nel_riepilogo:
                 for p in a.passi:
                     if p["stato"] == "in_corso":
