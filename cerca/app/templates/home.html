@@ -5,34 +5,6 @@
 {{ ricerca(mondo, base, mondi) }}
 {{ generi(mondo) }}
 
-<div class="in-primo-piano{% if gratis %} con-gratis{% endif %}">
-  {% for f in gratis[:2] %}
-  {% set servizio = (f.provider | first).nome if f.provider else "un servizio gratuito" %}
-  <section class="evidenza" aria-labelledby="gratis-{{ f.tmdb_id }}">
-    <a class="evidenza-locandina" href="{{ base }}/film/{{ f.tmdb_id }}" tabindex="-1" aria-hidden="true">
-      {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
-    </a>
-    <div class="evidenza-testo">
-      <p class="etichetta-maiuscola verde">Ora gratis</p>
-      <h2 id="gratis-{{ f.tmdb_id }}">{{ f.titolo }}</h2>
-      <p class="evidenza-frase">Era nella tua lista "avvisami". Adesso è gratis su {{ f.provider | map(attribute='nome') | join(', ') or servizio }}.</p>
-      <div class="azioni-riga">
-        <a class="bottone verde" href="{{ base }}/film/{{ f.tmdb_id }}#provider">Guarda su {{ servizio }}</a>
-        <a class="bottone contorno" href="{{ base }}/film/{{ f.tmdb_id }}">Scheda film</a>
-      </div>
-    </div>
-  </section>
-  {% endfor %}
-
-  <section id="attivi" class="riquadro-download" hidden aria-labelledby="titolo-attivi">
-    <div class="riquadro-testa">
-      <h2 id="titolo-attivi" class="etichetta-maiuscola">Download in corso</h2>
-      <a class="link-accento" href="{{ base }}/download">Vedi tutti →</a>
-    </div>
-    <div id="elenco-attivi" class="elenco-download compatto"></div>
-  </section>
-</div>
-
 <div id="righe" class="righe" aria-busy="true"></div>
 {{ dialogo_piattaforme("film") }}
 
@@ -76,4 +48,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block script %}<script>avviaDownload({ soloAttivi: true }); avviaGeneri(); avviaHome("film");</script>{% endblock %}
+{% block script %}<script>avviaGeneri(); avviaHome("film");</script>{% endblock %}

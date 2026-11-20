@@ -558,7 +558,7 @@ async function avviaChipPiattaforme(mondo) {
   nav.id = "chip-piattaforme";
   nav.className = "chip-piattaforme";
   nav.setAttribute("aria-label", "Piattaforme");
-  // subito sotto ricerca e generi, sopra i riquadri "Ora gratis" e "Download in corso": si vede senza scorrere
+  // subito sotto ricerca e generi: si vede senza scorrere
   const generi = document.getElementById("generi");
   if (generi) generi.after(nav); else contenitore.before(nav);
   await conMemoria(`piattaforme:${mondo}`, `/api/piattaforme?mondo=${encodeURIComponent(mondo)}`, (d) => {
