@@ -8,6 +8,8 @@ def test_lingua_da_formati_e_da_radarr():
     assert lingua_da([{"name": "Lingua · MULTI"}, {"name": "Lingua · Spagnolo"}]) == "Spagnolo"
     assert lingua_da([], [{"name": "Italian"}]) == "Italiano"
     assert lingua_da(None, None) == ""
+    assert lingua_da([{"name": "Lingua · Spagnolo"}, {"name": "Lingua · Italiano"}]) == "Italiano"
+    assert lingua_da([{"name": "Lingua · Spagnolo"}, {"name": "Lingua · Italiano"}], ordine=("es", "it")) == "Spagnolo"
     assert percentuale(200, 50) == 75.0 and percentuale(0, 0) == 0.0
 
 

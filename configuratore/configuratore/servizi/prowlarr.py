@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from ..impostazioni import Impostazioni
@@ -97,6 +100,25 @@ def trova_schema(schemi: list[dict], nome: str) -> dict | None:
 CAMPI_ACCOUNT = {"username", "password", "apikey", "apiKey", "cookie", "passkey", "pid", "rsskey", "uid", "token"}
 CATEGORIE_VIDEO = (2000, 5000)  # Film, TV
 PRIORITA_ITALIANO = 10
+FILE_SCARTATI = Path("/mediabox/generato/indexer-scartati.json")
+RIPROVA_DOPO = 7 * 24 * 3600
+
+
+def leggi_scartati(file: Path = FILE_SCARTATI) -> dict[str, float]:
+    try:
+        dati = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    adesso = time.time()
+    return {n: t for n, t in dati.items() if isinstance(t, (int, float)) and adesso - t < RIPROVA_DOPO}
+
+
+def salva_scartati(scartati: dict[str, float], file: Path = FILE_SCARTATI) -> None:
+    try:
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(json.dumps(scartati), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def categorie(schema: dict) -> set[int]:
@@ -122,7 +144,9 @@ def priorita_pubblico(schema: dict) -> int:
 
 def aggiungi_pubblici(arr: Arr, schemi: list[dict], presenti: set[str], profilo_app: int, etichette: list[int]) -> None:
     """Prova tutti gli indexer pubblici aperti, in parallelo, e tiene quelli che rispondono."""
-    candidati = [s for s in schemi if e_pubblico_aperto(s) and _semplice(s.get("name") or "") not in presenti]
+    scartati = leggi_scartati()
+    candidati = [s for s in schemi if e_pubblico_aperto(s) and _semplice(s.get("name") or "") not in presenti
+                 and _semplice(s.get("name") or "") not in scartati]
     if not candidati:
         return
     info(f"Provo {len(candidati)} indexer pubblici (qualche minuto: tengo solo quelli che funzionano)…")
@@ -139,6 +163,9 @@ def aggiungi_pubblici(arr: Arr, schemi: list[dict], presenti: set[str], profilo_
     with ThreadPoolExecutor(max_workers=6) as gruppo:
         aggiunti = [n for n in gruppo.map(prova, candidati) if n]
     presenti |= {_semplice(n) for n in aggiunti}
+    adesso = time.time()
+    scartati.update({_semplice(s.get("name") or ""): adesso for s in candidati if s.get("name") not in aggiunti})
+    salva_scartati(scartati)
     italiani = sum(1 for s in candidati if s.get("name") in aggiunti and priorita_pubblico(s) == PRIORITA_ITALIANO)
     ok(f"Indexer pubblici aggiunti: {len(aggiunti)} su {len(candidati)} provati ({italiani} italiani, usati per primi)")
 
