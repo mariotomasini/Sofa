@@ -215,3 +215,12 @@ body.in-impostazioni .passo h1 { font-size: 1.6rem; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* aggiornamenti */
+.aggiornamenti { margin-top: 32px; }
+.aggiornamenti .versione { margin: 4px 0; font-weight: 600; }
+.comandi-aggiornamento { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.aggiornamenti .registro {
+  margin-top: 14px; max-height: 220px; overflow: auto; padding: 12px; border-radius: 10px;
+  background: rgba(0, 0, 0, .35); font-size: .8rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}

@@ -8,7 +8,7 @@
   <title>{% block titolo %}Cerca{% endblock %} · mediabox</title>
   <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="{{ base }}/static/style.css">
+  <link rel="stylesheet" href="{{ base }}/static/style.css?v={{ v }}">
   <!-- icone e "app" sul telefono (Aggiungi a schermata Home) -->
   <link rel="icon" href="{{ base }}/static/logo.svg" type="image/svg+xml">
   <link rel="icon" href="{{ base }}/static/icone/favicon-32.png" type="image/png" sizes="32x32">
@@ -95,7 +95,7 @@
 
   <div id="avviso" class="avviso" role="status" hidden></div>
   <script>window.BASE = "{{ base }}"; window.MONDO = "{{ mondo }}"; window.KIDS = {{ 'true' if kids else 'false' }};</script>
-  <script src="{{ base }}/static/app.js"></script>
+  <script src="{{ base }}/static/app.js?v={{ v }}"></script>
   {% block script %}{% endblock %}
 </body>
 </html>

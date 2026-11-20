@@ -7,6 +7,7 @@ prima di tutto il resto); dopo è il servizio "impostazioni", dietro Caddy su
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -25,10 +26,36 @@ QUI = Path(__file__).parent
 TMDB_API = os.environ.get("TMDB_API_URL", "https://api.themoviedb.org/3")
 
 
+def impronta_statici(cartella: Path) -> str:
+    """Cambia quando cambia un file della pagina: va negli indirizzi (?v=…), così dopo un
+    aggiornamento il browser scarica i file nuovi invece di usare quelli vecchi che ha in memoria."""
+    h = hashlib.sha256()
+    for f in sorted(cartella.rglob("*")):
+        if f.is_file():
+            h.update(f.relative_to(cartella).as_posix().encode())
+            h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
+def regole_cache(percorso: str, versionato: bool) -> str:
+    """I file con ?v= non cambiano mai (un anno); gli altri file statici una settimana; pagine e API sempre fresche."""
+    if "/static/" in percorso:
+        return "public, max-age=31536000, immutable" if versionato else "public, max-age=604800"
+    return "no-cache"
+
+
 def crea_app(cartella: Path = CARTELLA_MEDIABOX) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.mount(f"{BASE}/static", StaticFiles(directory=QUI / "static"), name="static")
     modelli = Jinja2Templates(directory=QUI / "templates")
+    modelli.env.globals["v"] = impronta_statici(QUI / "static")
+
+    @app.middleware("http")
+    async def intestazioni_cache(request: Request, call_next):
+        risposta = await call_next(request)
+        if "cache-control" not in risposta.headers:
+            risposta.headers["Cache-Control"] = regole_cache(request.url.path, "v" in request.query_params)
+        return risposta
 
     @app.exception_handler(PermissionError)
     async def senza_permessi(request: Request, exc: PermissionError):
@@ -154,5 +181,34 @@ def crea_app(cartella: Path = CARTELLA_MEDIABOX) -> FastAPI:
         if not cambiato:
             return {"ok": True, "cambiato": False, "messaggio": "Non hai cambiato nulla."}
         return {"ok": True, "cambiato": True}
+
+    # --- aggiornamenti ---------------------------------------------------------------------------
+    def non_connesso() -> JSONResponse:
+        return JSONResponse({"errore": "Accedi di nuovo con la password di amministrazione."}, status_code=401)
+
+    @app.get(f"{BASE}/api/aggiornamento")
+    async def stato_aggiornamento(request: Request):
+        if not connesso(request):
+            return non_connesso()
+        return p.stato_aggiornamenti(cartella)
+
+    @app.post(f"{BASE}/api/aggiornamento/controlla")
+    async def controlla_aggiornamento(request: Request):
+        if not connesso(request):
+            return non_connesso()
+        from starlette.concurrency import run_in_threadpool
+
+        from .. import aggiornamenti
+
+        return await run_in_threadpool(aggiornamenti.controlla, cartella)
+
+    @app.post(f"{BASE}/api/aggiornamento/installa")
+    async def installa_aggiornamento(request: Request):
+        if not connesso(request):
+            return non_connesso()
+        if p.stato_aggiornamenti(cartella)["in_corso"]:
+            return {"ok": True, "messaggio": "L'aggiornamento è già in corso."}
+        p.richiedi_aggiornamento(cartella)
+        return {"ok": True}
 
     return app

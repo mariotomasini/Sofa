@@ -57,9 +57,9 @@ Con mediabox puoi:
 | Cosa | Da dove arriva |
 |---|---|
 | Ricerca e schede dei film, in italiano, con locandine e voti | Radarr (già installato) |
-| Film di tendenza e appena usciti | la pagina *Scopri* di Radarr |
-| Film per genere, cartoni per Kids, *Originali Netflix / Prime Video / Disney+* | [Wikidata](https://www.wikidata.org) |
-| Serie: ricerca, serie del momento, serie per genere e per piattaforma | [TVmaze](https://www.tvmaze.com) (titoli e trame in inglese) |
+| Righe della home: Top 10, appena usciti, per genere, Kids, *Di tendenza su Netflix / Prime Video / Disney+ / NOW…* (film e serie, in italiano) | [JustWatch](https://www.justwatch.com/it): quello che si guarda adesso sulle piattaforme in Italia |
+| Se JustWatch non risponde: film del momento, generi, originali delle piattaforme | la pagina *Scopri* di Radarr e [Wikidata](https://www.wikidata.org) |
+| Serie: ricerca e schede | [TVmaze](https://www.tvmaze.com) (titoli e trame in inglese) |
 | Dove vederlo in Italia | un link alla ricerca di [JustWatch](https://www.justwatch.com/it) |
 
 **Chiave TMDB facoltativa.** Se la metti nelle impostazioni (`/impostazioni`, in fondo alla pagina), Cerca usa TMDB: ogni scheda mostra direttamente su quali servizi si guarda il film in Italia, le righe "Su Netflix" mostrano il catalogo italiano vero, le serie hanno titoli e trame in italiano e torna il pulsante "Avvisami se diventa gratis". La chiave è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*: vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se la togli, Cerca torna alle fonti gratuite.
@@ -414,22 +414,30 @@ L'argomento è come una password: chi lo conosce vede le tue notifiche. Non sceg
 
 ## Aggiornamenti
 
-Ogni notte, verso le 4:30, mediabox controlla se su GitHub è uscita una **nuova versione**. Se c'è:
+Ogni notte, verso le 4:30, mediabox controlla su GitHub se c'è una **versione nuova**. Se c'è:
 
 1. fa un backup;
-2. scarica la nuova versione;
-3. aggiorna i servizi e riapplica la configurazione;
+2. scarica la versione nuova e installa **solo i file cambiati**;
+3. rifà **solo quello che serve**: ricostruisce Cerca solo se è cambiato Cerca, scarica solo i programmi che hanno una versione nuova, riavvia solo i servizi cambiati e riconfigura i servizi solo se è cambiata la configurazione;
+   alla fine toglie le versioni vecchie dei programmi, che su un disco piccolo occupano diversi GB;
 4. ti avvisa sul telefono (ntfy) quando ha finito, o se qualcosa non è andato.
 
-Il file `.env` e le tue scelte restano come sono. Le versioni dei servizi che hai cambiato a mano nel `.env` non vengono toccate.
+Il file `.env` e le tue scelte restano come sono. Le versioni dei programmi che hai cambiato a mano nel `.env` non vengono toccate.
 
-- Per aggiornare subito: `mediabox update`.
-- Per vedere la versione installata e l'ultima disponibile: `mediabox versione`.
-- Per spegnere gli aggiornamenti automatici: impostazioni, voce *Aggiornamenti automatici*.
+**Dal browser:** in **Impostazioni** (`/impostazioni`) c'è il riquadro *Aggiornamenti*. Mostra la versione installata e ha due pulsanti:
+- **Verifica aggiornamenti**, che controlla subito su GitHub;
+- **Aggiorna ora**, che compare se c'è una versione nuova.
 
-Su Linux l'aggiornamento automatico lo fa un timer di systemd (`mediabox-aggiorna.timer`), su Windows un'attività pianificata ("mediabox - aggiornamento automatico").
+Mentre lavora, la pagina mostra cosa sta facendo e si ricarica da sola alla fine.
 
-> Per chi pubblica mediabox: una nuova versione è una **Release** su GitHub con un tag come `v1.3.0`. Ricordati di aggiornare il file `VERSION` con lo stesso numero.
+**Dal terminale:**
+- per aggiornare subito: `mediabox update`;
+- per vedere la versione installata e l'ultima disponibile: `mediabox versione`;
+- per spegnere gli aggiornamenti automatici: nelle impostazioni, voce *Aggiornamenti automatici*.
+
+Su Linux l'aggiornamento automatico lo fa un timer di systemd (`mediabox-aggiorna.timer`), su Windows un'attività pianificata ("mediabox - aggiornamento automatico"). I passi dell'ultimo aggiornamento sono in `aggiornamenti.log`.
+
+> Per chi pubblica mediabox: se su GitHub ci sono **Release** (tag come `v1.4.0`), mediabox installa l'ultima Release. Ricordati di aggiornare il file `VERSION` con lo stesso numero. Se non ce n'è nessuna, segue il ramo `main`: ogni modifica unita arriva sui PC la notte dopo.
 
 ---
 
@@ -492,7 +500,7 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox impostazioni` | cambia cosa usi dal terminale (più comodo dal browser: `/impostazioni`) |
 | `mediabox azzera-jellyfin` | rifà Jellyfin da zero con l'utente di mediabox (i film restano) |
 | `mediabox configura` | riapplica la configurazione dopo una modifica al file `.env` |
-| `mediabox update` | aggiorna mediabox e i servizi (fa prima un backup) |
+| `mediabox update` | aggiorna mediabox (fa prima un backup, poi rifà solo quello che è cambiato) |
 | `mediabox versione` | mostra la versione installata e l'ultima disponibile |
 | `mediabox backup` | crea un backup |
 | `mediabox restore <file>` | ripristina un backup |
@@ -603,6 +611,8 @@ Un altro programma usa già la porta del sito, ad esempio IIS su Windows o un al
 Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Usa l'indirizzo con il numero (es. `http://192.168.1.20`), che l'installer scrive nel terminale: `mediabox.local` a volte non funziona sui telefoni Android. Su Windows controlla che la rete sia *Privata*. Se hai chiuso il terminale, rilancia l'installer: la procedura riparte da dove eri.
 
 ### Cerca resta in caricamento o mostra un errore
+
+Cerca tiene da parte le risposte di JustWatch, Radarr, TMDB e Internet Archive. Se uno di questi non risponde, mostra l'ultima risposta che ha ricevuto (fino a una settimana prima) invece di un errore. Questa memoria non supera i 60 MB e si pulisce da sola ogni 6 ore.
 
 Apri **Controllo** in alto in Cerca (sul telefono: *Altro → Controllo servizi*). In pochi secondi vedi quali servizi rispondono, quanto ci mettono e, per quelli che non vanno, cosa fare. Senza chiave TMDB i film arrivano da **Radarr**: se Radarr è spento, la home lo dice dopo pochi secondi invece di restare in caricamento. Sui PC con poca memoria, dopo l'accensione può volerci qualche minuto prima che Radarr risponda.
 

@@ -95,10 +95,16 @@ class InternetArchive:
         try:
             r = await self.client.get(url, params=parametri, timeout=30)
         except httpx.HTTPError as exc:
+            if (riserva := self.archivio.cache_leggi(chiave_cache, scadute=True)) is not None:
+                return riserva  # meglio la risposta di ieri che un errore
             raise ErroreServizio(
                 "Internet Archive non risponde.",
                 "Può capitare quando è molto carico: riprova tra qualche minuto.",
             ) from exc
+        if (r.status_code == 429 or r.status_code >= 500) and (
+            riserva := self.archivio.cache_leggi(chiave_cache, scadute=True)
+        ) is not None:
+            return riserva
         if r.status_code == 429:
             raise ErroreServizio("Internet Archive chiede di rallentare.", "Aspetta un minuto e riprova.")
         if not r.is_success:

@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS stato (
 """
 
 STATI_ATTIVI = ("in_corso", "completato", "importazione")
+# Le risposte scadute restano una settimana come riserva: se un servizio non risponde,
+# meglio la risposta di ieri che una pagina di errore.
+RISERVA = 7 * 24 * 3600
+LIMITE_CACHE_MB = 60  # oltre, si tolgono le risposte che scadono prima
 
 
 class Archivio:
@@ -87,9 +91,10 @@ class Archivio:
             return [dict(r) for r in self._conn.execute(sql, parametri).fetchall()]
 
     # --- cache -----------------------------------------------------------------
-    def cache_leggi(self, chiave: str) -> Any | None:
+    def cache_leggi(self, chiave: str, *, scadute: bool = False) -> Any | None:
+        """La risposta salvata; con scadute=True anche quella scaduta (la riserva)."""
         righe = self._righe("SELECT valore, scade FROM cache WHERE chiave = ?", (chiave,))
-        if not righe or righe[0]["scade"] < time.time():
+        if not righe or (righe[0]["scade"] < time.time() and not scadute):
             return None
         return json.loads(righe[0]["valore"])
 
@@ -102,8 +107,28 @@ class Archivio:
     def cache_togli(self, prefisso: str) -> None:
         self._esegui("DELETE FROM cache WHERE chiave LIKE ?", (prefisso + "%",))
 
-    def cache_pulisci(self) -> None:
-        self._esegui("DELETE FROM cache WHERE scade < ?", (time.time(),))
+    def cache_pulisci(self) -> int:
+        """Toglie le risposte scadute da più di una settimana. Restituisce quante."""
+        return self._esegui("DELETE FROM cache WHERE scade < ?", (time.time() - RISERVA,)).rowcount
+
+    def cache_dimensione(self) -> int:
+        return int(self._righe("SELECT COALESCE(SUM(LENGTH(valore)), 0) AS n FROM cache")[0]["n"])
+
+    def cache_limita(self, mb: float = LIMITE_CACHE_MB) -> int:
+        """Se la cache supera il limite, toglie le risposte che scadono prima. Restituisce quante."""
+        limite = int(mb * 1024 * 1024)
+        da_liberare = self.cache_dimensione() - limite
+        if da_liberare <= 0:
+            return 0
+        via = []
+        for r in self._righe("SELECT chiave, LENGTH(valore) AS n FROM cache ORDER BY scade"):
+            via.append(r["chiave"])
+            da_liberare -= r["n"]
+            if da_liberare <= 0:
+                break
+        with self._lock:
+            self._conn.executemany("DELETE FROM cache WHERE chiave = ?", [(c,) for c in via])
+        return len(via)
 
     # --- cronologia ------------------------------------------------------------
     def aggiungi_ricerca(self, testo: str) -> None:

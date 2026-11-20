@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import mimetypes
@@ -83,6 +84,19 @@ class Servizi:
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
 
 
+async def manutenzione_cache(archivio: Archivio) -> None:
+    """Ogni 6 ore: via le risposte vecchie e la cache sotto il limite (in un thread, senza fermare le pagine)."""
+    while True:
+        try:
+            tolte = await asyncio.to_thread(archivio.cache_pulisci)
+            tolte += await asyncio.to_thread(archivio.cache_limita)
+            dimensione = await asyncio.to_thread(archivio.cache_dimensione)
+            log.info("Cache: tolte %s risposte vecchie, ora occupa %.1f MB", tolte, dimensione / 1024**2)
+        except Exception:  # noqa: BLE001 - la pulizia non deve mai fermare Cerca
+            log.exception("Errore nella pulizia della cache")
+        await asyncio.sleep(6 * 3600)
+
+
 async def dopo(secondi: float, coro) -> None:
     await asyncio.sleep(secondi)
     await coro
@@ -102,6 +116,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(20, servizi.download.ciclo())),
             asyncio.create_task(servizi.avvisami.ciclo()),
             asyncio.create_task(dopo(60, servizi.disco.ciclo())),
+            asyncio.create_task(dopo(300, manutenzione_cache(servizi.archivio))),
         ]
         log.info("Cerca è pronto")
         yield
@@ -118,6 +133,35 @@ app = FastAPI(title="Cerca", lifespan=ciclo_di_vita, docs_url=None, redoc_url=No
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 app.mount("/static", StaticFiles(directory=CARTELLA / "static"), name="static")
 modelli = Jinja2Templates(directory=CARTELLA / "templates")
+
+
+def impronta_statici(cartella: Path) -> str:
+    """Cambia quando cambia un file della pagina: va negli indirizzi (?v=…), così dopo un
+    aggiornamento il browser scarica i file nuovi invece di usare quelli vecchi che ha in memoria."""
+    h = hashlib.sha256()
+    for f in sorted(cartella.rglob("*")):
+        if f.is_file():
+            h.update(f.relative_to(cartella).as_posix().encode())
+            h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
+def regole_cache(percorso: str, versionato: bool) -> str:
+    """I file con ?v= non cambiano mai (un anno); gli altri file statici una settimana; pagine e API sempre fresche."""
+    if "/static/" in percorso:
+        return "public, max-age=31536000, immutable" if versionato else "public, max-age=604800"
+    return "no-cache"
+
+
+modelli.env.globals["v"] = impronta_statici(CARTELLA / "static")
+
+
+@app.middleware("http")
+async def intestazioni_cache(request: Request, call_next):
+    risposta = await call_next(request)
+    if "cache-control" not in risposta.headers:
+        risposta.headers["Cache-Control"] = regole_cache(request.url.path, "v" in request.query_params)
+    return risposta
 
 
 def dimensione_leggibile(byte: int | None) -> str:

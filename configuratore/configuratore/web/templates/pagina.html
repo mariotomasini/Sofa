@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#17130f">
   <title>{{ "Impostazioni" if stato.configurato else "Configura mediabox" }} · mediabox</title>
-  <link rel="stylesheet" href="{{ base }}/static/stile.css">
+  <link rel="stylesheet" href="{{ base }}/static/stile.css?v={{ v }}">
   <link rel="icon" href="{{ base }}/static/logo.svg" type="image/svg+xml">
 </head>
 {% set s = stato.scelte or {} %}
@@ -96,6 +96,17 @@
           {% endfor %}
         </div>
         <p class="messaggio" id="msg-scelte" role="status"></p>
+        <div class="solo-impostazioni aggiornamenti" id="blocco-aggiornamenti">
+          <h2>Aggiornamenti</h2>
+          <p class="versione" id="agg-versione">Versione installata…</p>
+          <p class="aiuto" id="agg-automatici"></p>
+          <p class="messaggio" id="agg-stato" role="status"></p>
+          <div class="comandi-aggiornamento">
+            <button type="button" class="contorno" id="agg-verifica">Verifica aggiornamenti</button>
+            <button type="button" id="agg-installa" hidden>Aggiorna ora</button>
+          </div>
+          <pre class="registro" id="agg-registro" hidden></pre>
+        </div>
       </section>
 
       <section class="passo" data-passo="cartella" aria-labelledby="t-cartella">
@@ -241,6 +252,6 @@
 
   <div id="avviso" class="avviso" role="status" hidden></div>
   <script type="application/json" id="stato">{{ stato | tojson }}</script>
-  <script src="{{ base }}/static/procedura.js"></script>
+  <script src="{{ base }}/static/procedura.js?v={{ v }}"></script>
 </body>
 </html>

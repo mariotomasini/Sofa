@@ -16,3 +16,6 @@ installazione.log
 installazione.stato
 .configurazione-pronta
 .da-applicare
+aggiornamento.stato
+.da-aggiornare
+.versione-installata
