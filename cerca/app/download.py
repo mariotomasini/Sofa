@@ -230,7 +230,8 @@ class GestoreDownload:
                     campione_byte, campione_tempo = scaricati, time.monotonic()
                     with open(parziale, "ab" if gia_scaricati else "wb") as f:
                         async for blocco in r.aiter_bytes(1024 * 1024):
-                            f.write(blocco)
+                            # sul disco dei film (su Windows lento): scrittura in un thread a parte
+                            await asyncio.to_thread(f.write, blocco)
                             scaricati += len(blocco)
                             adesso = time.monotonic()
                             if adesso - ultimo_salvataggio > 2:

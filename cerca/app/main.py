@@ -79,6 +79,11 @@ class Servizi:
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
 
 
+async def dopo(secondi: float, coro) -> None:
+    await asyncio.sleep(secondi)
+    await coro
+
+
 @asynccontextmanager
 async def ciclo_di_vita(app: FastAPI):
     config = Config()
@@ -89,9 +94,10 @@ async def ciclo_di_vita(app: FastAPI):
         sentinella.avvia()
         compiti = [
             asyncio.create_task(sentinella.battito()),
-            asyncio.create_task(servizi.download.ciclo()),
+            # i controlli di sottofondo partono dopo: all'accensione il processore serve alle pagine
+            asyncio.create_task(dopo(20, servizi.download.ciclo())),
             asyncio.create_task(servizi.avvisami.ciclo()),
-            asyncio.create_task(servizi.disco.ciclo()),
+            asyncio.create_task(dopo(60, servizi.disco.ciclo())),
         ]
         log.info("Cerca è pronto")
         yield
@@ -434,7 +440,7 @@ async def api_musica_lidarr(request: Request, dati: RichiestaArtista):
 
 @app.get("/api/stato")
 async def api_stato(request: Request):
-    return servizi(request).disco.stato()
+    return await servizi(request).disco.aggiorna()
 
 
 @app.get("/api/pulizia")

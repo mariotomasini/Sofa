@@ -606,6 +606,8 @@ Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Us
 
 Apri **Controllo** in alto in Cerca (sul telefono: *Altro → Controllo servizi*). In pochi secondi vedi quali servizi rispondono, quanto ci mettono e, per quelli che non vanno, cosa fare. Senza chiave TMDB i film arrivano da **Radarr**: se Radarr è spento, la home lo dice dopo pochi secondi invece di restare in caricamento. Sui PC con poca memoria, dopo l'accensione può volerci qualche minuto prima che Radarr risponda.
 
+Se Cerca stesso smette di rispondere (succede sui PC lenti, soprattutto su Windows), si riavvia da solo dopo 3 minuti e scrive nei suoi messaggi dove si era fermato: per leggerli scrivi `docker logs --tail 80 mediabox-cerca-1`.
+
 ### Jellyfin non accetta utente e password
 
 Se la configurazione automatica non è ancora arrivata a Jellyfin, scrivi `mediabox configura`: crea l'utente **admin** con la password di mediabox. Se invece la prima configurazione di Jellyfin è stata fatta a mano con un altro utente, scrivi `mediabox azzera-jellyfin`: toglie utenti e impostazioni di Jellyfin e lo rifà da zero con l'utente di mediabox. I film nelle cartelle restano dove sono.

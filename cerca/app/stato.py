@@ -15,6 +15,8 @@ log = logging.getLogger("cerca.stato")
 
 UN_GIORNO = 24 * 3600
 CHIAVE_ULTIMO_AVVISO = "disco_ultimo_avviso"
+TEMPO_DISCO = 10  # secondi massimi per misurare lo spazio
+OGNI_QUANTO = 600  # la misura si rinnova ogni 10 minuti
 
 
 def spazio(percorso: Path) -> dict:
@@ -38,8 +40,29 @@ class ControlloDisco:
         self.archivio = archivio
         self.avvisami = avvisami  # per riusare l'invio delle notifiche ntfy
         self.pulizia = pulizia
+        self._ultimo: dict = {"disponibile": False}
+        self._misura: asyncio.Future | None = None
 
     def stato(self) -> dict:
+        """L'ultima misura: non tocca mai il disco, così le pagine non aspettano.
+
+        Su Windows la cartella dei film arriva nel contenitore attraverso Docker
+        Desktop, e misurarne lo spazio a volte ci mette moltissimo: se lo facessimo
+        a ogni pagina, Cerca resterebbe fermo per tutti.
+        """
+        return dict(self._ultimo)
+
+    async def aggiorna(self) -> dict:
+        """Rinnova la misura in un thread a parte, aspettando al massimo TEMPO_DISCO secondi."""
+        if self._misura is None or self._misura.done():
+            self._misura = asyncio.ensure_future(asyncio.to_thread(self._calcola))
+        try:
+            self._ultimo = await asyncio.wait_for(asyncio.shield(self._misura), TEMPO_DISCO)
+        except TimeoutError:
+            log.warning("Il disco dei film è lento a rispondere: uso l'ultima misura dello spazio")
+        return self.stato()
+
+    def _calcola(self) -> dict:
         try:
             info = spazio(self.config.cartella_download.parent)
         except OSError:
@@ -52,13 +75,13 @@ class ControlloDisco:
         return info
 
     async def controlla(self) -> None:
-        info = self.stato()
+        info = await self.aggiorna()
         if not info.get("quasi_pieno"):
             return
         if self.pulizia is not None:
             # prima proviamo a liberare spazio da soli
             await self.pulizia.libera("disco quasi pieno")
-            info = self.stato()
+            info = await self.aggiorna()
             if not info.get("quasi_pieno"):
                 return
         ultimo = float(self.archivio.stato_leggi(CHIAVE_ULTIMO_AVVISO) or 0)
@@ -68,9 +91,12 @@ class ControlloDisco:
         self.archivio.stato_scrivi(CHIAVE_ULTIMO_AVVISO, str(time.time()))
 
     async def ciclo(self) -> None:
+        giri = 0
         while True:
             try:
-                await self.controlla()
+                # la misura ogni 10 minuti, il controllo (pulizia e avviso) ogni ora
+                await (self.controlla() if giri % 6 == 0 else self.aggiorna())
             except Exception:  # noqa: BLE001 - il controllo non deve mai fermare Cerca
                 log.exception("Errore nel controllo del disco")
-            await asyncio.sleep(3600)
+            giri += 1
+            await asyncio.sleep(OGNI_QUANTO)
