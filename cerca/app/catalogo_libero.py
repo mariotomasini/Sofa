@@ -126,6 +126,49 @@ def riassunto_radarr(f: dict) -> dict:
     }
 
 
+# Radarr e TVmaze rispondono con schede piene di dati che non usiamo (attori, video,
+# episodi...): la lista "Scopri" di Radarr arriva a diversi MB. Teniamo solo quello che
+# serve, così cache, memoria e processore restano leggeri anche su un PC lento.
+CAMPI_FILM = ("tmdbId", "title", "originalTitle", "year", "overview", "genres", "popularity", "inCinemas",
+              "isTrending", "isPopular", "runtime", "imdbId", "remotePoster", "adult")
+CAMPI_SERIE = ("id", "name", "image", "summary", "weight", "genres", "premiered", "type")
+
+
+def snellisci_film(f: object) -> object:
+    if not isinstance(f, dict):
+        return f
+    piccolo = {k: f[k] for k in CAMPI_FILM if k in f}
+    piccolo["images"] = [{"coverType": i.get("coverType"), "remoteUrl": i.get("remoteUrl")}
+                         for i in f.get("images") or [] if i.get("coverType") in ("poster", "fanart")]
+    voti = f.get("ratings") or {}
+    piccolo["ratings"] = {k: {"value": (voti.get(k) or {}).get("value")} for k in ("tmdb", "imdb") if voti.get(k)}
+    return piccolo
+
+
+def snellisci_radarr(dati: object) -> object:
+    return [snellisci_film(f) for f in dati] if isinstance(dati, list) else snellisci_film(dati)
+
+
+def snellisci_serie(s: dict) -> dict:
+    piccola = {k: s[k] for k in CAMPI_SERIE if k in s}
+    for k in ("webChannel", "network"):
+        if s.get(k):
+            piccola[k] = {"name": s[k].get("name")}
+    return piccola
+
+
+def snellisci_tvmaze(dati: object) -> object:
+    """Ricerche e palinsesti: di ogni voce teniamo solo la serie."""
+    if not isinstance(dati, list):
+        return dati
+    voci = []
+    for x in dati:
+        serie = (x.get("_embedded") or {}).get("show") or x.get("show") if isinstance(x, dict) else None
+        if serie:
+            voci.append({"show": snellisci_serie(serie)})
+    return voci
+
+
 def testo_semplice(html_testo: str | None) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", html_testo or "")).strip()
 
@@ -155,6 +198,8 @@ solo_pronti: contextvars.ContextVar[bool] = contextvars.ContextVar("solo_pronti"
 SCHEDE_IN_CODA = 200
 PAUSA_TRA_SCHEDE = 0.5  # secondi: lascia respirare Radarr
 SCHEDE_INSIEME = 2
+MEMORIA_SECONDI = 300  # le risposte già lette restano in memoria 5 minuti
+MEMORIA_MASSIMA = 400
 
 
 class CatalogoLibero:
@@ -165,21 +210,41 @@ class CatalogoLibero:
         self._contemporanei = asyncio.Semaphore(SCHEDE_INSIEME)
         self._coda: dict[int, None] = {}  # schede da preparare in sottofondo (in ordine)
         self._preparatore: asyncio.Task | None = None
+        self._memoria: dict[str, tuple[float, object]] = {}  # le ultime risposte, già lette
+        self._in_volo: dict[str, asyncio.Future] = {}  # la stessa richiesta chiesta da più righe insieme
         self._senza_scheda: dict[int, float] = {}  # film che Radarr non trova: non li richiediamo per un po'
         self._giu: dict[str, float] = {}  # servizio → fino a quando non richiamarlo
 
     # --- richieste con cache -------------------------------------------------------------
     @staticmethod
     def _chiave(url: str, parametri: dict) -> str:
-        return f"libero:{url}:{sorted(parametri.items())}"
+        return f"libero2:{url}:{sorted(parametri.items())}"
 
     async def _json(self, url: str, parametri: dict, durata: float, *, intestazioni: dict | None = None,
-                    limitatore: Limitatore | None = None, nome: str = "") -> object:
+                    limitatore: Limitatore | None = None, nome: str = "", snellisci=None) -> object:
         chiave = self._chiave(url, parametri)
-        # le risposte di Radarr e Wikidata sono grandi: leggerle e scriverle in un thread a parte
-        # lascia Cerca libero di rispondere agli altri anche su un processore lento
+        ricordo = self._memoria.get(chiave)
+        if ricordo and ricordo[0] > time.monotonic():
+            return ricordo[1]
+        # se un'altra riga sta già chiedendo la stessa cosa, aspettiamo la sua risposta
+        compito = self._in_volo.get(chiave)
+        if compito is None:
+            compito = asyncio.ensure_future(
+                self._scarica(chiave, url, parametri, durata, intestazioni, limitatore, nome, snellisci))
+            self._in_volo[chiave] = compito
+            compito.add_done_callback(lambda _c: self._in_volo.pop(chiave, None))
+        return await asyncio.shield(compito)
+
+    def _ricorda(self, chiave: str, dati: object, durata: float) -> None:
+        while len(self._memoria) >= MEMORIA_MASSIMA:
+            self._memoria.pop(next(iter(self._memoria)))
+        self._memoria[chiave] = (time.monotonic() + min(durata, MEMORIA_SECONDI), dati)
+
+    async def _scarica(self, chiave, url, parametri, durata, intestazioni, limitatore, nome, snellisci) -> object:
+        # leggere e scrivere la cache in un thread a parte lascia Cerca libero di rispondere agli altri
         in_cache = await asyncio.to_thread(self.archivio.cache_leggi, chiave)
         if in_cache is not None:
+            self._ricorda(chiave, in_cache, durata)
             return in_cache
         # un servizio che non ha risposto da poco non lo richiamiamo subito: niente attese a catena
         if time.monotonic() < self._giu.get(nome, 0):
@@ -199,8 +264,10 @@ class CatalogoLibero:
             raise ErroreServizio(f"{nome} chiede di rallentare.", "Riprova tra qualche minuto.")
         if not r.is_success:
             raise ErroreServizio(f"{nome} ha risposto con un errore ({r.status_code}).", "Riprova tra qualche minuto.")
-        dati = await asyncio.to_thread(json.loads, r.content)
+        contenuto = r.content
+        dati = await asyncio.to_thread(lambda: (snellisci or (lambda d: d))(json.loads(contenuto)))
         await asyncio.to_thread(self.archivio.cache_scrivi, chiave, dati, durata)
+        self._ricorda(chiave, dati, durata)
         return dati
 
     @staticmethod
@@ -216,7 +283,7 @@ class CatalogoLibero:
     async def _radarr(self, percorso: str, parametri: dict, durata: float) -> object:
         return await self._json(
             f"{self.config.radarr_url}{percorso}", parametri, durata,
-            intestazioni={"X-Api-Key": self.config.radarr_chiave}, nome="Radarr",
+            intestazioni={"X-Api-Key": self.config.radarr_chiave}, nome="Radarr", snellisci=snellisci_radarr,
         )
 
     async def _wikidata(self, query: str, durata: float = 7 * UN_GIORNO) -> list[dict]:
@@ -229,7 +296,8 @@ class CatalogoLibero:
 
     async def _tvmaze(self, percorso: str, parametri: dict, durata: float) -> object:
         return await self._json(f"https://api.tvmaze.com{percorso}", parametri, durata,
-                                intestazioni={"User-Agent": AGENTE}, limitatore=_tvmaze, nome="TVmaze")
+                                intestazioni={"User-Agent": AGENTE}, limitatore=_tvmaze, nome="TVmaze",
+                                snellisci=snellisci_tvmaze)
 
     # --- film --------------------------------------------------------------------------------
     async def cerca(self, testo: str) -> list[dict]:

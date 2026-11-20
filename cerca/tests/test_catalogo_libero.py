@@ -209,3 +209,27 @@ def test_home_usa_solo_schede_pronte_e_prepara_le_altre_in_sottofondo(monkeypatc
             catalogo_libero.solo_pronti.reset(segno)
 
     asyncio.run(prova())
+
+
+def test_schede_snellite_danno_gli_stessi_riassunti():
+    grande = film_radarr(603, "Matrix", ("Action", "Science Fiction"), credits=[{"nome": "x"}] * 500,
+                         isTrending=True)
+    grande["images"].append({"coverType": "banner", "remoteUrl": "https://banner"})
+    piccolo = catalogo_libero.snellisci_film(grande)
+    assert "credits" not in piccolo and len(piccolo["images"]) == 2
+    assert riassunto_radarr(piccolo) == riassunto_radarr(grande)
+    palinsesto = [{"_embedded": {"show": {**show(1, "Dark", 9), "_links": {"x": 1}}}, "airtime": "21:00"}]
+    voce = catalogo_libero.snellisci_tvmaze(palinsesto)[0]
+    assert riassunto_tvmaze(voce["show"]) == riassunto_tvmaze(show(1, "Dark", 9))
+
+
+def test_stessa_richiesta_da_piu_righe_parte_una_volta_sola():
+    richieste = []
+
+    async def prova():
+        c = crea(richieste=richieste)
+        await asyncio.gather(c.tendenze(), c.al_cinema(), c.top_settimana("movie"), c.scopri("movie", 27))
+        await c.tendenze()  # ora arriva dalla memoria
+
+    asyncio.run(prova())
+    assert sum(1 for _, p, _ in richieste if p.endswith("/importlist/movie")) == 1

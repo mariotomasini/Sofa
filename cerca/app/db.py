@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS cache (
     valore TEXT NOT NULL,
     scade REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS cache_scade ON cache (scade);
 CREATE TABLE IF NOT EXISTS pulizia (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     quando REAL NOT NULL,
@@ -97,6 +98,9 @@ class Archivio:
             "INSERT OR REPLACE INTO cache (chiave, valore, scade) VALUES (?, ?, ?)",
             (chiave, json.dumps(valore), time.time() + durata),
         )
+
+    def cache_togli(self, prefisso: str) -> None:
+        self._esegui("DELETE FROM cache WHERE chiave LIKE ?", (prefisso + "%",))
 
     def cache_pulisci(self) -> None:
         self._esegui("DELETE FROM cache WHERE scade < ?", (time.time(),))
