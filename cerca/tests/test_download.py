@@ -92,3 +92,16 @@ def test_torrent_coerenti_con_il_film():
     assert not corrisponde("Animatrix 2003", titoli, "1999")  # parola dentro un'altra
     assert corrisponde("Blade Runner 2049 (2017) ITA", ["Blade Runner 2049"], "2017")
     assert corrisponde("Il.Gladiatore.2000.iTA", ["Gladiator", "Il gladiatore"], "2000")
+
+
+def test_torrent_in_italiano_prima():
+    from app.prowlarr import e_italiano
+
+    assert e_italiano("Matrix.1999.iTA.ENG.1080p")
+    assert e_italiano("Matrix (1999) [ITA-ENG] BDRip")
+    assert e_italiano("Matrix 1999 iTALiAN MD")
+    assert not e_italiano("The Matrix 1999 1080p BluRay x264")
+    assert not e_italiano("Matrix 1999 Italia Tour")  # "Italia" non è la lingua
+    tutti = [riassunto({"title": "Matrix 1999 1080p", "seeders": 900, "protocol": "torrent"}),
+             riassunto({"title": "Matrix 1999 iTA", "seeders": 5, "protocol": "torrent"})]
+    assert [r["titolo"] for r in ordina(tutti)] == ["Matrix 1999 iTA", "Matrix 1999 1080p"]

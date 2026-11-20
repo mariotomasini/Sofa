@@ -91,7 +91,7 @@ function avviaFilm(tmdbId) {
       .then((d) => {
         sezione("prowlarr").innerHTML = htmlProwlarr(d);
         riassunto.textContent = d.avviso ? d.avviso
-          : d.risultati.length === 1 ? "1 risultato" : `${d.risultati.length} risultati`;
+          : `${d.risultati.filter((r) => r.italiano).length} in italiano su ${d.risultati.length}`;
       })
       .catch((e) => { sezione("prowlarr").innerHTML = htmlErrore(e); riassunto.textContent = e.errore || "Errore"; });
 
@@ -202,10 +202,26 @@ function htmlProwlarr(d) {
     return `<div class="nota"><strong>${esc(d.avviso)}</strong><p>${esc(d.cosa_fare || "")}</p></div>`;
   }
   if (!d.risultati.length) return `<p>Nessun risultato negli indexer (${d.indexer} attivi).</p>`;
+  const italiani = d.risultati.filter((r) => r.italiano);
+  const altri = d.risultati.filter((r) => !r.italiano);
+  // prima solo quelli in italiano; gli altri si aprono a richiesta
+  if (!italiani.length) {
+    return '<div class="nota"><strong>Nessun torrent in italiano per questo film.</strong>' +
+      "<p>Questi sono in altre lingue (di solito inglese).</p></div>" + listaTorrent(altri);
+  }
+  let html = listaTorrent(italiani);
+  if (altri.length) {
+    html += `<details class="altre-lingue"><summary>Mostra anche ${altri.length} in altre lingue</summary>` +
+      listaTorrent(altri) + "</details>";
+  }
+  return html;
+}
+
+function listaTorrent(elenco) {
   let html = '<ul class="risultati">';
-  for (const r of d.risultati.slice(0, 25)) {
+  for (const r of elenco.slice(0, 25)) {
     html += "<li>" +
-      `<div class="descrizione"><strong>${esc(r.titolo)}</strong>` +
+      `<div class="descrizione"><strong>${r.italiano ? '<span class="lingua">ITA</span> ' : ""}${esc(r.titolo)}</strong>` +
       `<span class="sottotitolo">${dimensione(r.dimensione)} · seed ${r.seed ?? "?"} · peer ${r.peer ?? "?"} · ${esc(r.indexer)}` +
       `${r.data ? " · " + esc(r.data) : ""}</span></div>` +
       `<div class="azioni"><button class="secondario" data-risultato="${esc(r.id)}">Scarica</button></div></li>`;

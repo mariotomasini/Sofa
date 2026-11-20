@@ -663,3 +663,9 @@ button:disabled { background: var(--pannello-2); color: var(--tenue); opacity: 1
 .servizio-stato.lento .icona-stato { background: var(--giallo-fondo); color: var(--giallo); }
 .servizio-stato.errore { background: var(--rosso-fondo); }
 .servizio-stato.errore .icona-stato { background: var(--rosso); color: var(--su-accento); }
+
+/* torrent in italiano */
+.lingua { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 4px; font-size: .75em;
+  font-weight: 700; background: #1f8a4c; color: #fff; vertical-align: middle; }
+.altre-lingue { margin-top: 12px; }
+.altre-lingue summary { cursor: pointer; opacity: .8; padding: 8px 0; }

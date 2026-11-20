@@ -22,6 +22,14 @@ def _senza_articolo(titolo: str) -> str:
     return " ".join(parole[1:]) if len(parole) > 1 and parole[0] in ARTICOLI else titolo
 
 
+PAROLE_ITALIANO = {"ita", "italian", "italiano", "itaeng", "itaen", "iteng"}
+
+
+def e_italiano(nome: str) -> bool:
+    """Vero se il nome del torrent dice che c'è l'audio italiano (ITA, iTALiAN, ITA-ENG...)."""
+    return bool(set(normalizza(nome).split()) & PAROLE_ITALIANO)
+
+
 def corrisponde(nome: str, titoli: list[str], anno: str) -> bool:
     """Vero se il nome del torrent parla proprio di questo film.
 
@@ -61,12 +69,14 @@ def riassunto(r: dict) -> dict:
         "protocollo": r.get("protocol", ""),
         "pagina": r.get("infoUrl") or "",
         "data": (r.get("publishDate") or "")[:10],
+        "italiano": e_italiano(r.get("title", "")),
     }
 
 
 def ordina(risultati: list[dict]) -> list[dict]:
-    """Prima i torrent con più seed (scaricano prima e meglio)."""
-    return sorted(risultati, key=lambda r: (r["protocollo"] == "torrent", r["seed"] or 0), reverse=True)
+    """Prima quelli in italiano, poi i torrent con più seed (scaricano prima e meglio)."""
+    return sorted(risultati, key=lambda r: (r.get("italiano", False), r["protocollo"] == "torrent", r["seed"] or 0),
+                  reverse=True)
 
 
 class Prowlarr:
