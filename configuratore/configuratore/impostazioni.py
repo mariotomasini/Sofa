@@ -105,6 +105,14 @@ class Impostazioni:
         return _si(self.get("WITH_FLARESOLVERR", "si"))
 
     @property
+    def dimensione_max_gb(self) -> float:
+        """Peso massimo di un film 1080p di 2 ore (le serie in proporzione alla durata)."""
+        try:
+            return max(1.0, float(self.get("DIMENSIONE_MAX_GB", "10").replace(",", ".")))
+        except ValueError:
+            return 10.0
+
+    @property
     def tgarr(self) -> bool:
         """Telegram come fonte di download (tgarr)."""
         return _si(self.get("WITH_TGARR", "no"))

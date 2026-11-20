@@ -344,3 +344,19 @@ def test_indexer_pubblici_aperti():
     assert not e_pubblico_aperto({**aperto, "fields": [{"name": "username"}]})
     assert not e_pubblico_aperto({**aperto, "capabilities": {"categories": [{"id": 3000}]}})
     assert priorita_pubblico({**aperto, "language": "en-US"}) == 25
+
+
+def test_limiti_dimensione():
+    from configuratore.servizi.formati import limiti_dimensione
+
+    massimo, preferito = limiti_dimensione({"resolution": 1080}, 10)
+    assert round(massimo * 120 / 1024, 1) == 10.0 and preferito == round(massimo / 2, 1)
+    assert limiti_dimensione({"resolution": 720}, 10)[0] < massimo
+    assert limiti_dimensione({"resolution": 480}, 10)[0] < limiti_dimensione({"resolution": 720}, 10)[0]
+    assert limiti_dimensione({"resolution": 2160}, 10) is None
+
+
+def test_dimensione_max_gb():
+    assert Impostazioni({"DIMENSIONE_MAX_GB": "8,5"}).dimensione_max_gb == 8.5
+    assert Impostazioni({}).dimensione_max_gb == 10.0
+    assert Impostazioni({"DIMENSIONE_MAX_GB": "boh"}).dimensione_max_gb == 10.0

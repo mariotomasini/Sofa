@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..impostazioni import Impostazioni
 from ..messaggi import ok
 from .arr import Arr, campi_qbittorrent
-from .formati import NOME_PROFILO, assicura_profilo
+from .formati import NOME_PROFILO, assicura_profilo, imposta_dimensioni, preferisci_usenet
 
 CARTELLA_FILM = "/data/media/film"
 
@@ -79,4 +79,10 @@ def configura(imp: Impostazioni, esito) -> None:
     if da_spostare:
         arr.put("movie/editor", {"movieIds": da_spostare, "qualityProfileId": profilo}, "aggiornare i film")
     ok(f"Profilo qualità \"{NOME_PROFILO}\": audio italiano prima di tutto, poi 1080p, 720p, SD")
+    max_gb = imp.dimensione_max_gb
+    imposta_dimensioni(arr, max_gb)
+    ok(f"Dimensione: film 1080p di 2 ore al massimo {max_gb:g} GB, preferiti intorno a {max_gb / 2:g} GB")
+    if imp.tgarr:
+        preferisci_usenet(arr)
+        ok("A parità di lingua e qualità vince Telegram (tgarr)")
     ok("Se non c'è l'italiano scarica la versione migliore e la sostituisce appena esce quella ITA")
