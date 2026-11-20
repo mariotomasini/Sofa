@@ -143,18 +143,6 @@ function htmlProvider(d) {
   return html;
 }
 
-function listaTorrent(elenco) {
-  let html = '<ul class="risultati">';
-  for (const r of elenco.slice(0, 25)) {
-    html += "<li>" +
-      `<div class="descrizione"><strong>${r.italiano ? '<span class="lingua">ITA</span> ' : ""}${esc(r.titolo)}</strong>` +
-      `<span class="sottotitolo">${dimensione(r.dimensione)} · seed ${r.seed ?? "?"} · peer ${r.peer ?? "?"} · ${esc(r.indexer)}` +
-      `${r.data ? " · " + esc(r.data) : ""}</span></div>` +
-      `<div class="azioni"><button class="secondario" data-risultato="${esc(r.id)}">Scarica</button></div></li>`;
-  }
-  return html + "</ul>";
-}
-
 // --- ricerca di un film da associare (torrent manuali) ------------------------
 function cercatoreFilm(campo, bottone, contenitore, quandoScelto) {
   async function cerca() {
