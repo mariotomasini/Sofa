@@ -46,6 +46,25 @@ scarica_mancanti() {
   done < <(compose config --images 2>/dev/null | grep -v '^mediabox/' | sort -u)
 }
 
+# Dopo un aggiornamento: via le versioni vecchie dei programmi di mediabox e gli avanzi delle
+# costruzioni di Cerca e del configuratore. Su un PC con un disco piccolo sono diversi GB.
+# Si toglie solo un'immagine dello stesso programma con una versione diversa da quella in uso.
+pulisci_versioni_vecchie() {
+  local in_uso nomi immagine
+  in_uso="$(compose config --images 2>/dev/null | sort -u)"
+  [[ -n "$in_uso" ]] || return 0
+  nomi="$(sed 's/:[^:/]*$//' <<<"$in_uso" | sort -u)"
+  while read -r immagine; do
+    [[ -n "$immagine" && "$immagine" != *"<none>"* ]] || continue
+    grep -qxF "$immagine" <<<"$in_uso" && continue
+    grep -qxF "${immagine%:*}" <<<"$nomi" || continue
+    # se un contenitore la usa ancora, Docker si rifiuta: va bene così
+    "${DOCKER[@]}" rmi "$immagine" >/dev/null 2>&1 && info "Tolta la versione vecchia: ${immagine##*/}"
+  done < <("${DOCKER[@]}" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
+  "${DOCKER[@]}" image prune -f >/dev/null 2>&1 || true
+  "${DOCKER[@]}" builder prune -f --filter until=168h >/dev/null 2>&1 || true
+}
+
 # Prima parte: controlla, fa il backup e installa i file nuovi. Poi passa al nuovo script.
 aggiorna_mediabox() {
   local esito=0
@@ -99,6 +118,7 @@ aggiorna_servizi() {
       return 1
     }
   fi
+  pulisci_versioni_vecchie
   rm -f "$MEDIABOX_DIR/generato/aggiornamento.json"
   stato_aggiornamento fatto "mediabox aggiornato alla versione $(versione_installata)."
   ok "mediabox aggiornato alla versione $(versione_installata)"

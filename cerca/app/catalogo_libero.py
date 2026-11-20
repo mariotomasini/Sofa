@@ -252,6 +252,8 @@ class CatalogoLibero:
             return in_cache
         # un servizio che non ha risposto da poco non lo richiamiamo subito: niente attese a catena
         if time.monotonic() < self._giu.get(nome, 0):
+            if (riserva := await self._riserva(chiave, nome)) is not None:
+                return riserva
             raise self._non_risponde(nome)
         if limitatore:
             await limitatore.attendi()
@@ -264,9 +266,14 @@ class CatalogoLibero:
         except httpx.HTTPError as exc:
             self._giu[nome] = time.monotonic() + PAUSA_DOPO_ERRORE
             log.warning("%s non risponde: %s", nome, type(exc).__name__)
+            if (riserva := await self._riserva(chiave, nome)) is not None:
+                return riserva
             raise self._non_risponde(nome) from exc
         if r.status_code == 404:
             raise ErroreServizio(f"{nome} non conosce questo titolo.", "Torna indietro e scegline un altro.")
+        if r.status_code == 429 or r.status_code >= 500:
+            if (riserva := await self._riserva(chiave, nome)) is not None:
+                return riserva
         if r.status_code == 429:
             raise ErroreServizio(f"{nome} chiede di rallentare.", "Riprova tra qualche minuto.")
         if not r.is_success:
@@ -275,6 +282,16 @@ class CatalogoLibero:
         dati = await asyncio.to_thread(lambda: (snellisci or (lambda d: d))(json.loads(contenuto)))
         await asyncio.to_thread(self.archivio.cache_scrivi, chiave, dati, durata)
         self._ricorda(chiave, dati, durata)
+        return dati
+
+    async def _riserva(self, chiave: str, nome: str) -> object | None:
+        """La risposta scaduta, se c'è: meglio quella di ieri che una pagina di errore."""
+        try:
+            dati = await asyncio.to_thread(self.archivio.cache_leggi, chiave, scadute=True)
+        except TypeError:  # archivi senza riserva (nei test)
+            return None
+        if dati is not None:
+            log.info("%s non risponde: uso l'ultima risposta salvata", nome)
         return dati
 
     @staticmethod

@@ -259,3 +259,16 @@ def test_aggiornamenti_dalla_pagina(cartella, monkeypatch):
     assert client.get("/impostazioni/api/aggiornamento").json()["registro"] == ["== 20/11 ==", "  · Scarico cerca"]
     pagina = client.get("/impostazioni/").text
     assert 'id="agg-verifica"' in pagina and 'id="agg-installa"' in pagina
+
+
+def test_cache_del_browser(cartella):
+    client = TestClient(crea_app(cartella))
+    pagina = client.get("/impostazioni/")
+    assert pagina.headers["cache-control"] == "no-cache"
+    import re
+
+    v = re.search(r"procedura\.js\?v=(\w+)", pagina.text).group(1)
+    assert f"stile.css?v={v}" in pagina.text
+    statico = client.get(f"/impostazioni/static/procedura.js?v={v}")
+    assert statico.status_code == 200 and "immutable" in statico.headers["cache-control"]
+    assert client.get("/impostazioni/static/logo.svg").headers["cache-control"] == "public, max-age=604800"

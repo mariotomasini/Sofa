@@ -92,4 +92,3 @@ class Avvisami:
                 log.exception("Errore nel controllo giornaliero")
                 with contextlib.suppress(Exception):
                     self.archivio.stato_scrivi(CHIAVE_ULTIMO_CONTROLLO, str(time.time()))
-            await asyncio.to_thread(self.archivio.cache_pulisci)  # non blocca le pagine

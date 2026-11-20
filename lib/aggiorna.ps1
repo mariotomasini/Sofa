@@ -50,6 +50,26 @@ function Scarica-Mancanti {
     }
 }
 
+# Dopo un aggiornamento: via le versioni vecchie dei programmi di mediabox e gli avanzi delle
+# costruzioni di Cerca e del configuratore. Su un PC con un disco piccolo sono diversi GB.
+# Si toglie solo un'immagine dello stesso programma con una versione diversa da quella in uso.
+function Pulisci-VersioniVecchie {
+    $inUso = @(Senza-Stderr { Invoca-Compose config --images 2>$null } | Where-Object { $_ } | Sort-Object -Unique)
+    if (-not $inUso) { return }
+    $nomi = @($inUso | ForEach-Object { $_ -replace ":[^:/]*$", "" } | Sort-Object -Unique)
+    $tutte = @(Senza-Stderr { & docker images --format "{{.Repository}}:{{.Tag}}" 2>$null })
+    foreach ($immagine in $tutte) {
+        if (-not $immagine -or $immagine -like "*<none>*") { continue }
+        if ($inUso -contains $immagine) { continue }
+        if ($nomi -notcontains ($immagine -replace ":[^:/]*$", "")) { continue }
+        # se un contenitore la usa ancora, Docker si rifiuta: va bene così
+        Senza-Stderr { & docker rmi $immagine *> $null }
+        if ($LASTEXITCODE -eq 0) { Scrivi-Info "Tolta la versione vecchia: $(($immagine -split '/')[-1])" }
+    }
+    Senza-Stderr { & docker image prune -f *> $null }
+    Senza-Stderr { & docker builder prune -f --filter until=168h *> $null }
+}
+
 # Prima parte: controlla, fa il backup e installa i file nuovi.
 # Restituisce $true se ha installato qualcosa (poi va eseguito "aggiorna-servizi" con il nuovo script).
 function Aggiorna-Mediabox {
@@ -104,6 +124,7 @@ function Aggiorna-Servizi {
             return $false
         }
     }
+    Pulisci-VersioniVecchie
     Remove-Item (Join-Path $script:MediaboxDir "generato\aggiornamento.json") -Force -ErrorAction SilentlyContinue
     Scrivi-StatoAggiornamento "fatto" "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)."
     Scrivi-Ok "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)"

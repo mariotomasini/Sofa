@@ -419,6 +419,7 @@ Ogni notte, verso le 4:30, mediabox controlla su GitHub se c'è una **versione n
 1. fa un backup;
 2. scarica la versione nuova e installa **solo i file cambiati**;
 3. rifà **solo quello che serve**: ricostruisce Cerca solo se è cambiato Cerca, scarica solo i programmi che hanno una versione nuova, riavvia solo i servizi cambiati e riconfigura i servizi solo se è cambiata la configurazione;
+   alla fine toglie le versioni vecchie dei programmi, che su un disco piccolo occupano diversi GB;
 4. ti avvisa sul telefono (ntfy) quando ha finito, o se qualcosa non è andato.
 
 Il file `.env` e le tue scelte restano come sono. Le versioni dei programmi che hai cambiato a mano nel `.env` non vengono toccate.
@@ -610,6 +611,8 @@ Un altro programma usa già la porta del sito, ad esempio IIS su Windows o un al
 Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Usa l'indirizzo con il numero (es. `http://192.168.1.20`), che l'installer scrive nel terminale: `mediabox.local` a volte non funziona sui telefoni Android. Su Windows controlla che la rete sia *Privata*. Se hai chiuso il terminale, rilancia l'installer: la procedura riparte da dove eri.
 
 ### Cerca resta in caricamento o mostra un errore
+
+Cerca tiene da parte le risposte di JustWatch, Radarr, TMDB e Internet Archive. Se uno di questi non risponde, mostra l'ultima risposta che ha ricevuto (fino a una settimana prima) invece di un errore. Questa memoria non supera i 60 MB e si pulisce da sola ogni 6 ore.
 
 Apri **Controllo** in alto in Cerca (sul telefono: *Altro → Controllo servizi*). In pochi secondi vedi quali servizi rispondono, quanto ci mettono e, per quelli che non vanno, cosa fare. Senza chiave TMDB i film arrivano da **Radarr**: se Radarr è spento, la home lo dice dopo pochi secondi invece di restare in caricamento. Sui PC con poca memoria, dopo l'accensione può volerci qualche minuto prima che Radarr risponda.
 

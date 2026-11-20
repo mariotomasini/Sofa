@@ -135,6 +135,8 @@ class TMDB:
             url = f"{self.config.tmdb_api}{percorso}"
             r = await self.client.get(url, params={**parametri, **auth}, headers=intestazioni)
         except httpx.HTTPError as exc:
+            if (riserva := self.archivio.cache_leggi(chiave_cache, scadute=True)) is not None:
+                return riserva  # TMDB non risponde: meglio la risposta di ieri che un errore
             raise ErroreServizio(
                 "Non riesco a contattare TMDB.",
                 "Controlla che il PC di mediabox sia collegato a Internet e riprova tra poco.",
@@ -145,6 +147,10 @@ class TMDB:
                 "Controlla la chiave nella pagina Impostazioni di mediabox (/impostazioni): deve essere tutta, "
                 "senza spazi. Oppure cancellala: Cerca funziona anche senza, con meno informazioni.",
             )
+        if (r.status_code == 429 or r.status_code >= 500) and (
+            riserva := self.archivio.cache_leggi(chiave_cache, scadute=True)
+        ) is not None:
+            return riserva
         if r.status_code == 429:
             raise ErroreServizio("TMDB chiede di rallentare.", "Aspetta qualche secondo e riprova.")
         if r.status_code == 404:
