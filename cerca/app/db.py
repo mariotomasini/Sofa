@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS download (
     nome_file TEXT,
     percorso TEXT,                -- file o cartella sul disco
     categoria TEXT,
+    serie INTEGER,                -- id della serie in Sonarr (per le puntate)
     hash TEXT,
     stato TEXT NOT NULL,          -- in_corso | completato | importazione | importato | da_associare | errore
     scaricati INTEGER DEFAULT 0,
@@ -73,22 +74,42 @@ LIMITE_CACHE_MB = 60  # oltre, si tolgono le risposte che scadono prima
 
 
 class Archivio:
+    """Un collegamento a SQLite per ogni thread, senza lucchetti nostri.
+
+    Con un solo collegamento condiviso (e un lucchetto) il ciclo principale di Cerca
+    doveva aspettare ogni volta che un thread in sottofondo leggeva o scriveva la
+    cache: su un PC lento le pagine restavano in caricamento. In modalità WAL invece
+    le letture non aspettano mai le scritture, e le scritture (brevi) si mettono in
+    fila da sole grazie a busy_timeout.
+    """
+
     def __init__(self, percorso: Path) -> None:
         percorso.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(percorso, check_same_thread=False, isolation_level=None)
-        self._conn.row_factory = sqlite3.Row
-        self._lock = threading.Lock()
-        with self._lock:
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.executescript(SCHEMA)
+        self._percorso = percorso
+        self._locale = threading.local()
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.executescript(SCHEMA)
+        # archivi creati prima delle serie: aggiungiamo la colonna che manca
+        colonne = {r["name"] for r in self._righe("PRAGMA table_info(download)")}
+        if "serie" not in colonne:
+            self._conn.execute("ALTER TABLE download ADD COLUMN serie INTEGER")
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        conn = getattr(self._locale, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self._percorso, isolation_level=None, timeout=10)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout = 10000")
+            conn.execute("PRAGMA synchronous = NORMAL")  # con WAL è sicuro e molto più veloce sui dischi lenti
+            self._locale.conn = conn
+        return conn
 
     def _esegui(self, sql: str, parametri: tuple = ()) -> sqlite3.Cursor:
-        with self._lock:
-            return self._conn.execute(sql, parametri)
+        return self._conn.execute(sql, parametri)
 
     def _righe(self, sql: str, parametri: tuple = ()) -> list[dict]:
-        with self._lock:
-            return [dict(r) for r in self._conn.execute(sql, parametri).fetchall()]
+        return [dict(r) for r in self._conn.execute(sql, parametri).fetchall()]
 
     # --- cache -----------------------------------------------------------------
     def cache_leggi(self, chiave: str, *, scadute: bool = False) -> Any | None:
@@ -126,8 +147,14 @@ class Archivio:
             da_liberare -= r["n"]
             if da_liberare <= 0:
                 break
-        with self._lock:
-            self._conn.executemany("DELETE FROM cache WHERE chiave = ?", [(c,) for c in via])
+        conn = self._conn
+        conn.execute("BEGIN")
+        try:
+            conn.executemany("DELETE FROM cache WHERE chiave = ?", [(c,) for c in via])
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
         return len(via)
 
     # --- cronologia ------------------------------------------------------------

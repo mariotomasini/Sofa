@@ -38,6 +38,7 @@ GENERI = {
 DA_CODICE = {"act": 28, "ani": 16, "cmy": 35, "crm": 80, "doc": 99, "drm": 18, "fml": 10751, "fnt": 14,
              "hst": 36, "hrr": 27, "msc": 10402, "trl": 53, "rma": 10749, "scf": 878, "war": 10752, "wsn": 37}
 NO_KIDS = ["hrr", "trl", "crm", "war"]
+REALITY = "rly"  # reality e talent (X Factor…): non sono le serie che si cercano qui
 
 DOMANDA = """
 query Titoli($paese: Country!, $lingua: Language!, $quanti: Int!, $filtro: TitleFilter, $ordine: PopularTitlesSorting!) {
@@ -62,6 +63,7 @@ def corpo(*, serie: bool, ordine: str = "TRENDING", quanti: int = 40, piattaform
     }
     if generi:
         filtro["genres"] = generi
+    escludi = list(dict.fromkeys([*(escludi or []), *([REALITY] if serie else [])]))
     if escludi:
         filtro["excludeGenres"] = escludi
     if dal_anno:

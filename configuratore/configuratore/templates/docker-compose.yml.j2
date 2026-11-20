@@ -42,6 +42,20 @@ x-utente: &utente
   PGID: "{{ PGID }}"
   TZ: "{{ TZ }}"
 
+# Controllo di salute: ogni 30 secondi ogni servizio dice se risponde. Se non risponde
+# per 3 volte di fila (un minuto e mezzo) diventa "unhealthy" e il custode lo riavvia.
+# start_period: il tempo concesso all'avvio (sui PC lenti i programmi ci mettono minuti).
+x-controllo: &controllo
+  interval: 30s
+  timeout: 15s
+  retries: 3
+# I servizi con questa etichetta li sorveglia il custode
+x-custodito: &custodito
+  autoheal: "true"
+# Priorità del processore quando il PC è al massimo: quello che usi tu (Cerca, Jellyfin,
+# pagina iniziale) passa davanti ai lavori in sottofondo. Con il PC libero non cambia nulla.
+x-sottofondo: &sottofondo 512
+
 services:
   # Unico punto di ingresso: http://{{ NOME_HOST }}
   caddy:
@@ -53,6 +67,11 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/.salute"]
+      start_period: 30s
 
   # Pagina iniziale con le tessere dei servizi
   homepage:
@@ -65,6 +84,7 @@ services:
       - ./homepage:/app/config
       # solo per mostrare lo spazio libero nella pagina iniziale
       - "{{ MEDIA_DIR }}:/dati-media:ro"
+    labels: *custodito
 
   jellyfin:
     image: "{{ IMG_JELLYFIN }}"
@@ -83,6 +103,11 @@ services:
       - jellyfin_config:/config
       - jellyfin_cache:/cache
       - "{{ MEDIA_DIR }}/media:/data"
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:8096/jellyfin/health"]
+      start_period: 600s
 
   qbittorrent:
     image: "{{ IMG_QBITTORRENT }}"
@@ -97,6 +122,12 @@ services:
     volumes:
       - qbittorrent_config:/config
       - "{{ MEDIA_DIR }}:/data"
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:8080/"]
+      start_period: 120s
 
   radarr:
     image: "{{ IMG_RADARR }}"
@@ -111,6 +142,12 @@ services:
     volumes:
       - radarr_config:/config
       - "{{ MEDIA_DIR }}:/data"
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:7878/radarr/ping"]
+      start_period: 300s
 
   prowlarr:
     image: "{{ IMG_PROWLARR }}"
@@ -124,6 +161,12 @@ services:
       PROWLARR__LOG__ANALYTICSENABLED: "False"
     volumes:
       - prowlarr_config:/config
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:9696/prowlarr/ping"]
+      start_period: 300s
 {%- if sonarr %}
 
   sonarr:
@@ -139,6 +182,12 @@ services:
     volumes:
       - sonarr_config:/config
       - "{{ MEDIA_DIR }}:/data"
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:8989/sonarr/ping"]
+      start_period: 300s
 {%- endif %}
 {%- if dvb %}
 
@@ -170,6 +219,12 @@ services:
     volumes:
       - lidarr_config:/config
       - "{{ MEDIA_DIR }}:/data"
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:8686/lidarr/ping"]
+      start_period: 300s
 {%- endif %}
 {%- if bazarr %}
 
@@ -182,6 +237,12 @@ services:
     volumes:
       - bazarr_config:/config
       - "{{ MEDIA_DIR }}:/data"
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:6767/bazarr/"]
+      start_period: 300s
 {%- endif %}
 {%- if flaresolverr %}
 
@@ -192,6 +253,12 @@ services:
     environment:
       TZ: "{{ TZ }}"
       LOG_LEVEL: info
+    cpu_shares: 256
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:8191/health"]
+      start_period: 120s
 {%- endif %}
 {%- if beszel %}
 
@@ -260,12 +327,11 @@ services:
     volumes:
       - cerca_dati:/dati
       - "{{ MEDIA_DIR }}:/data"
+    labels: *custodito
     healthcheck:
       # sui PC lenti anche solo avviare python per il controllo richiede qualche secondo
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/salute', timeout=20)"]
-      interval: 60s
-      timeout: 30s
-      retries: 3
+      <<: *controllo
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/salute', timeout=10)"]
       start_period: 120s
 
   # Strumento interno: configura i servizi, backup e ripristino.
@@ -281,6 +347,24 @@ services:
       TZ: "{{ TZ }}"
     volumes:
       - ..:/mediabox
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/impostazioni/salute', timeout=10)"]
+      start_period: 120s
+
+  # Custode: se un servizio smette di rispondere (controllo di salute "unhealthy") lo
+  # riavvia in pochi secondi. È minuscolo (un piccolo programma, pochi MB di memoria).
+  custode:
+    image: "{{ IMG_AUTOHEAL }}"
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "15"
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: "10"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    cpu_shares: 256
 
   configuratore:
     build:

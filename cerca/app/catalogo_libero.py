@@ -133,7 +133,7 @@ def riassunto_radarr(f: dict) -> dict:
 # serve, così cache, memoria e processore restano leggeri anche su un PC lento.
 CAMPI_FILM = ("tmdbId", "title", "originalTitle", "year", "overview", "genres", "popularity", "inCinemas",
               "isTrending", "isPopular", "runtime", "imdbId", "remotePoster", "adult")
-CAMPI_SERIE = ("id", "name", "image", "summary", "weight", "genres", "premiered", "type")
+CAMPI_SERIE = ("id", "name", "image", "summary", "weight", "genres", "premiered", "type", "externals")
 
 
 def snellisci_film(f: object) -> object:
@@ -190,6 +190,8 @@ def riassunto_tvmaze(s: dict) -> dict:
         "generi_tvmaze": s.get("genres") or [],
         "canale": canale,
         "premiere": s.get("premiered") or "",
+        "imdb_id": (s.get("externals") or {}).get("imdb") or "",
+        "tvdb": (s.get("externals") or {}).get("thetvdb"),
     }
 
 
@@ -478,8 +480,9 @@ class CatalogoLibero:
         codice = justwatch.GENERI.get(genere)
         if codice and pagina <= 5:
             per_pagina = 24
+            per_bambini = kids or (tipo == "tv" and genere == 10762)  # il genere "Kids" delle serie
             elenco = await self._jw(serie=tipo == "tv", generi=[codice], quanti=per_pagina * pagina,
-                                    escludi=justwatch.NO_KIDS if kids else None)
+                                    escludi=justwatch.NO_KIDS if per_bambini else None)
             if elenco:
                 elenco = [t for t in elenco if adatto_ai_bambini(t)] if kids and tipo != "tv" else elenco
                 return elenco[(pagina - 1) * per_pagina:pagina * per_pagina]

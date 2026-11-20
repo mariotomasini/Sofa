@@ -92,6 +92,7 @@ class GestoreDownload:
         self.jellyfin = jellyfin
         # funzione per le notifiche sul telefono (la imposta main.py)
         self.notifica = None
+        self.serie = None  # Serie (Sonarr): la imposta main.py
         self._compiti: dict[int, asyncio.Task] = {}
         self._importazioni: set[int] = set()
 
@@ -141,12 +142,15 @@ class GestoreDownload:
         titolo: str,
         magnet: str | None = None,
         file_torrent: bytes | None = None,
+        serie: int | None = None,
+        poster: str = "",
     ) -> int:
         id_download = self.archivio.nuovo_download(
             tmdb_id=film["id"] if film else None,
             titolo=film["titolo"] if film else (titolo or "Torrent"),
             anno=film["anno"] if film else "",
-            poster=film.get("poster", "") if film else "",
+            poster=film.get("poster", "") if film else poster,
+            serie=serie,
             fonte=fonte,
             tipo="torrent",
             url=magnet or "",
@@ -338,6 +342,23 @@ class GestoreDownload:
                 return c
         return None
 
+    async def _passa_a_sonarr(self, voce: dict) -> None:
+        """Le puntate di una serie vanno a Sonarr (che poi avvisa Jellyfin)."""
+        id_download = voce["id"]
+        self.archivio.aggiorna_download(id_download, stato="importazione", messaggio="")
+        quante, cartella_serie = await self.serie.importa(voce["percorso"], voce["serie"])
+        if cartella_serie:
+            # come per i film: avviso e scansione, perché Jellyfin ignora gli avvisi per le cartelle nuove
+            await self.jellyfin.avvisa_nuovo(cartella_serie)
+        if voce["tipo"] == "torrent" and voce.get("hash"):
+            with contextlib.suppress(ErroreServizio):
+                await self.qbit.elimina(voce["hash"], con_file=True)
+        self.archivio.aggiorna_download(id_download, stato="importato", messaggio="")
+        if self.notifica:
+            puntate = "1 puntata" if quante == 1 else f"{quante} puntate"
+            await self.notifica("Pronto da guardare", f"{voce['titolo']}: {puntate} in Jellyfin.",
+                                f"{self.config.indirizzo_pubblico}/jellyfin/")
+
     async def _passa_a_radarr(self, id_download: int) -> None:
         if id_download in self._importazioni:
             return
@@ -345,6 +366,9 @@ class GestoreDownload:
         try:
             voce = self.archivio.download(id_download)
             if not voce or voce["stato"] != "completato":
+                return
+            if voce.get("serie") and self.serie is not None:
+                await self._passa_a_sonarr(voce)
                 return
             if not voce["tmdb_id"]:
                 film = await self._indovina_film(voce)

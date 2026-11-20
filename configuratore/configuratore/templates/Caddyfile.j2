@@ -21,6 +21,11 @@
 
 	encode gzip
 
+	# Controllo di salute di Caddy (lo usa il custode)
+	handle /.salute {
+		respond "ok" 200
+	}
+
 	# --- Cerca -----------------------------------------------------------
 	redir /cerca /cerca/
 	handle_path /cerca/* {

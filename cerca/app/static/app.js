@@ -389,12 +389,16 @@ function avviaDownload({ soloAttivi }) {
 function htmlScheda(f) {
   let link = `${BASE}/film/${f.id}`;
   let sotto = esc(f.anno || "");
-  if (f.serie) link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
+  let dati = "";
+  if (f.serie) {
+    link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
+    dati = attrSerie(f);
+  }
   if (f.sottotitolo) {  // episodio da Sonarr
     link = "/jellyfin/";
     sotto = `${esc(f.sottotitolo)}${f.pronto ? ' · <span class="pronto">pronto</span>' : ""}`;
   }
-  return `<a class="scheda" href="${link}">` +
+  return `<a class="scheda" href="${link}"${dati}>` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
     `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${sotto}</span></a>`;
 }
@@ -433,7 +437,7 @@ async function avviaGeneri() {
 
 function htmlTop(f, i) {
   const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}` : `${BASE}/film/${f.id}`;
-  return `<a class="scheda-top" href="${link}" aria-label="${i + 1}. ${esc(f.titolo)}">` +
+  return `<a class="scheda-top" href="${link}"${f.serie ? attrSerie(f) : ""} aria-label="${i + 1}. ${esc(f.titolo)}">` +
     `<span class="numero" aria-hidden="true">${i + 1}</span>` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) + "</a>";
 }
@@ -565,6 +569,16 @@ async function avviaDiagnosi() {
       const male = d.risultati.filter((r) => r.stato === "errore").map((r) => r.nome);
       riassunto.textContent = d.tutto_ok ? "Tutto a posto: tutti i servizi rispondono."
         : male.length ? `Non rispondono: ${male.join(", ")}.` : "Rispondono tutti, ma qualcuno è lento.";
+      const b = d.ultimo_blocco;
+      if (b) {
+        const quando = new Date(b.quando).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
+        elenco.insertAdjacentHTML("beforeend",
+          '<li class="servizio-stato lento"><span class="icona-stato" aria-hidden="true">!</span><div>' +
+          `<strong>Ultimo blocco di Cerca</strong> <span class="sottotitolo">${esc(quando)}</span>` +
+          `<p>Era fermo da ${b.secondi} secondi${b.riavviato ? " e si è riavviato da solo" : ""}.</p>` +
+          (b.punti && b.punti.length ? `<details><summary>Dove era fermo (da mandare a chi ti aiuta)</summary><pre class="dove-blocco">${esc(b.punti.join("\n"))}</pre></details>` : "") +
+          "</div></li>");
+      }
     } catch (e) {
       elenco.innerHTML = `<li>${htmlErrore(e)}</li>`;
     }
@@ -672,3 +686,135 @@ function avviaSpazio() {
   });
   carica();
 }
+
+// --- "Segui la serie": la aggiunge a Sonarr senza passare dalla sua pagina (in inglese) ----------
+function attrSerie(f) {
+  const dati = {
+    nome: f.titolo, titolo: f.titolo_originale || f.titolo, anno: f.anno || "", poster: f.poster || "",
+    trama: f.trama || "", imdb: f.imdb_id || "", tvdb: f.tvdb || null,
+    tmdb: f.generi_tvmaze ? null : f.id,  // le serie di TVmaze hanno un id loro, non quello di TMDB
+  };
+  return ` data-serie="${esc(JSON.stringify(dati))}"`;
+}
+
+function dialogoSerie() {
+  let d = document.getElementById("dialogo-serie");
+  if (d) return d;
+  document.body.insertAdjacentHTML("beforeend", `
+<dialog id="dialogo-serie" aria-labelledby="titolo-serie">
+  <div class="modulo">
+    <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
+    <p id="serie-trama" class="serie-trama"></p>
+    <p class="sottotitolo">Scarico tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono. Le trovi in Jellyfin.</p>
+    <p id="serie-esito" class="messaggio-serie" role="status"></p>
+    <div id="serie-puntate" class="serie-puntate" hidden></div>
+    <div class="azioni-riga">
+      <button type="button" id="serie-segui">Segui la serie</button>
+      <button type="button" id="serie-cerca" hidden>Cerca le puntate</button>
+      <a class="bottone secondario" id="serie-sonarr">Apri in Sonarr</a>
+      <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
+    </div>
+  </div>
+</dialog>`);
+  d = document.getElementById("dialogo-serie");
+  document.getElementById("serie-chiudi").addEventListener("click", () => d.close());
+  document.getElementById("serie-segui").addEventListener("click", async () => {
+    const b = document.getElementById("serie-segui");
+    const esito = document.getElementById("serie-esito");
+    b.disabled = true;
+    esito.className = "messaggio-serie";
+    esito.textContent = "Chiedo a Sonarr… (può volerci qualche secondo)";
+    try {
+      const s = JSON.parse(d.dataset.serie);
+      const r = await inviaJSON("/api/serie/segui", { titolo: s.titolo, imdb: s.imdb, tvdb: s.tvdb, tmdb: s.tmdb });
+      esito.className = "messaggio-serie ok";
+      esito.textContent = r.messaggio + (r.serie_id ? " Se Sonarr non le trova da solo, premi \"Cerca le puntate\"." : "");
+      b.textContent = "La segui";
+      if (r.serie_id) {
+        d.dataset.serieId = r.serie_id;
+        document.getElementById("serie-cerca").hidden = false;
+      }
+    } catch (e) {
+      esito.className = "messaggio-serie errore";
+      esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
+      b.disabled = false;
+    }
+  });
+  document.getElementById("serie-cerca").addEventListener("click", () => cercaPuntate(d));
+  document.getElementById("serie-puntate").addEventListener("click", async (ev) => {
+    const bottone = ev.target.closest("button[data-puntata]");
+    if (!bottone) return;
+    bottone.disabled = true;
+    const s = JSON.parse(d.dataset.serie);
+    try {
+      const r = await inviaJSON("/api/serie/scarica", {
+        serie_id: Number(d.dataset.serieId), id: bottone.dataset.puntata, nome: s.nome, poster: s.poster,
+      });
+      bottone.textContent = "Avviato";
+      avviso(r.messaggio);
+    } catch (e) {
+      bottone.disabled = false;
+      avviso(`${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`, true);
+    }
+  });
+  return d;
+}
+
+// Le puntate cercate da Cerca con il titolo italiano: Sonarr da solo usa quello inglese
+async function cercaPuntate(d) {
+  const box = document.getElementById("serie-puntate");
+  const s = JSON.parse(d.dataset.serie);
+  box.hidden = false;
+  box.innerHTML = '<p class="caricamento">Cerco le puntate sugli indexer… (anche un minuto)</p>';
+  try {
+    const r = await chiama(`/api/serie/${d.dataset.serieId}/torrent?nome=${encodeURIComponent(s.nome || "")}` +
+      `&originale=${encodeURIComponent(s.titolo || "")}`, { attesa: 120000 });
+    if (r.avviso) {
+      box.innerHTML = `<div class="nota"><strong>${esc(r.avviso)}</strong><p>${esc(r.cosa_fare || "")}</p></div>`;
+      return;
+    }
+    const italiani = r.risultati.filter((x) => x.italiano);
+    const altri = r.risultati.filter((x) => !x.italiano);
+    const riga = (x) => `<li><div class="descrizione"><strong>${x.italiano ? '<span class="lingua">ITA</span> ' : ""}` +
+      `${esc(x.contenuto || x.titolo)}</strong><span class="sottotitolo">${esc(x.contenuto ? x.titolo : "")}` +
+      `${x.contenuto ? " · " : ""}${dimensione(x.dimensione)} · seed ${x.seed ?? "?"}</span></div>` +
+      `<div class="azioni"><button class="secondario" data-puntata="${esc(x.id)}">Scarica</button></div></li>`;
+    let html = italiani.length ? `<ul class="risultati">${italiani.slice(0, 25).map(riga).join("")}</ul>`
+      : '<p class="sottotitolo">Nessuna puntata in italiano: queste sono in altre lingue.</p>';
+    if (altri.length) {
+      const lista = `<ul class="risultati">${altri.slice(0, 25).map(riga).join("")}</ul>`;
+      html += italiani.length ? `<details class="altre-lingue"><summary>Mostra anche ${altri.length} in altre lingue</summary>${lista}</details>` : lista;
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = htmlErrore(e);
+  }
+}
+
+function apriSerie(dati, linkSonarr) {
+  const d = dialogoSerie();
+  d.dataset.serie = JSON.stringify(dati);
+  const poster = document.getElementById("serie-poster");
+  poster.hidden = !dati.poster;
+  if (dati.poster) poster.src = dati.poster;
+  document.getElementById("titolo-serie").textContent = dati.nome || dati.titolo;
+  document.getElementById("serie-anno").textContent =
+    [dati.anno, dati.titolo !== dati.nome ? dati.titolo : ""].filter(Boolean).join(" · ");
+  document.getElementById("serie-trama").textContent = dati.trama || "";
+  document.getElementById("serie-sonarr").href = linkSonarr;
+  const b = document.getElementById("serie-segui");
+  b.disabled = false;
+  b.textContent = "Segui la serie";
+  delete d.dataset.serieId;
+  document.getElementById("serie-cerca").hidden = true;
+  document.getElementById("serie-puntate").hidden = true;
+  document.getElementById("serie-esito").textContent = "";
+  d.showModal();
+}
+
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest("a[data-serie]");
+  if (!a || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;  // con Ctrl si apre comunque Sonarr
+  ev.preventDefault();
+  try { apriSerie(JSON.parse(a.dataset.serie), a.href); } catch (e) { window.location.href = a.href; }
+});

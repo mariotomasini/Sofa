@@ -300,3 +300,13 @@ def test_senza_justwatch_restano_le_altre_fonti():
     # crea() risponde 404 a JustWatch: la Top 10 arriva dai film del momento di Radarr
     top = asyncio.run(crea().top_settimana("movie"))
     assert [f["id"] for f in top] == [2, 1]
+
+
+
+def test_serie_senza_reality_e_kids_per_bambini():
+    from app import justwatch
+
+    c = justwatch.corpo(serie=True, generi=["fml"], escludi=justwatch.NO_KIDS)
+    assert c["variables"]["filtro"]["excludeGenres"] == [*justwatch.NO_KIDS, "rly"]
+    assert justwatch.corpo(serie=True)["variables"]["filtro"]["excludeGenres"] == ["rly"]
+    assert "excludeGenres" not in justwatch.corpo(serie=False)["variables"]["filtro"]

@@ -30,6 +30,22 @@ def e_italiano(nome: str) -> bool:
     return bool(set(normalizza(nome).split()) & PAROLE_ITALIANO)
 
 
+RE_EPISODIO = re.compile(r"\bS(\d{1,2})[ ._-]?E(\d{1,3})\b", re.IGNORECASE)
+RE_STAGIONE = re.compile(r"\b(?:S(\d{1,2})(?![ ._-]?E\d)|stagion[ei][ ._-]*(\d{1,2})|season[ ._-]*(\d{1,2}))\b",
+                         re.IGNORECASE)
+
+
+def contenuto(nome: str) -> str:
+    """Cosa c'è nel torrent di una serie: "Stagione 2 · Episodio 3", "Stagione 1" o "" se non si capisce."""
+    if m := RE_EPISODIO.search(nome):
+        return f"Stagione {int(m.group(1))} · Episodio {int(m.group(2))}"
+    if m := RE_STAGIONE.search(nome):
+        return f"Stagione {int(next(g for g in m.groups() if g))}"
+    if re.search(r"\b(complet[ao]|completa|complete|integrale)\b", nome, re.IGNORECASE):
+        return "Serie completa"
+    return ""
+
+
 def corrisponde(nome: str, titoli: list[str], anno: str) -> bool:
     """Vero se il nome del torrent parla proprio di questo film.
 
@@ -105,7 +121,7 @@ class Prowlarr:
             )
         if not r.is_success:
             raise ErroreServizio(f"Prowlarr ha risposto con un errore ({r.status_code}).", "Riprova tra poco.")
-        return r.json()
+        return await asyncio.to_thread(r.json)  # le ricerche sono grandi: si leggono in un thread
 
     async def cerca(self, film: dict) -> dict:
         indexer = await self._get("indexer")
@@ -123,7 +139,8 @@ class Prowlarr:
         risposte = await asyncio.gather(*(self._cerca_testo(f"{t} {anno}".strip()) for t in titoli))
         grezzi = list({id_risultato(r): r for risposta in risposte for r in risposta}.values())
         # Teniamo i risultati completi per poter avviare il download dopo
-        self.archivio.cache_scrivi(f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
+        # (centinaia di risultati: si salvano in un thread, senza fermare le pagine)
+        await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
         torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
         coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, anno)]
         risultati = ordina([riassunto(r) for r in coerenti])
@@ -135,20 +152,40 @@ class Prowlarr:
             )
         return risposta
 
-    async def _cerca_testo(self, testo: str) -> list[dict]:
-        chiave_cache = f"prowlarr:{testo}"
-        grezzi = self.archivio.cache_leggi(chiave_cache)
+    async def _cerca_testo(self, testo: str, categoria: int = 2000) -> list[dict]:
+        chiave_cache = f"prowlarr:{categoria}:{testo}"
+        grezzi = await asyncio.to_thread(self.archivio.cache_leggi, chiave_cache)
         if grezzi is None:
             grezzi = await self._get(
                 "search",
-                {"query": testo, "type": "search", "categories": [2000], "limit": 100},
+                {"query": testo, "type": "search", "categories": [categoria], "limit": 100},
                 timeout=90,
             )
-            self.archivio.cache_scrivi(chiave_cache, grezzi, DIECI_MINUTI)
+            await asyncio.to_thread(self.archivio.cache_scrivi, chiave_cache, grezzi, DIECI_MINUTI)
         return grezzi
 
-    def risultato_originale(self, tmdb_id: int, id_ris: str) -> dict:
-        grezzi = self.archivio.cache_leggi(f"prowlarr:film:{tmdb_id}") or []
+    async def cerca_serie(self, serie_id: int, titoli: list[str]) -> dict:
+        """Le puntate di una serie (categoria TV), con il titolo italiano e quello originale."""
+        indexer = await self._get("indexer")
+        attivi = [i for i in indexer if i.get("enable")]
+        if not attivi:
+            return {"risultati": [], "avviso": "Nessun indexer configurato in Prowlarr.",
+                    "cosa_fare": "Apri Prowlarr → Indicizzatori → Aggiungi indicizzatore."}
+        titoli = list(dict.fromkeys(t.strip() for t in titoli if t and t.strip()))[:4]
+        risposte = await asyncio.gather(*(self._cerca_testo(t, categoria=5000) for t in titoli))
+        grezzi = list({id_risultato(r): r for risposta in risposte for r in risposta}.values())
+        await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:serie:{serie_id}", grezzi, 6 * 3600)
+        torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
+        coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, "")]
+        risultati = ordina([{**riassunto(r), "contenuto": contenuto(r.get("title", ""))} for r in coerenti])
+        risposta = {"risultati": risultati[:60], "indexer": len(attivi)}
+        if not risultati:
+            risposta.update(avviso="Nessuna puntata trovata sui tuoi indexer.",
+                            cosa_fare="Prova più tardi, o aggiungi altri indexer in Prowlarr.")
+        return risposta
+
+    def risultato_originale(self, tmdb_id: int, id_ris: str, tipo: str = "film") -> dict:
+        grezzi = self.archivio.cache_leggi(f"prowlarr:{tipo}:{tmdb_id}") or []
         for r in grezzi:
             if id_risultato(r) == id_ris:
                 return r
