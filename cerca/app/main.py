@@ -40,6 +40,8 @@ from .tmdb import TMDB, tipo_tmdb
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("cerca")
+# una riga per ogni richiesta fatta da Cerca: troppe, e sui PC lenti costano processore
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 CARTELLA = Path(__file__).parent
 MAX_TORRENT = 10 * 1024 * 1024

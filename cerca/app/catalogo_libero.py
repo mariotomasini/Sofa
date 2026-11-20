@@ -14,6 +14,7 @@ in Italia" (dati JustWatch): al suo posto c'è un link alla ricerca di JustWatch
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import datetime as dt
 import html
 import json
@@ -147,18 +148,34 @@ def riassunto_tvmaze(s: dict) -> dict:
     }
 
 
+# Nella home le righe usano solo le schede dei film già pronte: quelle mancanti si
+# preparano in sottofondo, una alla volta, e compaiono alla visita successiva.
+# Chiedere a Radarr 100 schede insieme bloccava i PC lenti (e la ricerca restava in coda).
+solo_pronti: contextvars.ContextVar[bool] = contextvars.ContextVar("solo_pronti", default=False)
+SCHEDE_IN_CODA = 200
+PAUSA_TRA_SCHEDE = 0.5  # secondi: lascia respirare Radarr
+SCHEDE_INSIEME = 2
+
+
 class CatalogoLibero:
     def __init__(self, config: Config, archivio: Archivio, client: httpx.AsyncClient) -> None:
         self.config = config
         self.archivio = archivio
         self.client = client
-        self._contemporanei = asyncio.Semaphore(6)
+        self._contemporanei = asyncio.Semaphore(SCHEDE_INSIEME)
+        self._coda: dict[int, None] = {}  # schede da preparare in sottofondo (in ordine)
+        self._preparatore: asyncio.Task | None = None
+        self._senza_scheda: dict[int, float] = {}  # film che Radarr non trova: non li richiediamo per un po'
         self._giu: dict[str, float] = {}  # servizio → fino a quando non richiamarlo
 
     # --- richieste con cache -------------------------------------------------------------
+    @staticmethod
+    def _chiave(url: str, parametri: dict) -> str:
+        return f"libero:{url}:{sorted(parametri.items())}"
+
     async def _json(self, url: str, parametri: dict, durata: float, *, intestazioni: dict | None = None,
                     limitatore: Limitatore | None = None, nome: str = "") -> object:
-        chiave = f"libero:{url}:{sorted(parametri.items())}"
+        chiave = self._chiave(url, parametri)
         # le risposte di Radarr e Wikidata sono grandi: leggerle e scriverle in un thread a parte
         # lascia Cerca libero di rispondere agli altri anche su un processore lento
         in_cache = await asyncio.to_thread(self.archivio.cache_leggi, chiave)
@@ -238,15 +255,57 @@ class CatalogoLibero:
 
     async def _da_id(self, ids: list[int], kids: bool = False) -> list[dict]:
         """Le schede di più film insieme (per le righe che arrivano da Wikidata)."""
-        async def uno(tmdb_id: int) -> dict | None:
-            async with self._contemporanei:
-                try:
-                    return riassunto_radarr(await self._film(tmdb_id))
-                except ErroreServizio:
-                    return None
+        adesso = time.monotonic()
+        ids = [i for i in dict.fromkeys(ids) if self._senza_scheda.get(i, 0) < adesso]
+        if solo_pronti.get():
+            pronte = await asyncio.to_thread(self._schede_pronte, ids)
+            self._prepara([i for i in ids if i not in pronte])
+            film = [riassunto_radarr(pronte[i]) for i in ids if i in pronte]
+        else:
+            async def uno(tmdb_id: int) -> dict | None:
+                async with self._contemporanei:
+                    try:
+                        return riassunto_radarr(await self._film(tmdb_id))
+                    except ErroreServizio:
+                        self._senza_scheda[tmdb_id] = time.monotonic() + UN_GIORNO
+                        return None
 
-        film = [f for f in await asyncio.gather(*(uno(i) for i in ids)) if f and f["poster"]]
+            film = list(await asyncio.gather(*(uno(i) for i in ids)))
+        film = [f for f in film if f and f["poster"]]
         return [f for f in film if adatto_ai_bambini(f)] if kids else film
+
+    def _schede_pronte(self, ids: list[int]) -> dict[int, dict]:
+        url = f"{self.config.radarr_url}/api/v3/movie/lookup/tmdb"
+        pronte = {}
+        for i in ids:
+            dati = self.archivio.cache_leggi(self._chiave(url, {"tmdbId": i}))
+            if dati:
+                pronte[i] = dati
+        return pronte
+
+    def _prepara(self, ids: list[int]) -> None:
+        for i in ids:
+            if len(self._coda) >= SCHEDE_IN_CODA:
+                break
+            self._coda.setdefault(i, None)
+        if self._coda and (self._preparatore is None or self._preparatore.done()):
+            self._preparatore = asyncio.create_task(self._prepara_in_sottofondo())
+
+    async def _prepara_in_sottofondo(self) -> None:
+        while self._coda:
+            tmdb_id = next(iter(self._coda))
+            self._coda.pop(tmdb_id, None)
+            if time.monotonic() < self._giu.get("Radarr", 0):
+                self._coda.clear()  # Radarr non risponde: riproveremo alla prossima visita
+                return
+            try:
+                async with self._contemporanei:
+                    await self._film(tmdb_id)
+            except ErroreServizio:
+                self._senza_scheda[tmdb_id] = time.monotonic() + UN_GIORNO
+            except Exception:  # noqa: BLE001 - la preparazione in sottofondo non deve mai fermarsi male
+                log.exception("Errore nel preparare la scheda %s", tmdb_id)
+            await asyncio.sleep(PAUSA_TRA_SCHEDE)
 
     async def _scopri_radarr(self) -> list[dict]:
         """Film di tendenza e popolari della pagina "Scopri" di Radarr."""
@@ -328,6 +387,8 @@ class CatalogoLibero:
             )
             ids = [int(r["tmdb"]) for r in righe if r.get("tmdb", "").isdigit()]
             film = await self._da_id(ids, kids=kids)
+            if not film or (solo_pronti.get() and len(film) < 6):
+                raise ErroreServizio("Schede non ancora pronte.", "")  # intanto i film del momento di quel genere
             # Wikidata a volte mette un film in troppi generi: teniamo quelli che anche TMDB (via Radarr) mette lì
             stesso_genere = [f for f in film if genere in f["genre_ids"]]
             return stesso_genere if len(stesso_genere) >= 6 else film

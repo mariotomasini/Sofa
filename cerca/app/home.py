@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from .catalogo_libero import solo_pronti
 from .rete import ErroreServizio
 from .tmdb import GENERI_INIZIALI
 
@@ -75,6 +76,14 @@ MASSIMO_PIATTAFORME = 6
 
 async def righe(tmdb, jellyfin, tipo: str, piattaforme: list[int] | None = None) -> dict:
     """Le righe della home per tipo "movie" (Film) o "tv" (Serie TV)."""
+    segno = solo_pronti.set(True)  # senza chiave: solo schede già pronte, così la home arriva subito
+    try:
+        return await _righe(tmdb, jellyfin, tipo, piattaforme)
+    finally:
+        solo_pronti.reset(segno)
+
+
+async def _righe(tmdb, jellyfin, tipo: str, piattaforme: list[int] | None) -> dict:
     preferiti_jf, libreria = await asyncio.gather(
         _senza_errori(jellyfin.generi_preferiti(tipo), []),
         _senza_errori(jellyfin.tmdb_in_libreria(tipo), set()),

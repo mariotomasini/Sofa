@@ -170,3 +170,42 @@ def test_generi_di_jellyfin():
     assert asyncio.run(c.id_genere("movie", ["Horror", "Science Fiction", "Commedia", "Boh"])) == {
         "Horror": 27, "Science Fiction": 878, "Commedia": 35}
     assert asyncio.run(c.id_genere("tv", ["Drama", "Fantasy"])) == {"Drama": 18, "Fantasy": 10765}
+
+
+class ArchivioInMemoria(ArchivioFinto):
+    def __init__(self):
+        self.dati = {}
+
+    def cache_leggi(self, chiave):
+        return self.dati.get(chiave)
+
+    def cache_scrivi(self, chiave, valore, durata):
+        self.dati[chiave] = valore
+
+
+def test_home_usa_solo_schede_pronte_e_prepara_le_altre_in_sottofondo(monkeypatch):
+    """Nella home niente raffiche di richieste a Radarr: le schede mancanti arrivano una alla volta."""
+    monkeypatch.setattr(catalogo_libero, "PAUSA_TRA_SCHEDE", 0)
+    richieste = []
+    c = crea(richieste=richieste)
+    c.archivio = ArchivioInMemoria()
+
+    def schede():
+        return sum(1 for _, p, _ in richieste if p.endswith("/movie/lookup/tmdb"))
+
+    async def prova():
+        segno = catalogo_libero.solo_pronti.set(True)
+        try:
+            prima = await c.su_piattaforma("movie", 8)
+            assert prima == [] and schede() == 0  # la home non aspetta nessuna scheda
+            await c._preparatore  # le schede si preparano in sottofondo
+            assert schede() == 2
+            dopo = await c.su_piattaforma("movie", 8)
+            assert [f["id"] for f in dopo] == [900, 901] and schede() == 2
+            # un genere senza abbastanza schede pronte mostra intanto i film del momento
+            horror = await c.scopri("movie", 27)
+            assert [f["id"] for f in horror] == [2, 3]
+        finally:
+            catalogo_libero.solo_pronti.reset(segno)
+
+    asyncio.run(prova())
