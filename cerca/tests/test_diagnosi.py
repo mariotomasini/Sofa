@@ -103,3 +103,27 @@ def test_jellyfin_lento_non_blocca_la_home():
     inizio = time.monotonic()
     risultato = asyncio.run(home._senza_errori(lentissimo(), "vuoto", secondi=0.2))
     assert risultato == "vuoto" and time.monotonic() - inizio < 2
+
+
+def test_sentinella(caplog, monkeypatch):
+    from app import sentinella
+
+    adesso = [0.0]
+    monkeypatch.setattr(sentinella.time, "monotonic", lambda: adesso[0])
+    uscite = []
+    s = sentinella.Sentinella(avviso=30, riavvio=180, esci=uscite.append)
+    adesso[0] = 10
+    assert s.controlla() == ""
+    adesso[0] = 35
+    # la sentinella gira in un thread suo, mentre il ciclo principale (qui: il test) è fermo
+    import threading
+    esito = []
+    controllo = threading.Thread(target=lambda: esito.append(s.controlla()))
+    controllo.start()
+    controllo.join()
+    assert esito == ["avviso"]  # scrive dove si è fermato
+    assert "test_sentinella" in caplog.text  # lo stack del punto bloccato
+    adesso[0] = 60
+    assert s.controlla() == ""  # l'avviso si scrive una volta sola
+    adesso[0] = 200
+    assert s.controlla() == "riavvio" and uscite == [1]

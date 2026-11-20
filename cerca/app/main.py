@@ -33,6 +33,7 @@ from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, nuovo_client
+from .sentinella import Sentinella
 from .serie import Serie
 from .stato import ControlloDisco
 from .tmdb import TMDB, tipo_tmdb
@@ -84,13 +85,17 @@ async def ciclo_di_vita(app: FastAPI):
     async with nuovo_client() as client:
         servizi = Servizi(config, client)
         app.state.servizi = servizi
+        sentinella = Sentinella()
+        sentinella.avvia()
         compiti = [
+            asyncio.create_task(sentinella.battito()),
             asyncio.create_task(servizi.download.ciclo()),
             asyncio.create_task(servizi.avvisami.ciclo()),
             asyncio.create_task(servizi.disco.ciclo()),
         ]
         log.info("Cerca è pronto")
         yield
+        sentinella.ferma()
         for c in compiti:
             c.cancel()
         for c in compiti:
