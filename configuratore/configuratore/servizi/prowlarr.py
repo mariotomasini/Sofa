@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import re
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit, urlunsplit
 
 from ..impostazioni import Impostazioni
@@ -92,11 +93,62 @@ def trova_schema(schemi: list[dict], nome: str) -> dict | None:
     return None
 
 
+# Campi che vogliono un account: un indexer che li chiede non è "aperto"
+CAMPI_ACCOUNT = {"username", "password", "apikey", "apiKey", "cookie", "passkey", "pid", "rsskey", "uid", "token"}
+CATEGORIE_VIDEO = (2000, 5000)  # Film, TV
+PRIORITA_ITALIANO = 10
+
+
+def categorie(schema: dict) -> set[int]:
+    trovate: set[int] = set()
+    for c in (schema.get("capabilities") or {}).get("categories") or []:
+        trovate.add(c.get("id", 0))
+        trovate |= {s.get("id", 0) for s in c.get("subCategories") or []}
+    return trovate
+
+
+def e_pubblico_aperto(schema: dict) -> bool:
+    """Pubblico, torrent, senza account, con film o serie."""
+    if schema.get("privacy") != "public" or schema.get("protocol") != "torrent":
+        return False
+    if any(c.get("name") in CAMPI_ACCOUNT for c in schema.get("fields", [])):
+        return False
+    return any(c // 1000 * 1000 in CATEGORIE_VIDEO for c in categorie(schema))
+
+
+def priorita_pubblico(schema: dict) -> int:
+    return PRIORITA_ITALIANO if (schema.get("language") or "").lower().startswith("it") else PRIORITA_NORMALE
+
+
+def aggiungi_pubblici(arr: Arr, schemi: list[dict], presenti: set[str], profilo_app: int, etichette: list[int]) -> None:
+    """Prova tutti gli indexer pubblici aperti, in parallelo, e tiene quelli che rispondono."""
+    candidati = [s for s in schemi if e_pubblico_aperto(s) and _semplice(s.get("name") or "") not in presenti]
+    if not candidati:
+        return
+    info(f"Provo {len(candidati)} indexer pubblici (qualche minuto: tengo solo quelli che funzionano)…")
+
+    def prova(schema: dict) -> str | None:
+        nome = schema.get("name") or schema.get("definitionName") or ""
+        dati = prepara_indexer(schema, nome, {}, profilo_app, priorita_pubblico(schema), etichette)
+        try:
+            arr.post("indexer", dati, f"aggiungere l'indexer {nome}", timeout=150)
+            return nome
+        except ErroreMediabox:
+            return None
+
+    with ThreadPoolExecutor(max_workers=6) as gruppo:
+        aggiunti = [n for n in gruppo.map(prova, candidati) if n]
+    presenti |= {_semplice(n) for n in aggiunti}
+    italiani = sum(1 for s in candidati if s.get("name") in aggiunti and priorita_pubblico(s) == PRIORITA_ITALIANO)
+    ok(f"Indexer pubblici aggiunti: {len(aggiunti)} su {len(candidati)} provati ({italiani} italiani, usati per primi)")
+
+
 def aggiungi_indexer(arr: Arr, imp: Impostazioni, esito) -> None:
     """Aggiunge da soli gli indexer scritti nel file .env (quelli già presenti non si toccano)."""
     voci = leggi_indexer(imp.get("PROWLARR_INDEXER"))
     torznab = leggi_torznab(imp.get("INDEXER_TORZNAB"))
-    if not voci and not torznab:
+    pubblici = imp.flag("PROWLARR_PUBLICI")
+    if not voci and not torznab and not pubblici:
         return
     presenti = {_semplice(i["name"]) for i in arr.get("indexer")}
     profili = arr.get("appprofile")
@@ -130,6 +182,9 @@ def aggiungi_indexer(arr: Arr, imp: Impostazioni, esito) -> None:
                 f"Indexer \"{nome}\" non aggiunto: Prowlarr non riesce a usarlo ({e.cosa[:160]}). "
                 "Se serve un account, scrivi i dati nel file .env (es. Nome|apikey=…) e riesegui \"mediabox configura\"."
             )
+
+    if pubblici:
+        aggiungi_pubblici(arr, schemi, presenti, profilo_app, etichette)
 
 
 def configura(imp: Impostazioni, esito) -> None:

@@ -7,6 +7,7 @@ qualsiasi momento: i dati veri stanno nei volumi Docker e in MEDIA_DIR.
 from __future__ import annotations
 
 import re
+import secrets
 from pathlib import Path
 
 import bcrypt
@@ -57,7 +58,24 @@ def normalizza_percorso(percorso: str) -> str:
     return percorso.rstrip("/") if len(percorso) > 1 else percorso
 
 
+SEGRETI_TGARR = ("TGARR_API_KEY", "TGARR_DB_PASSWORD", "TGARR_MEILI_KEY")
+
+
+def assicura_segreti_tgarr(imp: Impostazioni, file_env: Path) -> None:
+    """Le chiavi interne di tgarr si creano da sole la prima volta e restano nel file .env."""
+    mancanti = {k: secrets.token_hex(24) for k in SEGRETI_TGARR if not imp.get(k)}
+    if not mancanti:
+        return
+    from .menu import aggiorna_env
+
+    if file_env.exists():
+        aggiorna_env(file_env, mancanti)
+    imp.valori.update(mancanti)
+
+
 def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
+    if imp.tgarr:
+        assicura_segreti_tgarr(imp, cartella_generato.parent / ".env")
     valori = dict(imp.valori)
     # la chiave TMDB è facoltativa: senza, Cerca usa fonti gratuite
     for chiave in ("ADMIN_PASSWORD", "RADARR_API_KEY", "PROWLARR_API_KEY"):
@@ -86,6 +104,7 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         bazarr=imp.bazarr,
         flaresolverr=imp.flaresolverr,
         beszel=imp.beszel,
+        tgarr=imp.tgarr,
         gateway=gateway(imp.get("SUBNET", "172.28.64.0/24")),
         tv=imp.dvb or bool(imp.hdhomerun),
         hash_password=_hash_password(imp.password, cartella_generato / "Caddyfile"),

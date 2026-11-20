@@ -23,6 +23,7 @@ MEMORIA_MB = {
     "WITH_SONARR": 250,
     "WITH_BAZARR": 200,
     "WITH_BESZEL": 100,
+    "WITH_TGARR": 600,
 }
 # Quelli che la modalità leggera spegne (Serie TV e Anime restano come li hai scelti)
 DA_SPEGNERE = {
@@ -30,6 +31,7 @@ DA_SPEGNERE = {
     "WITH_LIDARR": "Musica da scaricare (Lidarr)",
     "WITH_BAZARR": "Sottotitoli automatici (Bazarr)",
     "WITH_BESZEL": "Grafici del PC (Beszel)",
+    "WITH_TGARR": "Telegram come fonte (tgarr)",
 }
 
 

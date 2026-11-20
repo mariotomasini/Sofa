@@ -43,7 +43,7 @@ def errore_imprevisto(nome: str, exc: Exception) -> ErroreMediabox:
 
 def _configura(imp: Impostazioni) -> int:
     from .riepilogo import Esito, stampa_riepilogo
-    from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tvheadend
+    from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tgarr, tvheadend
 
     esito = Esito()
     passi = [
@@ -55,6 +55,8 @@ def _configura(imp: Impostazioni) -> int:
     if imp.lidarr:
         passi.append(("Lidarr", lidarr.configura))
     passi.append(("Prowlarr", prowlarr.configura))
+    if imp.tgarr:
+        passi.append(("Telegram (tgarr)", tgarr.configura))
     if imp.bazarr:
         passi.append(("Bazarr", bazarr.configura))
     if imp.dvb:

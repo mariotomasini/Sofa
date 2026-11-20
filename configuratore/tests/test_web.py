@@ -203,8 +203,9 @@ def test_modalita_leggera(cartella):
     spenti = leggero.applica(cartella)
     env = leggi_env(cartella / ".env")
     assert spenti == ["Aiuto per i siti protetti (FlareSolverr)", "Musica da scaricare (Lidarr)",
-                      "Sottotitoli automatici (Bazarr)"]
+                      "Sottotitoli automatici (Bazarr)", "Telegram come fonte (tgarr)"]
     assert env["WITH_FLARESOLVERR"] == env["WITH_LIDARR"] == env["WITH_BAZARR"] == env["WITH_BESZEL"] == "no"
+    assert env["WITH_TGARR"] == "no"
     assert env["WITH_SONARR"] == "si"  # le serie restano come le hai scelte
     assert env["MODALITA_LEGGERA"] == "si"
     # una volta sola: se poi riaccendi qualcosa, resta acceso

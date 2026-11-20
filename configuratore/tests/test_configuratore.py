@@ -315,3 +315,32 @@ def test_un_servizio_che_non_risponde_non_ferma_gli_altri():
     assert lento.cosa == "Lidarr risponde troppo lentamente." and "mediabox configura" in lento.cosa_fare
     assert "ConnectError" in errore_imprevisto("Radarr", httpx.ConnectError("no")).cosa
     assert "KeyError" in errore_imprevisto("Jellyfin", KeyError("Id")).cosa
+
+
+def test_genera_con_tgarr(cartella):
+    from configuratore.impostazioni import Impostazioni as I
+
+    env = cartella / ".env"
+    env.write_text(env.read_text() + "\nWITH_TGARR=si\nTG_PHONE=+390000000\n")
+    imp = I.carica(cartella)
+    genera(imp, cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert "tgarr-crawler:" in compose and "tgarr-db:" in compose
+    chiavi = leggi_env(env)
+    assert all(len(chiavi[k]) == 48 for k in ("TGARR_API_KEY", "TGARR_DB_PASSWORD", "TGARR_MEILI_KEY"))
+    assert chiavi["TGARR_API_KEY"] in compose
+    # la seconda volta le chiavi restano le stesse
+    genera(I.carica(cartella), cartella)
+    assert leggi_env(env)["TGARR_API_KEY"] == chiavi["TGARR_API_KEY"]
+
+
+def test_indexer_pubblici_aperti():
+    from configuratore.servizi.prowlarr import e_pubblico_aperto, priorita_pubblico
+
+    video = {"capabilities": {"categories": [{"id": 2000, "subCategories": [{"id": 2040}]}]}}
+    aperto = {"privacy": "public", "protocol": "torrent", "fields": [{"name": "baseUrl"}], "language": "it-IT", **video}
+    assert e_pubblico_aperto(aperto) and priorita_pubblico(aperto) == 10
+    assert not e_pubblico_aperto({**aperto, "privacy": "private"})
+    assert not e_pubblico_aperto({**aperto, "fields": [{"name": "username"}]})
+    assert not e_pubblico_aperto({**aperto, "capabilities": {"categories": [{"id": 3000}]}})
+    assert priorita_pubblico({**aperto, "language": "en-US"}) == 25
