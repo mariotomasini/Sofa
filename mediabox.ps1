@@ -27,6 +27,7 @@ Uso: mediabox <comando>
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
   impostazioni       cambia cosa usi dal terminale (più comodo dal browser: /impostazioni)
+  azzera-jellyfin    rifà Jellyfin da zero con l'utente di mediabox (i film restano)
   configura          rigenera la configurazione dal file .env e la riapplica
   update             aggiorna mediabox e i servizi all'ultima versione (fa prima un backup)
   versione           mostra la versione installata e l'ultima disponibile
@@ -143,6 +144,16 @@ switch ($Comando.ToLower()) {
     "status" { Controlla-Installazione; Mostra-Stato }
     "logs" { Controlla-Installazione; Invoca-Compose logs -f --tail 200 @Altri }
     "configura" { Controlla-Installazione; Aggiorna-Ip; [void](Applica-Configurazione) }
+    "azzera-jellyfin" {
+        Controlla-Installazione
+        Scrivi-Titolo "Rifaccio Jellyfin da zero"
+        Scrivi-Info "Tolgo utenti e impostazioni di Jellyfin (i film nelle cartelle restano dove sono)…"
+        Senza-Stderr { Invoca-Compose rm -sf jellyfin *> $null }
+        Senza-Stderr { & docker volume rm mediabox_jellyfin_config *> $null }
+        Scrivi-Ok "Jellyfin azzerato: ora lo riconfiguro con l'utente di mediabox"
+        Aggiorna-Ip
+        if (-not (Con-Registro { Applica-Configurazione })) { exit 1 }
+    }
     "applica-impostazioni" { Controlla-Installazione; Applica-ImpostazioniWeb }
     "controlla-impostazioni" {
         # avviato all'accesso a Windows (nascosto): applica le modifiche fatte nel browser

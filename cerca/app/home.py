@@ -60,10 +60,10 @@ def _errore(exc: BaseException) -> dict:
     return {"errore": "Una parte della pagina non si è caricata.", "cosa_fare": "Ricarica tra poco."}
 
 
-async def _senza_errori(coro, predefinito):
-    """Jellyfin è un di più: se manca o non risponde, la home si vede lo stesso."""
+async def _senza_errori(coro, predefinito, secondi: float = 10):
+    """Jellyfin è un di più: se manca o non risponde entro pochi secondi, la home si vede lo stesso."""
     try:
-        return await coro
+        return await asyncio.wait_for(coro, secondi)
     except Exception as exc:  # noqa: BLE001 — qualunque errore di Jellyfin non deve rompere la pagina
         log.info("Jellyfin non disponibile per la home: %s", exc)
         return predefinito

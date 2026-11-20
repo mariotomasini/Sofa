@@ -652,3 +652,14 @@ button:disabled { background: var(--pannello-2); color: var(--tenue); opacity: 1
   .piattaforma-scelta { padding: .5rem; gap: .5rem; min-height: 52px; }
   .piattaforma-scelta span:last-child { font-size: .88rem; }
 }
+
+/* --- Controllo servizi ----------------------------------------------------------------------- */
+.elenco-diagnosi { list-style: none; padding: 0; margin: 1.4rem 0 0; display: grid; gap: .7rem; }
+.servizio-stato { display: flex; gap: 1rem; align-items: flex-start; background: var(--pannello); border-radius: var(--raggio); padding: 1rem 1.2rem; }
+.servizio-stato p { margin: .25rem 0 0; }
+.servizio-stato .cosa-fare { color: var(--testo-2); }
+.icona-stato { flex: 0 0 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--pannello-2); }
+.servizio-stato.ok .icona-stato { background: var(--verde-fondo); color: var(--verde); }
+.servizio-stato.lento .icona-stato { background: var(--giallo-fondo); color: var(--giallo); }
+.servizio-stato.errore { background: var(--rosso-fondo); }
+.servizio-stato.errore .icona-stato { background: var(--rosso); color: var(--su-accento); }

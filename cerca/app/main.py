@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from . import diagnosi
 from . import home as home_netflix
 from .archive import InternetArchive
 from .avvisami import Avvisami
@@ -267,6 +268,11 @@ async def pagina_piattaforma(request: Request, piattaforma: int, mondo: str = "f
     return pagina(request, "piattaforma.html", mondo=mondo, piattaforma=trovata)
 
 
+@app.get("/diagnosi", response_class=HTMLResponse)
+async def pagina_diagnosi(request: Request):
+    return pagina(request, "diagnosi.html", sezione="diagnosi")
+
+
 @app.get("/torrent", response_class=HTMLResponse)
 async def pagina_torrent(request: Request):
     return solo_adulti(request) or pagina(request, "torrent.html", sezione="torrent")
@@ -375,6 +381,13 @@ async def api_piattaforma(request: Request, piattaforma: int, mondo: str = "film
     s = servizi(request)
     elementi = await s.tmdb.su_piattaforma(tipo_tmdb(mondo), piattaforma, pagina=pagina)
     return {"elementi": elementi, "pagina": pagina, "altri": len(elementi) >= 10 and pagina < 20}
+
+
+@app.get("/api/diagnosi")
+async def api_diagnosi(request: Request):
+    """Quali servizi rispondono: serve a capire perché una pagina non si carica."""
+    s = servizi(request)
+    return await diagnosi.controlla(s.config, s.client)
 
 
 @app.get("/api/generi")

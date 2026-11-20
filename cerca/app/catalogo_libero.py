@@ -18,18 +18,22 @@ import datetime as dt
 import html
 import logging
 import re
+import time
 from urllib.parse import quote
 
 import httpx
 
 from .config import Config
 from .db import Archivio
-from .rete import AGENTE, ErroreServizio, Limitatore, non_raggiungibile
+from .rete import AGENTE, ErroreServizio, Limitatore
 from .tmdb import GENERI_NO_KIDS, GENERI_PER_KIDS, adatto_ai_bambini
 
 log = logging.getLogger("cerca.catalogo")
 
 UN_GIORNO = 24 * 3600
+# Quanto aspettare ogni risposta: meglio un messaggio chiaro che una pagina che carica all'infinito
+TEMPO_MASSIMO = {"Radarr": 15, "Wikidata": 20, "TVmaze": 15}
+PAUSA_DOPO_ERRORE = 60
 _wikidata = Limitatore(per_secondo=1)
 _tvmaze = Limitatore(per_secondo=2)  # TVmaze chiede al massimo 20 richieste ogni 10 secondi
 
@@ -148,6 +152,7 @@ class CatalogoLibero:
         self.archivio = archivio
         self.client = client
         self._contemporanei = asyncio.Semaphore(6)
+        self._giu: dict[str, float] = {}  # servizio → fino a quando non richiamarlo
 
     # --- richieste con cache -------------------------------------------------------------
     async def _json(self, url: str, parametri: dict, durata: float, *, intestazioni: dict | None = None,
@@ -156,14 +161,18 @@ class CatalogoLibero:
         in_cache = self.archivio.cache_leggi(chiave)
         if in_cache is not None:
             return in_cache
+        # un servizio che non ha risposto da poco non lo richiamiamo subito: niente attese a catena
+        if time.monotonic() < self._giu.get(nome, 0):
+            raise self._non_risponde(nome)
         if limitatore:
             await limitatore.attendi()
         try:
-            r = await self.client.get(url, params=parametri, headers=intestazioni or {}, timeout=40)
+            r = await self.client.get(url, params=parametri, headers=intestazioni or {},
+                                      timeout=httpx.Timeout(TEMPO_MASSIMO.get(nome, 20), connect=5))
         except httpx.HTTPError as exc:
-            if nome == "Radarr":
-                raise non_raggiungibile("Radarr", "/radarr") from exc
-            raise esterno_non_raggiungibile(nome) from exc
+            self._giu[nome] = time.monotonic() + PAUSA_DOPO_ERRORE
+            log.warning("%s non risponde: %s", nome, type(exc).__name__)
+            raise self._non_risponde(nome) from exc
         if r.status_code == 404:
             raise ErroreServizio(f"{nome} non conosce questo titolo.", "Torna indietro e scegline un altro.")
         if r.status_code == 429:
@@ -173,6 +182,16 @@ class CatalogoLibero:
         dati = r.json()
         self.archivio.cache_scrivi(chiave, dati, durata)
         return dati
+
+    @staticmethod
+    def _non_risponde(nome: str) -> ErroreServizio:
+        if nome == "Radarr":
+            return ErroreServizio(
+                "Radarr non risponde, e senza chiave TMDB i film arrivano da lui.",
+                "Controlla che sia acceso: apri \"Controllo servizi\" in Cerca, oppure sul PC scrivi \"mediabox status\". "
+                "Sui PC con poca memoria può volerci qualche minuto dopo l'accensione.",
+            )
+        return esterno_non_raggiungibile(nome)
 
     async def _radarr(self, percorso: str, parametri: dict, durata: float) -> object:
         return await self._json(

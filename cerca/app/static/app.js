@@ -29,12 +29,21 @@ function avviso(testo, errore = false) {
   avviso._t = setTimeout(() => { box.hidden = true; }, 6000);
 }
 
+// Dopo questo tempo smettiamo di aspettare e diciamo cosa succede (niente caricamenti infiniti)
+const ATTESA_MASSIMA = 45000;
+
 async function chiama(percorso, opzioni = {}) {
   let risposta;
+  const controllo = new AbortController();
+  const timer = setTimeout(() => controllo.abort(), opzioni.attesa || ATTESA_MASSIMA);
   try {
-    risposta = await fetch(BASE + percorso, opzioni);
+    risposta = await fetch(BASE + percorso, { ...opzioni, signal: controllo.signal });
   } catch (e) {
-    throw { errore: "Cerca non risponde.", cosa_fare: "Controlla la connessione e ricarica la pagina." };
+    throw e.name === "AbortError"
+      ? { errore: "Cerca ci sta mettendo troppo a rispondere.", cosa_fare: "Un servizio è lento o spento.", diagnosi: true }
+      : { errore: "Cerca non risponde.", cosa_fare: "Controlla la connessione e ricarica la pagina." };
+  } finally {
+    clearTimeout(timer);
   }
   let dati = {};
   try { dati = await risposta.json(); } catch (e) { /* risposta non JSON */ }
@@ -54,7 +63,8 @@ function inviaJSON(percorso, corpo) {
 
 function htmlErrore(e) {
   return `<div class="errore"><strong>${esc(e.errore || "Errore")}</strong>` +
-    (e.cosa_fare ? `<p>${esc(e.cosa_fare)}</p>` : "") + "</div>";
+    (e.cosa_fare ? `<p>${esc(e.cosa_fare)}</p>` : "") +
+    `<p><a href="${BASE}/diagnosi">Controlla quali servizi rispondono →</a></p></div>`;
 }
 
 // Segnaposto per i film senza locandina: titolo in alto, anno in basso
@@ -77,7 +87,7 @@ function avviaFilm(tmdbId) {
       .catch((e) => { sezione("archive").innerHTML = htmlErrore(e); });
 
     const riassunto = document.getElementById("riassunto-prowlarr");
-    chiama(`/api/film/${tmdbId}/prowlarr`)
+    chiama(`/api/film/${tmdbId}/prowlarr`, { attesa: 120000 })
       .then((d) => {
         sezione("prowlarr").innerHTML = htmlProwlarr(d);
         riassunto.textContent = d.avviso ? d.avviso
@@ -517,6 +527,35 @@ async function salvaPiattaforme(mondo) {
     avviso(r.messaggio);
     avviaHome(mondo);
   } catch (e) { avviso(e.errore || "Non riesco a salvare."); }
+}
+
+// --- Controllo servizi ---------------------------------------------------------------------
+async function avviaDiagnosi() {
+  const elenco = document.getElementById("elenco-diagnosi");
+  const riassunto = document.getElementById("riassunto-diagnosi");
+  const bottone = document.getElementById("ricontrolla");
+  async function controlla() {
+    bottone.disabled = true;
+    elenco.innerHTML = '<li class="caricamento">Controllo i servizi… (al massimo 10 secondi)</li>';
+    riassunto.textContent = "";
+    try {
+      const d = await chiama("/api/diagnosi", { attesa: 30000 });
+      const icona = { ok: "✓", lento: "!", errore: "✗" };
+      elenco.innerHTML = d.risultati.map((r) =>
+        `<li class="servizio-stato ${esc(r.stato)}"><span class="icona-stato" aria-hidden="true">${icona[r.stato] || "?"}</span>` +
+        `<div><strong>${esc(r.nome)}</strong> <span class="sottotitolo">serve per ${esc(r.a_cosa_serve)}</span>` +
+        `<p>${esc(r.messaggio)}${r.millisecondi ? ` <span class="sottotitolo">(${(r.millisecondi / 1000).toFixed(1).replace(".", ",")} s)</span>` : ""}</p>` +
+        (r.cosa_fare ? `<p class="cosa-fare">${esc(r.cosa_fare)}</p>` : "") + "</div></li>").join("");
+      const male = d.risultati.filter((r) => r.stato === "errore").map((r) => r.nome);
+      riassunto.textContent = d.tutto_ok ? "Tutto a posto: tutti i servizi rispondono."
+        : male.length ? `Non rispondono: ${male.join(", ")}.` : "Rispondono tutti, ma qualcuno è lento.";
+    } catch (e) {
+      elenco.innerHTML = `<li>${htmlErrore(e)}</li>`;
+    }
+    bottone.disabled = false;
+  }
+  bottone.addEventListener("click", controlla);
+  controlla();
 }
 
 // --- pagina Musica --------------------------------------------------------------------

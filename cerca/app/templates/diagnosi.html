@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block titolo %}Controllo servizi{% endblock %}
+{% block contenuto %}
+<h1 class="titolo-pagina">Controllo servizi</h1>
+<p class="sottotitolo">Se una pagina di Cerca non si carica, qui vedi quale servizio non risponde e cosa fare.</p>
+
+<div class="azioni-riga"><button id="ricontrolla" type="button" class="secondario">Controlla di nuovo</button></div>
+<p id="riassunto-diagnosi" class="nota-mondo" role="status"></p>
+<ul id="elenco-diagnosi" class="elenco-diagnosi" aria-live="polite"><li class="caricamento">Controllo i servizi…</li></ul>
+{% endblock %}
+{% block script %}<script>avviaDiagnosi();</script>{% endblock %}

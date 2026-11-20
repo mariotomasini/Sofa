@@ -107,9 +107,11 @@ class Jellyfin:
         )
         if r.status_code == 401:
             raise ErroreMediabox(
-                f"Jellyfin non accetta utente \"{utente}\" con la password del file .env.",
-                "Se hai cambiato la password da Jellyfin, rimetti la stessa in ADMIN_PASSWORD nel file .env "
-                "e riesegui \"mediabox configura\".",
+                f"Jellyfin non accetta l'utente \"{utente}\" con la password di mediabox.",
+                "Succede se la prima configurazione di Jellyfin è stata fatta a mano con un altro utente o un'altra "
+                "password. Se in Jellyfin non hai ancora niente di tuo, sul PC scrivi \"mediabox azzera-jellyfin\": "
+                "lo rifà da zero con l'utente giusto. Se invece hai solo cambiato la password da Jellyfin, "
+                "rimetti la stessa nelle impostazioni di mediabox.",
             )
         controlla(r, "accedere a Jellyfin")
         self.token = r.json()["AccessToken"]
