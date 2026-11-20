@@ -63,11 +63,6 @@
     {% block contenuto %}{% endblock %}
   </main>
 
-  <footer class="piede">
-    Dati dei film da <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>.
-    Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
-  </footer>
-
   {% if not kids %}
   <nav class="barra-basso" aria-label="Menu">
     <a href="{{ base }}/"{% if sezione == 'cerca' %} aria-current="page"{% endif %}>
