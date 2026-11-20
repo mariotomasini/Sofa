@@ -34,7 +34,7 @@ from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, nuovo_client
-from .sentinella import Sentinella
+from .sentinella import Sentinella, ultimo_blocco
 from .serie import Serie
 from .stato import ControlloDisco
 from .tmdb import TMDB, tipo_tmdb
@@ -108,7 +108,7 @@ async def ciclo_di_vita(app: FastAPI):
     async with nuovo_client() as client:
         servizi = Servizi(config, client)
         app.state.servizi = servizi
-        sentinella = Sentinella()
+        sentinella = Sentinella(cartella=config.cartella_dati)
         sentinella.avvia()
         compiti = [
             asyncio.create_task(sentinella.battito()),
@@ -446,7 +446,9 @@ async def api_piattaforma(request: Request, piattaforma: int, mondo: str = "film
 async def api_diagnosi(request: Request):
     """Quali servizi rispondono: serve a capire perché una pagina non si carica."""
     s = servizi(request)
-    return await diagnosi.controlla(s.config, s.client)
+    esito = await diagnosi.controlla(s.config, s.client)
+    esito["ultimo_blocco"] = await asyncio.to_thread(ultimo_blocco, s.config.cartella_dati)
+    return esito
 
 
 @app.get("/api/generi")
@@ -557,7 +559,7 @@ class RichiestaProwlarr(BaseModel):
 async def api_scarica_prowlarr(request: Request, dati: RichiestaProwlarr):
     s = servizi(request)
     film = await s.tmdb.dettagli(dati.tmdb_id)
-    originale = s.prowlarr.risultato_originale(dati.tmdb_id, dati.id)
+    originale = await asyncio.to_thread(s.prowlarr.risultato_originale, dati.tmdb_id, dati.id)
     magnet, file_torrent = await s.prowlarr.scarica_torrent(originale)
     id_download = await s.download.da_torrent(
         fonte="prowlarr", categoria="cerca", film=film, titolo=originale.get("title", ""),

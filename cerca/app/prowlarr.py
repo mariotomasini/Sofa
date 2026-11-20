@@ -105,7 +105,7 @@ class Prowlarr:
             )
         if not r.is_success:
             raise ErroreServizio(f"Prowlarr ha risposto con un errore ({r.status_code}).", "Riprova tra poco.")
-        return r.json()
+        return await asyncio.to_thread(r.json)  # le ricerche sono grandi: si leggono in un thread
 
     async def cerca(self, film: dict) -> dict:
         indexer = await self._get("indexer")
@@ -123,7 +123,8 @@ class Prowlarr:
         risposte = await asyncio.gather(*(self._cerca_testo(f"{t} {anno}".strip()) for t in titoli))
         grezzi = list({id_risultato(r): r for risposta in risposte for r in risposta}.values())
         # Teniamo i risultati completi per poter avviare il download dopo
-        self.archivio.cache_scrivi(f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
+        # (centinaia di risultati: si salvano in un thread, senza fermare le pagine)
+        await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
         torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
         coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, anno)]
         risultati = ordina([riassunto(r) for r in coerenti])
@@ -137,14 +138,14 @@ class Prowlarr:
 
     async def _cerca_testo(self, testo: str) -> list[dict]:
         chiave_cache = f"prowlarr:{testo}"
-        grezzi = self.archivio.cache_leggi(chiave_cache)
+        grezzi = await asyncio.to_thread(self.archivio.cache_leggi, chiave_cache)
         if grezzi is None:
             grezzi = await self._get(
                 "search",
                 {"query": testo, "type": "search", "categories": [2000], "limit": 100},
                 timeout=90,
             )
-            self.archivio.cache_scrivi(chiave_cache, grezzi, DIECI_MINUTI)
+            await asyncio.to_thread(self.archivio.cache_scrivi, chiave_cache, grezzi, DIECI_MINUTI)
         return grezzi
 
     def risultato_originale(self, tmdb_id: int, id_ris: str) -> dict:

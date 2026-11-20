@@ -54,6 +54,7 @@ class Avvisami:
         """Controlla tutti i film della lista. Restituisce quanti sono diventati gratis."""
         nuovi = 0
         if not self.config.con_tmdb:
+            self.archivio.stato_scrivi(CHIAVE_ULTIMO_CONTROLLO, str(time.time()))
             return 0  # senza chiave TMDB non sappiamo dove si guarda un film
         for voce in self.archivio.avvisami_elenco():
             try:
@@ -90,5 +91,9 @@ class Avvisami:
                 await self.controlla()
             except Exception:  # noqa: BLE001 - il controllo non deve mai fermare Cerca
                 log.exception("Errore nel controllo giornaliero")
-                with contextlib.suppress(Exception):
-                    self.archivio.stato_scrivi(CHIAVE_ULTIMO_CONTROLLO, str(time.time()))
+            # Sempre: segniamo il controllo come fatto e lasciamo respirare il resto di Cerca.
+            # Senza chiave TMDB "controlla" finisce subito: senza questa riga il ciclo girava
+            # all'infinito senza mai fermarsi, e Cerca restava bloccato al 100% del processore.
+            with contextlib.suppress(Exception):
+                self.archivio.stato_scrivi(CHIAVE_ULTIMO_CONTROLLO, str(time.time()))
+            await asyncio.sleep(60)

@@ -565,6 +565,16 @@ async function avviaDiagnosi() {
       const male = d.risultati.filter((r) => r.stato === "errore").map((r) => r.nome);
       riassunto.textContent = d.tutto_ok ? "Tutto a posto: tutti i servizi rispondono."
         : male.length ? `Non rispondono: ${male.join(", ")}.` : "Rispondono tutti, ma qualcuno è lento.";
+      const b = d.ultimo_blocco;
+      if (b) {
+        const quando = new Date(b.quando).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
+        elenco.insertAdjacentHTML("beforeend",
+          '<li class="servizio-stato lento"><span class="icona-stato" aria-hidden="true">!</span><div>' +
+          `<strong>Ultimo blocco di Cerca</strong> <span class="sottotitolo">${esc(quando)}</span>` +
+          `<p>Era fermo da ${b.secondi} secondi${b.riavviato ? " e si è riavviato da solo" : ""}.</p>` +
+          (b.punti && b.punti.length ? `<details><summary>Dove era fermo (da mandare a chi ti aiuta)</summary><pre class="dove-blocco">${esc(b.punti.join("\n"))}</pre></details>` : "") +
+          "</div></li>");
+      }
     } catch (e) {
       elenco.innerHTML = `<li>${htmlErrore(e)}</li>`;
     }
