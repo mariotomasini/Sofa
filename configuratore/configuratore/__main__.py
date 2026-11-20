@@ -8,6 +8,7 @@ Uso (dentro il container):
     python -m configuratore backup
     python -m configuratore ripristina <file>
     python -m configuratore web         # configurazione dal browser (porta 8080)
+    python -m configuratore leggero     # sui PC con poca memoria spegne i programmi pesanti
 """
 
 from __future__ import annotations
@@ -91,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     sotto.add_parser("hdhomerun")
     imp_menu = sotto.add_parser("impostazioni")
     imp_menu.add_argument("--prima-volta", action="store_true")
+    sotto.add_parser("leggero")
     web = sotto.add_parser("web")
     web.add_argument("--porta", type=int, default=8080)
     rip = sotto.add_parser("ripristina")
@@ -101,6 +103,11 @@ def main(argv: list[str] | None = None) -> int:
         from .menu import menu
 
         return menu(CARTELLA_MEDIABOX, prima_volta=args.prima_volta)
+
+    if args.comando == "leggero":
+        from .leggero import main as leggero
+
+        return leggero(CARTELLA_MEDIABOX)
 
     if args.comando == "web":
         import uvicorn

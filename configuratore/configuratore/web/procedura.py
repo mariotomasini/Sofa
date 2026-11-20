@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..impostazioni import leggi_env
+from ..leggero import MEMORIA_MB, memoria_gb, poca_memoria
 from ..menu import PREDEFINITI, VOCI, aggiorna_env, attivo, lingue_valide, modifiche_finali, percorso_valido
 
 FLAG_PRONTA = ".configurazione-pronta"
@@ -114,7 +115,7 @@ def scelte_attuali(v: dict[str, str]) -> dict:
     """Quello che la pagina mostra: niente segreti."""
     voci = [
         {"chiave": k, "titolo": TITOLI_VOCI[k][0], "descrizione": TITOLI_VOCI[k][1], "gruppo": GRUPPI[k],
-         "attivo": attivo(v, k)}
+         "attivo": attivo(v, k), "memoria_mb": MEMORIA_MB.get(k, 0)}
         for k, _, _ in VOCI
     ]
     risultato = {
@@ -124,6 +125,8 @@ def scelte_attuali(v: dict[str, str]) -> dict:
         "cartella": v.get("MEDIA_DIR", ""),
         "tmdb_impostata": bool(v.get("TMDB_API_KEY")),
         "windows": windows(v),
+        "memoria_gb": memoria_gb(v),
+        "poca_memoria": poca_memoria(v),
         "hardware": {
             "grafica": attivo(v, "VAAPI"),
             "tuner": attivo(v, "DVB"),

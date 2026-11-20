@@ -64,13 +64,19 @@
         <p class="etichetta">Cosa vuoi fare</p>
         <h1 id="t-scelte">Cosa guardi?</h1>
         <p>I film ci sono sempre. Accendi il resto: puoi cambiare idea quando vuoi.</p>
+        {% if s.poca_memoria %}
+        <div class="avviso-memoria" role="note">
+          <strong>Questo PC ha {{ ("%g" | format(s.memoria_gb)) | replace(".", ",") }} GB di memoria</strong>
+          <span>Ho lasciato spenti i programmi più pesanti: così cercare, scaricare e guardare film funziona bene. Puoi accenderli, ma il PC potrebbe rallentare molto e alcuni programmi potrebbero non partire.</span>
+        </div>
+        {% endif %}
         <div class="schede-scelta">
           <div class="scelta fissa"><span class="interruttore acceso" aria-hidden="true"></span><span><strong>Film</strong><small>Cerca, scarica e guarda in Jellyfin. Sempre attivo.</small></span></div>
           {% for v in s.voci or [] if v.gruppo == "guardi" %}
           <label class="scelta" for="voce-{{ v.chiave }}">
-            <input type="checkbox" id="voce-{{ v.chiave }}" data-voce="{{ v.chiave }}"{% if v.attivo %} checked{% endif %}>
+            <input type="checkbox" id="voce-{{ v.chiave }}" data-voce="{{ v.chiave }}"{% if v.memoria_mb %} data-memoria="{{ v.memoria_mb }}"{% endif %}{% if v.attivo %} checked{% endif %}>
             <span class="interruttore" aria-hidden="true"></span>
-            <span><strong>{{ v.titolo }}</strong><small>{{ v.descrizione }}</small></span>
+            <span><strong>{{ v.titolo }}{% if s.poca_memoria and v.memoria_mb %} <em class="pesante">circa {{ v.memoria_mb }} MB</em>{% endif %}</strong><small>{{ v.descrizione }}</small></span>
           </label>
           {% endfor %}
         </div>
@@ -83,9 +89,9 @@
         <div class="schede-scelta">
           {% for v in s.voci or [] if v.gruppo == "pc" %}
           <label class="scelta" for="voce-{{ v.chiave }}">
-            <input type="checkbox" id="voce-{{ v.chiave }}" data-voce="{{ v.chiave }}"{% if v.attivo %} checked{% endif %}>
+            <input type="checkbox" id="voce-{{ v.chiave }}" data-voce="{{ v.chiave }}"{% if v.memoria_mb %} data-memoria="{{ v.memoria_mb }}"{% endif %}{% if v.attivo %} checked{% endif %}>
             <span class="interruttore" aria-hidden="true"></span>
-            <span><strong>{{ v.titolo }}</strong><small>{{ v.descrizione }}</small></span>
+            <span><strong>{{ v.titolo }}{% if s.poca_memoria and v.memoria_mb %} <em class="pesante">circa {{ v.memoria_mb }} MB</em>{% endif %}</strong><small>{{ v.descrizione }}</small></span>
           </label>
           {% endfor %}
         </div>

@@ -146,6 +146,10 @@ Scrivi-Ok "File di configurazione pronto"
 Scrivi-Titolo "Rilevo l'hardware e la rete"
 Scrivi-Info "Su Windows la transcodifica usa il processore e i tuner USB non sono supportati (limiti di Docker Desktop)."
 Costruisci-Configuratore
+# Memoria del PC: sotto i 6 GB si accendono solo i programmi che ci stanno (modalità leggera)
+$memoria = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+Scrivi-Env "MEMORIA_GB" $memoria.ToString([Globalization.CultureInfo]::InvariantCulture) $script:EnvFile
+& docker run --rm -v "$($script:MediaboxDir):/mediabox" mediabox/configuratore:locale leggero | Out-Host
 $hdhr = Trova-HDHomeRun
 if ($hdhr) { Scrivi-Env "HDHOMERUN_IP" $hdhr $script:EnvFile; Scrivi-Ok "HDHomeRun trovato in rete: $hdhr" }
 else { Scrivi-Info "Nessun HDHomeRun in rete" }

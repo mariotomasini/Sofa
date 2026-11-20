@@ -194,3 +194,35 @@ def test_chiave_tmdb_facoltativa(cartella):
     assert leggi_env(cartella / ".env")["TMDB_API_KEY"] == "la-mia-chiave"
     assert p.salva_impostazioni(cartella, {"tmdb_togli": True})
     assert leggi_env(cartella / ".env")["TMDB_API_KEY"] == ""
+
+
+def test_modalita_leggera(cartella):
+    from configuratore import leggero
+
+    p.aggiorna_env(cartella / ".env", {"MEMORIA_GB": "3.9", "WITH_LIDARR": "si", "WITH_SONARR": "si"})
+    spenti = leggero.applica(cartella)
+    env = leggi_env(cartella / ".env")
+    assert spenti == ["Aiuto per i siti protetti (FlareSolverr)", "Musica da scaricare (Lidarr)",
+                      "Sottotitoli automatici (Bazarr)"]
+    assert env["WITH_FLARESOLVERR"] == env["WITH_LIDARR"] == env["WITH_BAZARR"] == env["WITH_BESZEL"] == "no"
+    assert env["WITH_SONARR"] == "si"  # le serie restano come le hai scelte
+    assert env["MODALITA_LEGGERA"] == "si"
+    # una volta sola: se poi riaccendi qualcosa, resta acceso
+    p.aggiorna_env(cartella / ".env", {"WITH_BAZARR": "si"})
+    assert leggero.applica(cartella) == []
+    assert leggi_env(cartella / ".env")["WITH_BAZARR"] == "si"
+    # la pagina lo sa e mostra quanta memoria usa ogni programma
+    s = p.scelte_attuali(p.valori(cartella))
+    assert s["poca_memoria"] and s["memoria_gb"] == 3.9
+    assert {v["chiave"]: v["memoria_mb"] for v in s["voci"]}["WITH_FLARESOLVERR"] == 400
+    pagina = TestClient(crea_app(cartella)).get("/impostazioni/").text
+    assert "Questo PC ha 3,9 GB di memoria" in pagina and "circa 400 MB" in pagina
+
+
+def test_con_tanta_memoria_non_cambia_niente(cartella):
+    from configuratore import leggero
+
+    p.aggiorna_env(cartella / ".env", {"MEMORIA_GB": "16", "WITH_BAZARR": "si"})
+    assert leggero.applica(cartella) == []
+    assert leggi_env(cartella / ".env")["WITH_BAZARR"] == "si"
+    assert not p.scelte_attuali(p.valori(cartella))["poca_memoria"]
