@@ -15,6 +15,7 @@ Radarr non conosce), i preferiti, quello che qualcuno sta ancora guardando.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import logging
 import os
@@ -62,6 +63,14 @@ def ultima_modifica(percorso: Path) -> float:
             except OSError:
                 pass
     return ultima
+
+
+def _dimensione_file(p: Path) -> int:
+    return p.stat().st_size if p.exists() else 0
+
+
+def _cancella(percorso: Path) -> None:
+    shutil.rmtree(percorso) if percorso.is_dir() else percorso.unlink()
 
 
 def protetto(percorso: Path, in_uso: set[str]) -> bool:
@@ -177,7 +186,9 @@ class Pulizia:
         return in_uso
 
     async def abbandonati(self) -> list[dict]:
-        return trova_abbandonati(self.config.cartella_download, await self._in_uso(), time.time())
+        # leggere le cartelle sul disco dei film può essere lento (su Windows molto): in un thread a parte
+        in_uso = await self._in_uso()
+        return await asyncio.to_thread(trova_abbandonati, self.config.cartella_download, in_uso, time.time())
 
     async def visti(self) -> list[dict]:
         if not self.config.pulizia_visti:
@@ -188,8 +199,7 @@ class Pulizia:
                 unisci_dati_utente(elementi, voce)
         scelti = scegli_visti(elementi, dt.datetime.now(dt.UTC), self.config.pulizia_giorni)
         for e in scelti:
-            p = Path(percorso_radarr(e["percorso"]))
-            e["dimensione"] = p.stat().st_size if p.exists() else 0
+            e["dimensione"] = await asyncio.to_thread(_dimensione_file, Path(percorso_radarr(e["percorso"])))
             e["giorni"] = (dt.datetime.now(dt.UTC) - e["ultima_visione"]).days
             e["ultima_visione"] = e["ultima_visione"].isoformat()
         return [e for e in scelti if e["dimensione"]]
@@ -245,8 +255,8 @@ class Pulizia:
         await self._arr("DELETE", base, chiave, f"episodefile/{voce['id']}")
         return True
 
-    def _libero_percento(self) -> float:
-        return spazio(self.config.cartella_download.parent)["libero_percento"]
+    async def _libero_percento(self) -> float:
+        return (await asyncio.to_thread(spazio, self.config.cartella_download.parent))["libero_percento"]
 
     async def libera(self, motivo: str) -> dict:
         """Libera spazio fino a soglia + margine. Restituisce cosa è stato tolto."""
@@ -255,15 +265,15 @@ class Pulizia:
         for a in await self.abbandonati():
             percorso = Path(a["percorso"])
             try:
-                shutil.rmtree(percorso) if percorso.is_dir() else percorso.unlink()
+                await asyncio.to_thread(_cancella, percorso)
             except OSError as exc:
                 log.warning("Non riesco a cancellare %s: %s", percorso, exc)
                 continue
             tolti.append(a)
             self.archivio.registra_pulizia(f"Download abbandonato: {a['nome']}", a["dimensione"], motivo)
-        if self._libero_percento() < obiettivo:
+        if await self._libero_percento() < obiettivo:
             for e in await self.visti():
-                if self._libero_percento() >= obiettivo:
+                if await self._libero_percento() >= obiettivo:
                     break
                 try:
                     fatto = await (self._togli_film(e) if e["tipo"] == "film" else self._togli_episodio(e))
@@ -285,4 +295,4 @@ class Pulizia:
                 f"(il dettaglio è nella pagina Spazio di Cerca).",
                 f"{self.config.indirizzo_pubblico}/cerca/spazio",
             )
-        return {"tolti": len(tolti), "liberati": liberati, "libero_percento": self._libero_percento()}
+        return {"tolti": len(tolti), "liberati": liberati, "libero_percento": await self._libero_percento()}

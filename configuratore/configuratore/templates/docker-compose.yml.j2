@@ -261,10 +261,12 @@ services:
       - cerca_dati:/dati
       - "{{ MEDIA_DIR }}:/data"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/salute', timeout=5)"]
-      interval: 30s
-      timeout: 10s
+      # sui PC lenti anche solo avviare python per il controllo richiede qualche secondo
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/salute', timeout=20)"]
+      interval: 60s
+      timeout: 30s
       retries: 3
+      start_period: 120s
 
   # Strumento interno: configura i servizi, backup e ripristino.
   # Non resta acceso: si avvia solo con "docker compose run".

@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import html
+import json
 import logging
 import re
 import time
@@ -158,7 +159,9 @@ class CatalogoLibero:
     async def _json(self, url: str, parametri: dict, durata: float, *, intestazioni: dict | None = None,
                     limitatore: Limitatore | None = None, nome: str = "") -> object:
         chiave = f"libero:{url}:{sorted(parametri.items())}"
-        in_cache = self.archivio.cache_leggi(chiave)
+        # le risposte di Radarr e Wikidata sono grandi: leggerle e scriverle in un thread a parte
+        # lascia Cerca libero di rispondere agli altri anche su un processore lento
+        in_cache = await asyncio.to_thread(self.archivio.cache_leggi, chiave)
         if in_cache is not None:
             return in_cache
         # un servizio che non ha risposto da poco non lo richiamiamo subito: niente attese a catena
@@ -179,8 +182,8 @@ class CatalogoLibero:
             raise ErroreServizio(f"{nome} chiede di rallentare.", "Riprova tra qualche minuto.")
         if not r.is_success:
             raise ErroreServizio(f"{nome} ha risposto con un errore ({r.status_code}).", "Riprova tra qualche minuto.")
-        dati = r.json()
-        self.archivio.cache_scrivi(chiave, dati, durata)
+        dati = await asyncio.to_thread(json.loads, r.content)
+        await asyncio.to_thread(self.archivio.cache_scrivi, chiave, dati, durata)
         return dati
 
     @staticmethod

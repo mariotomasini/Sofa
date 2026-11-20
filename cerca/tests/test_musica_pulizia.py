@@ -113,3 +113,38 @@ def test_scegli_visti_rispetta_preferiti_meta_e_tempo():
 
 def test_percorso_radarr():
     assert percorso_radarr("/data/film/X (2000)/x.mkv") == "/data/media/film/X (2000)/x.mkv"
+
+
+# --- disco lento (Windows) --------------------------------------------------------------
+
+def test_disco_lento_non_blocca_le_pagine(monkeypatch):
+    """Se misurare lo spazio si pianta, le pagine usano l'ultima misura e Cerca resta libero."""
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+
+    from app import stato
+
+    sblocca = threading.Event()
+
+    def spazio_piantato(_percorso):
+        sblocca.wait(5)
+        return {"totale": 100, "libero": 50, "usato": 50, "libero_percento": 50.0}
+
+    monkeypatch.setattr(stato, "spazio", spazio_piantato)
+    monkeypatch.setattr(stato, "TEMPO_DISCO", 0.2)
+    config = SimpleNamespace(cartella_download=Path("/data/downloads"), soglia_disco=10)
+    disco = stato.ControlloDisco(config, archivio=None, avvisami=None)
+
+    async def prova():
+        inizio = time.monotonic()
+        info = await disco.aggiorna()
+        assert time.monotonic() - inizio < 1  # non aspetta il disco
+        assert info == {"disponibile": False}
+        assert disco.stato() == {"disponibile": False}  # le pagine non toccano il disco
+        sblocca.set()
+        await asyncio.sleep(0.1)
+        info = await disco.aggiorna()  # riusa la misura rimasta in corso
+        assert info["disponibile"] and info["libero_percento"] == 50.0
+
+    asyncio.run(prova())
