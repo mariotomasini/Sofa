@@ -25,6 +25,7 @@ Uso: mediabox <comando>
   status             mostra quali servizi sono accesi
   logs [servizio]    mostra i messaggi dei servizi (Ctrl+C per uscire)
   impostazioni       cambia cosa usi dal terminale (più comodo dal browser: /impostazioni)
+  azzera-jellyfin    rifà Jellyfin da zero con l'utente di mediabox (i film restano)
   configura          rigenera la configurazione dal file .env e la riapplica
   update             aggiorna mediabox e i servizi all'ultima versione (fa prima un backup)
   versione           mostra la versione installata e l'ultima disponibile
@@ -157,6 +158,14 @@ case "$comando" in
     compose logs -f --tail 200 "$@" ;;
   configura)
     controlla_installazione; prepara_docker; aggiorna_ip; applica ;;
+  azzera-jellyfin)
+    controlla_installazione; prepara_docker
+    titolo "Rifaccio Jellyfin da zero"
+    info "Tolgo utenti e impostazioni di Jellyfin (i film nelle cartelle restano dove sono)…"
+    compose rm -sf jellyfin >/dev/null 2>&1 || true
+    "${DOCKER[@]}" volume rm mediabox_jellyfin_config >/dev/null 2>&1 || true
+    ok "Jellyfin azzerato: ora lo riconfiguro con l'utente di mediabox"
+    aggiorna_ip; con_registro applica ;;
   applica-impostazioni)
     controlla_installazione; prepara_docker; applica_impostazioni_web ;;
   prepara-cartella)

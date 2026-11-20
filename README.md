@@ -490,6 +490,7 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox restart [servizio]` | riavvia tutto o un servizio (es. `mediabox restart jellyfin`) |
 | `mediabox logs [servizio]` | mostra i messaggi di un servizio (Ctrl+C per uscire) |
 | `mediabox impostazioni` | cambia cosa usi dal terminale (più comodo dal browser: `/impostazioni`) |
+| `mediabox azzera-jellyfin` | rifà Jellyfin da zero con l'utente di mediabox (i film restano) |
 | `mediabox configura` | riapplica la configurazione dopo una modifica al file `.env` |
 | `mediabox update` | aggiorna mediabox e i servizi (fa prima un backup) |
 | `mediabox versione` | mostra la versione installata e l'ultima disponibile |
@@ -600,6 +601,14 @@ Un altro programma usa già la porta del sito, ad esempio IIS su Windows o un al
 ### La procedura nel browser non si apre
 
 Durante l'installazione la pagina è servita direttamente dal PC di mediabox. Usa l'indirizzo con il numero (es. `http://192.168.1.20`), che l'installer scrive nel terminale: `mediabox.local` a volte non funziona sui telefoni Android. Su Windows controlla che la rete sia *Privata*. Se hai chiuso il terminale, rilancia l'installer: la procedura riparte da dove eri.
+
+### Cerca resta in caricamento o mostra un errore
+
+Apri **Controllo** in alto in Cerca (sul telefono: *Altro → Controllo servizi*). In pochi secondi vedi quali servizi rispondono, quanto ci mettono e, per quelli che non vanno, cosa fare. Senza chiave TMDB i film arrivano da **Radarr**: se Radarr è spento, la home lo dice dopo pochi secondi invece di restare in caricamento. Sui PC con poca memoria, dopo l'accensione può volerci qualche minuto prima che Radarr risponda.
+
+### Jellyfin non accetta utente e password
+
+Se la configurazione automatica non è ancora arrivata a Jellyfin, scrivi `mediabox configura`: crea l'utente **admin** con la password di mediabox. Se invece la prima configurazione di Jellyfin è stata fatta a mano con un altro utente, scrivi `mediabox azzera-jellyfin`: toglie utenti e impostazioni di Jellyfin e lo rifà da zero con l'utente di mediabox. I film nelle cartelle restano dove sono.
 
 ### Cerca dice "TMDB rifiuta la chiave API"
 
