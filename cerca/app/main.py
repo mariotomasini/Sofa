@@ -479,6 +479,21 @@ async def api_musica_tendenze(request: Request):
     return {"artisti": await servizi(request).musica.tendenze()}
 
 
+class RichiestaSerie(BaseModel):
+    titolo: str = ""
+    tvdb: int | None = None
+    tmdb: int | None = None
+    imdb: str = ""
+
+
+@app.post("/api/serie/segui")
+async def api_serie_segui(request: Request, dati: RichiestaSerie):
+    """"Segui la serie": la aggiunge a Sonarr, che scarica tutte le puntate e poi quelle nuove."""
+    if in_kids(request):
+        return JSONResponse({"errore": "In modalità Kids non si aggiungono serie."}, status_code=403)
+    return await servizi(request).serie.segui(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
+
+
 class RichiestaArtista(BaseModel):
     mbid: str
 

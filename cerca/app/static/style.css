@@ -672,3 +672,14 @@ button:disabled { background: var(--pannello-2); color: var(--tenue); opacity: 1
 
 .dove-blocco { white-space: pre-wrap; word-break: break-word; font-size: .8rem; background: rgba(0,0,0,.35);
   padding: 10px; border-radius: 8px; margin-top: 8px; }
+
+/* "Segui la serie" */
+#dialogo-serie { max-width: 34rem; }
+#dialogo-serie .modulo { gap: .7rem; }
+.serie-testa { display: flex; gap: 1rem; align-items: flex-start; }
+.serie-testa img { width: 6.5rem; border-radius: 10px; flex: 0 0 auto; }
+.serie-testa h2 { margin: 0 0 .3rem; }
+.serie-trama { max-height: 9rem; overflow: auto; margin: 0; }
+.messaggio-serie { min-height: 1.3rem; margin: 0; }
+.messaggio-serie.ok { color: var(--verde, #4ade80); }
+.messaggio-serie.errore { color: var(--rosso, #f87171); }

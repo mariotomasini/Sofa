@@ -389,12 +389,16 @@ function avviaDownload({ soloAttivi }) {
 function htmlScheda(f) {
   let link = `${BASE}/film/${f.id}`;
   let sotto = esc(f.anno || "");
-  if (f.serie) link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
+  let dati = "";
+  if (f.serie) {
+    link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
+    dati = attrSerie(f);
+  }
   if (f.sottotitolo) {  // episodio da Sonarr
     link = "/jellyfin/";
     sotto = `${esc(f.sottotitolo)}${f.pronto ? ' · <span class="pronto">pronto</span>' : ""}`;
   }
-  return `<a class="scheda" href="${link}">` +
+  return `<a class="scheda" href="${link}"${dati}>` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
     `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${sotto}</span></a>`;
 }
@@ -433,7 +437,7 @@ async function avviaGeneri() {
 
 function htmlTop(f, i) {
   const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}` : `${BASE}/film/${f.id}`;
-  return `<a class="scheda-top" href="${link}" aria-label="${i + 1}. ${esc(f.titolo)}">` +
+  return `<a class="scheda-top" href="${link}"${f.serie ? attrSerie(f) : ""} aria-label="${i + 1}. ${esc(f.titolo)}">` +
     `<span class="numero" aria-hidden="true">${i + 1}</span>` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) + "</a>";
 }
@@ -682,3 +686,78 @@ function avviaSpazio() {
   });
   carica();
 }
+
+// --- "Segui la serie": la aggiunge a Sonarr senza passare dalla sua pagina (in inglese) ----------
+function attrSerie(f) {
+  const dati = {
+    nome: f.titolo, titolo: f.titolo_originale || f.titolo, anno: f.anno || "", poster: f.poster || "",
+    trama: f.trama || "", imdb: f.imdb_id || "", tvdb: f.tvdb || null,
+    tmdb: f.generi_tvmaze ? null : f.id,  // le serie di TVmaze hanno un id loro, non quello di TMDB
+  };
+  return ` data-serie="${esc(JSON.stringify(dati))}"`;
+}
+
+function dialogoSerie() {
+  let d = document.getElementById("dialogo-serie");
+  if (d) return d;
+  document.body.insertAdjacentHTML("beforeend", `
+<dialog id="dialogo-serie" aria-labelledby="titolo-serie">
+  <div class="modulo">
+    <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
+    <p id="serie-trama" class="serie-trama"></p>
+    <p class="sottotitolo">Scarico tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono. Le trovi in Jellyfin.</p>
+    <p id="serie-esito" class="messaggio-serie" role="status"></p>
+    <div class="azioni-riga">
+      <button type="button" id="serie-segui">Segui la serie</button>
+      <a class="bottone secondario" id="serie-sonarr">Apri in Sonarr</a>
+      <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
+    </div>
+  </div>
+</dialog>`);
+  d = document.getElementById("dialogo-serie");
+  document.getElementById("serie-chiudi").addEventListener("click", () => d.close());
+  document.getElementById("serie-segui").addEventListener("click", async () => {
+    const b = document.getElementById("serie-segui");
+    const esito = document.getElementById("serie-esito");
+    b.disabled = true;
+    esito.className = "messaggio-serie";
+    esito.textContent = "Chiedo a Sonarr… (può volerci qualche secondo)";
+    try {
+      const s = JSON.parse(d.dataset.serie);
+      const r = await inviaJSON("/api/serie/segui", { titolo: s.titolo, imdb: s.imdb, tvdb: s.tvdb, tmdb: s.tmdb });
+      esito.className = "messaggio-serie ok";
+      esito.textContent = r.messaggio;
+      b.textContent = "La segui";
+    } catch (e) {
+      esito.className = "messaggio-serie errore";
+      esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
+      b.disabled = false;
+    }
+  });
+  return d;
+}
+
+function apriSerie(dati, linkSonarr) {
+  const d = dialogoSerie();
+  d.dataset.serie = JSON.stringify(dati);
+  const poster = document.getElementById("serie-poster");
+  poster.hidden = !dati.poster;
+  if (dati.poster) poster.src = dati.poster;
+  document.getElementById("titolo-serie").textContent = dati.nome || dati.titolo;
+  document.getElementById("serie-anno").textContent =
+    [dati.anno, dati.titolo !== dati.nome ? dati.titolo : ""].filter(Boolean).join(" · ");
+  document.getElementById("serie-trama").textContent = dati.trama || "";
+  document.getElementById("serie-sonarr").href = linkSonarr;
+  const b = document.getElementById("serie-segui");
+  b.disabled = false;
+  b.textContent = "Segui la serie";
+  document.getElementById("serie-esito").textContent = "";
+  d.showModal();
+}
+
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest("a[data-serie]");
+  if (!a || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;  // con Ctrl si apre comunque Sonarr
+  ev.preventDefault();
+  try { apriSerie(JSON.parse(a.dataset.serie), a.href); } catch (e) { window.location.href = a.href; }
+});

@@ -16,11 +16,14 @@
 <div class="griglia">
   {% for f in film %}
   {% if mondo == "serie" %}
-  {% set link = "/sonarr/add/new?term=" ~ (f.titolo | urlencode) if sonarr else "" %}
+  {% set link = "/sonarr/add/new?term=" ~ ((f.titolo_originale or f.titolo) | urlencode) if sonarr else "" %}
+  {% set dati_serie = {"nome": f.titolo, "titolo": f.titolo_originale or f.titolo, "anno": f.anno or "", "poster": f.poster or "",
+                       "trama": f.trama or "", "imdb": f.imdb_id or "", "tvdb": f.tvdb,
+                       "tmdb": none if f.generi_tvmaze else f.id} %}
   {% else %}
   {% set link = base ~ "/film/" ~ f.id %}
   {% endif %}
-  <{{ 'a' if link else 'div' }} class="scheda"{% if link %} href="{{ link }}"{% endif %}{% if not link %} tabindex="0"{% endif %}>
+  <{{ 'a' if link else 'div' }} class="scheda"{% if link %} href="{{ link }}"{% endif %}{% if link and mondo == "serie" %} data-serie="{{ dati_serie | tojson | forceescape }}"{% endif %}{% if not link %} tabindex="0"{% endif %}>
     {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
     <span class="titolo">{{ f.titolo }}</span>
     <span class="anno">{{ f.anno or "anno sconosciuto" }}{% if f.titolo_originale and f.titolo_originale != f.titolo %} · {{ f.titolo_originale }}{% endif %}</span>
@@ -28,7 +31,7 @@
   {% endfor %}
 </div>
 {% if mondo == "serie" %}
-<p class="sottotitolo">{% if sonarr %}Scegli una serie: si apre Sonarr, dove decidi se scaricarla tutta, una stagione o i singoli episodi.{% else %}Per scaricare le serie attiva Sonarr con <code>mediabox impostazioni</code>.{% endif %}</p>
+<p class="sottotitolo">{% if sonarr %}Scegli una serie e premi "Segui la serie": scarico le puntate già uscite e quelle nuove. Da "Apri in Sonarr" puoi anche scegliere solo una stagione.{% else %}Per scaricare le serie attiva Sonarr con <code>mediabox impostazioni</code>.{% endif %}</p>
 {% endif %}
 {% endif %}
 {% endblock %}
