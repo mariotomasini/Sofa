@@ -683,3 +683,6 @@ button:disabled { background: var(--pannello-2); color: var(--tenue); opacity: 1
 .messaggio-serie { min-height: 1.3rem; margin: 0; }
 .messaggio-serie.ok { color: var(--verde, #4ade80); }
 .messaggio-serie.errore { color: var(--rosso, #f87171); }
+
+#dialogo-serie { max-height: 92vh; max-height: 92dvh; overflow: auto; }
+.serie-puntate { max-height: 45vh; overflow: auto; }

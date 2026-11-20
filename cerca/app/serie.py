@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
+import os
 
 import httpx
 
 from .config import Config
+from .radarr import ESTENSIONI_VIDEO
 from .rete import ErroreServizio, non_raggiungibile
+
+log = logging.getLogger("cerca.serie")
 
 PROFILI_PREFERITI = ("HD - 720p/1080p", "HD-1080p", "HD-720p")
 
@@ -116,7 +121,8 @@ class Serie:
             raise ErroreServizio(f"Sonarr non trova \"{titolo}\".", "Prova a cercarla con il titolo originale.")
         nome = serie.get("title") or titolo
         if serie.get("id"):  # è già tra le serie seguite
-            return {"messaggio": f"Segui già \"{nome}\": le puntate nuove arrivano da sole in Jellyfin.", "nuova": False}
+            return {"messaggio": f"Segui già \"{nome}\": le puntate nuove arrivano da sole in Jellyfin.",
+                    "nuova": False, "serie_id": serie["id"]}
         profili, cartelle = await asyncio.gather(self._api("GET", "qualityprofile"), self._api("GET", "rootfolder"))
         anime = e_anime(serie)
         serie.update(
@@ -127,9 +133,99 @@ class Serie:
             seasonFolder=True,
             addOptions={"monitor": "all", "searchForMissingEpisodes": True, "searchForCutoffUnmetEpisodes": False},
         )
-        await self._api("POST", "series", json=serie)
+        aggiunta = await self._api("POST", "series", json=serie)
         return {"messaggio": f"Fatto! Sonarr cerca le puntate di \"{nome}\": quando sono scaricate le trovi in Jellyfin.",
-                "nuova": True}
+                "nuova": True, "serie_id": (aggiunta or {}).get("id")}
+
+    async def titoli(self, serie_id: int) -> list[str]:
+        """Il titolo della serie in Sonarr e quelli alternativi (per cercare i torrent)."""
+        serie = await self._api("GET", f"series/{serie_id}")
+        altri = [a.get("title", "") for a in serie.get("alternateTitles") or []]
+        return [serie.get("title", ""), *altri]
+
+    async def importa(self, percorso: str, serie_id: int) -> tuple[int, str]:
+        """Importa in Sonarr le puntate di un download, dicendo noi di che serie sono.
+
+        Sonarr da solo riconosce le serie dal titolo inglese: un torrent "Mare Fuori S04E03"
+        non lo collegherebbe a "The Sea Beyond". Gli facciamo leggere dal nome del file solo
+        stagione ed episodio (quello lo sa fare sempre) e li colleghiamo noi alla serie giusta.
+        Restituisce quante puntate ha importato e la cartella della serie.
+        """
+        # Sonarr crea la cartella della serie solo al primo file: se manca, l'importazione
+        # può fallire ("Could not find a part of the path"). Cerca vede /data come Sonarr.
+        dati_serie = await self._api("GET", f"series/{serie_id}")
+        if dati_serie and dati_serie.get("path"):
+            try:
+                await asyncio.to_thread(os.makedirs, dati_serie["path"], exist_ok=True)
+            except OSError:
+                log.warning("Non riesco a creare la cartella %s", dati_serie["path"])
+        cartella = percorso if os.path.isdir(percorso) else os.path.dirname(percorso)
+        candidati = await self._api("GET", "manualimport", params={"folder": cartella, "filterExistingFiles": "false"})
+        dentro = [c for c in candidati or [] if (c.get("path") == percorso
+                  or c.get("path", "").startswith(percorso.rstrip("/") + "/"))
+                  and c.get("path", "").lower().endswith(ESTENSIONI_VIDEO)
+                  and not any("sample" in (r.get("reason") or "").lower() for r in c.get("rejections") or [])]
+        puntate = {(e["seasonNumber"], e["episodeNumber"]): e["id"]
+                   for e in await self._api("GET", "episode", params={"seriesId": serie_id}) or []}
+        file = []
+        for c in dentro:
+            if (c.get("series") or {}).get("id") == serie_id and c.get("episodes"):
+                ids = [e["id"] for e in c["episodes"]]
+            else:
+                nome = os.path.splitext(os.path.basename(c["path"]))[0]
+                info = (await self._api("GET", "parse", params={"title": nome}) or {}).get("parsedEpisodeInfo") or {}
+                ids = [puntate[(info.get("seasonNumber"), n)] for n in info.get("episodeNumbers") or []
+                       if (info.get("seasonNumber"), n) in puntate]
+            if ids:
+                file.append({
+                    "path": c["path"], "seriesId": serie_id, "episodeIds": ids,
+                    "quality": c.get("quality"), "languages": c.get("languages") or [],
+                    "releaseGroup": c.get("releaseGroup") or "", "downloadId": c.get("downloadId") or "",
+                    "indexerFlags": c.get("indexerFlags") or 0,
+                })
+        if not file:
+            raise ErroreServizio("Sonarr non riconosce nessuna puntata nel download.",
+                                 "Apri Sonarr → Attività → Coda per importarla a mano, oppure scegli un altro torrent.")
+        comando = await self._api("POST", "command", json={"name": "ManualImport", "importMode": "move", "files": file})
+        stato = {}
+        for _ in range(300):
+            stato = await self._api("GET", f"command/{comando['id']}")
+            if stato.get("status") in ("completed", "failed", "aborted", "cancelled"):
+                break
+            await asyncio.sleep(2)
+        if stato.get("status") != "completed":
+            raise ErroreServizio("Sonarr non è riuscito a importare le puntate.",
+                                 "Apri Sonarr → Sistema → Eventi per vedere il motivo.")
+        return len(file), (dati_serie or {}).get("path", "")
+
+    async def ultima_importazione(self) -> str:
+        """La data dell'ultima puntata importata da Sonarr ("" se nessuna)."""
+        dati = await self._api("GET", "history", params={
+            "page": 1, "pageSize": 1, "sortKey": "date", "sortDirection": "descending", "eventType": 3})
+        record = (dati or {}).get("records") or []
+        return record[0].get("date", "") if record else ""
+
+    async def sorveglia_importazioni(self, jellyfin, ogni: float = 120) -> None:
+        """Le puntate che Sonarr scarica da solo: quando ne arriva una, Jellyfin aggiorna la libreria.
+
+        Sonarr avvisa Jellyfin, ma per una serie nuova (cartella che prima non c'era) Jellyfin
+        ignora l'avviso e la puntata comparirebbe solo alla scansione di ogni 12 ore.
+        Una chiamata leggera ogni 2 minuti; la scansione solo quando c'è davvero qualcosa di nuovo.
+        """
+        visto = None
+        while True:
+            if self.attivo:
+                try:
+                    ultima = await self.ultima_importazione()
+                    if visto is not None and ultima and ultima != visto:
+                        log.info("Sonarr ha importato nuove puntate: aggiorno Jellyfin")
+                        await jellyfin.aggiorna_libreria()
+                    visto = ultima
+                except ErroreServizio:
+                    pass
+                except Exception:  # noqa: BLE001 - la sorveglianza non deve mai fermare Cerca
+                    log.exception("Errore nel controllo delle puntate importate")
+            await asyncio.sleep(ogni)
 
     async def nuovi_episodi(self) -> list[dict]:
         if not self.attivo:

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS download (
     nome_file TEXT,
     percorso TEXT,                -- file o cartella sul disco
     categoria TEXT,
+    serie INTEGER,                -- id della serie in Sonarr (per le puntate)
     hash TEXT,
     stato TEXT NOT NULL,          -- in_corso | completato | importazione | importato | da_associare | errore
     scaricati INTEGER DEFAULT 0,
@@ -88,6 +89,10 @@ class Archivio:
         self._locale = threading.local()
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(SCHEMA)
+        # archivi creati prima delle serie: aggiungiamo la colonna che manca
+        colonne = {r["name"] for r in self._righe("PRAGMA table_info(download)")}
+        if "serie" not in colonne:
+            self._conn.execute("ALTER TABLE download ADD COLUMN serie INTEGER")
 
     @property
     def _conn(self) -> sqlite3.Connection:

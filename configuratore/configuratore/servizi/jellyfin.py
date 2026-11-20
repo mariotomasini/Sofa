@@ -426,6 +426,7 @@ def collega_radarr(imp: Impostazioni, chiave: str, nome_servizio: str = "radarr"
         },
         extra={
             "onDownload": True,
+            "onImportComplete": True,  # Sonarr 4: l'avviso a Jellyfin arriva a importazione finita
             "onUpgrade": True,
             "onRename": True,
             "onMovieDelete": True,

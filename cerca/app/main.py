@@ -29,7 +29,7 @@ from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
 from .jellyfin import Jellyfin
 from .musica import Musica
-from .prowlarr import Prowlarr
+from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
@@ -79,6 +79,7 @@ class Servizi:
         self.avvisami = Avvisami(config, self.archivio, self.tmdb, client)
         self.download.notifica = self.avvisami.notifica
         self.serie = Serie(config, client)
+        self.download.serie = self.serie
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
@@ -117,6 +118,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(servizi.avvisami.ciclo()),
             asyncio.create_task(dopo(60, servizi.disco.ciclo())),
             asyncio.create_task(dopo(300, manutenzione_cache(servizi.archivio))),
+            asyncio.create_task(dopo(90, servizi.serie.sorveglia_importazioni(servizi.jellyfin))),
         ]
         log.info("Cerca è pronto")
         yield
@@ -492,6 +494,39 @@ async def api_serie_segui(request: Request, dati: RichiestaSerie):
     if in_kids(request):
         return JSONResponse({"errore": "In modalità Kids non si aggiungono serie."}, status_code=403)
     return await servizi(request).serie.segui(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
+
+
+@app.get("/api/serie/{serie_id}/torrent")
+async def api_serie_torrent(request: Request, serie_id: int, nome: str = "", originale: str = ""):
+    """Le puntate da scaricare: cercate con il titolo italiano, quello originale e quelli di Sonarr."""
+    s = servizi(request)
+    try:
+        titoli_sonarr = await s.serie.titoli(serie_id)
+    except ErroreServizio:
+        titoli_sonarr = []
+    return await s.prowlarr.cerca_serie(serie_id, [nome, originale, *titoli_sonarr])
+
+
+class RichiestaPuntate(BaseModel):
+    serie_id: int
+    id: str
+    nome: str = ""
+    poster: str = ""
+
+
+@app.post("/api/serie/scarica")
+async def api_serie_scarica(request: Request, dati: RichiestaPuntate):
+    s = servizi(request)
+    originale = await asyncio.to_thread(s.prowlarr.risultato_originale, dati.serie_id, dati.id, "serie")
+    magnet, file_torrent = await s.prowlarr.scarica_torrent(originale)
+    cosa = contenuto(originale.get("title", ""))
+    titolo = f"{dati.nome} · {cosa}" if dati.nome and cosa else (dati.nome or originale.get("title", ""))
+    id_download = await s.download.da_torrent(
+        fonte="prowlarr", categoria="cerca", film=None, titolo=titolo, magnet=magnet, file_torrent=file_torrent,
+        serie=dati.serie_id, poster=dati.poster,
+    )
+    return {"id": id_download,
+            "messaggio": "Download avviato: lo segui nella pagina Download. Quando finisce, la puntata va in Jellyfin."}
 
 
 class RichiestaArtista(BaseModel):

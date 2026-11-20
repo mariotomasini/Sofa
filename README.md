@@ -255,12 +255,13 @@ qBittorrent è impostato in modo fisso così:
 
 Attivale dalle **impostazioni** (`/impostazioni`, voce *Serie TV*): viene installato **Sonarr**.
 
-- In Sonarr cerchi una serie e la aggiungi. Sonarr scarica gli episodi (anche quelli nuovi, appena escono) e li ordina in `Serie/Nome serie (Anno)/Stagione 01/`.
+- **Da Cerca** (mondo *Serie TV*): tocca una serie, nella home o tra i risultati, e premi **Segui la serie**. Cerca la aggiunge a Sonarr con la qualità giusta (e nella cartella Anime se è un anime), e Sonarr scarica le puntate già uscite e quelle nuove appena escono.
+- **Cerca le puntate**: Sonarr cerca i torrent con il titolo inglese, quindi molte serie italiane non le trova da solo (*Mare fuori* per lui è *The Sea Beyond*). Dopo "Segui la serie" premi **Cerca le puntate**: Cerca le cerca con il titolo italiano e quello originale, mostra prima quelle in italiano (puntate singole o stagioni intere) e le scarica. A download finito le consegna a Sonarr dicendo di che serie sono, e la puntata compare in Jellyfin.
+- Le puntate finiscono in `Serie/Nome serie (Anno)/Stagione 01/`. Puoi sempre usare anche Sonarr direttamente ("Apri in Sonarr"), per esempio per scaricare solo una stagione.
 - In Jellyfin ogni serie è **una sola scheda**, divisa in **stagioni** ed **episodi**.
 - Jellyfin ricorda per ogni utente **gli episodi già visti** e **dove ti sei fermato**: in home trovi "Continua a guardare" e "Prossimi episodi". Se in casa siete in più, crea un utente per ciascuno (*Pannello di controllo → Utenti*).
 - Il plugin Intro Skipper aggiunge i pulsanti **"Salta intro"** e **"Salta titoli di coda"**.
 
-Cerca per ora è pensato solo per i film: le serie aggiungile da Sonarr.
 
 ### Anime
 
@@ -345,6 +346,12 @@ Se disattivi un servizio, le sue impostazioni restano salvate: riattivandolo rit
 ---
 
 ## Spazio, pulizia e monitoraggio
+
+### Servizi che si bloccano
+
+Ogni programma ha un **controllo di salute**: ogni 30 secondi dice se risponde. Se non risponde per un minuto e mezzo, il **custode** (un servizio minuscolo: 1 MB di memoria) lo riavvia da solo, e in circa due minuti torna a funzionare. Per Jellyfin, che all'accensione è lento, il controllo aspetta 10 minuti prima di cominciare.
+
+Quando il PC è al massimo, i programmi che usi tu (Cerca, Jellyfin, la pagina iniziale) hanno la precedenza sui lavori in sottofondo (Radarr, Sonarr, Prowlarr, qBittorrent, Bazarr, FlareSolverr). Con il PC libero non cambia niente.
 
 ### Nella pagina iniziale
 
