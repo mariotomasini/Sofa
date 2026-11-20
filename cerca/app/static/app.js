@@ -511,7 +511,7 @@ function htmlInEvidenza(f, mondo, dove) {
   const generi = [f.serie ? "Serie" : "Film", ...(f.genre_ids || []).map((g) => NOMI_GENERI[g]).filter(Boolean).slice(0, 2)];
   const sonarr = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
   const azioni = f.serie
-    ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">+</span> Segui la serie</a>`
+    ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">⬇</span> Download</a>`
     : `<a class="bottone bianco" href="${BASE}/film/${f.id}"><span aria-hidden="true">▶</span> Scarica</a>` +
       `<a class="bottone grigio" href="${BASE}/film/${f.id}"><span aria-hidden="true">ⓘ</span> Scheda</a>`;
   const top = f.top10 ? `<p class="vetrina-top">${htmlEtichette({ top10: 1 })} N° ${f.top10} oggi ${dove ? "su " + esc(dove) : (f.serie ? "tra le serie" : "tra i film")}</p>` : "";
@@ -776,13 +776,11 @@ function dialogoSerie() {
   <div class="modulo">
     <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
     <p id="serie-trama" class="serie-trama"></p>
-    <p class="sottotitolo">Scarico tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono. Le trovi in Jellyfin.</p>
+    <button type="button" id="serie-segui" class="scarica-grande">⬇ Download</button>
+    <p class="sottotitolo">Scarica tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono:
+      sceglie da solo la versione migliore (prima in italiano) e le mette in Jellyfin con i sottotitoli.</p>
     <p id="serie-esito" class="messaggio-serie" role="status"></p>
-    <div id="serie-puntate" class="serie-puntate" hidden></div>
     <div class="azioni-riga">
-      <button type="button" id="serie-segui">Segui la serie</button>
-      <button type="button" id="serie-cerca" hidden>Cerca le puntate</button>
-      <a class="bottone secondario" id="serie-sonarr">Apri in Sonarr</a>
       <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
     </div>
   </div>
@@ -799,67 +797,15 @@ function dialogoSerie() {
       const s = JSON.parse(d.dataset.serie);
       const r = await inviaJSON("/api/serie/segui", { titolo: s.titolo, imdb: s.imdb, tvdb: s.tvdb, tmdb: s.tmdb });
       esito.className = "messaggio-serie ok";
-      esito.textContent = r.messaggio + (r.serie_id ? " Se Sonarr non le trova da solo, premi \"Cerca le puntate\"." : "");
-      b.textContent = "La segui";
-      if (r.serie_id) {
-        d.dataset.serieId = r.serie_id;
-        document.getElementById("serie-cerca").hidden = false;
-      }
+      esito.textContent = r.messaggio;
+      b.textContent = "✓ In download";
     } catch (e) {
       esito.className = "messaggio-serie errore";
       esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
       b.disabled = false;
     }
   });
-  document.getElementById("serie-cerca").addEventListener("click", () => cercaPuntate(d));
-  document.getElementById("serie-puntate").addEventListener("click", async (ev) => {
-    const bottone = ev.target.closest("button[data-puntata]");
-    if (!bottone) return;
-    bottone.disabled = true;
-    const s = JSON.parse(d.dataset.serie);
-    try {
-      const r = await inviaJSON("/api/serie/scarica", {
-        serie_id: Number(d.dataset.serieId), id: bottone.dataset.puntata, nome: s.nome, poster: s.poster,
-      });
-      bottone.textContent = "Avviato";
-      avviso(r.messaggio);
-    } catch (e) {
-      bottone.disabled = false;
-      avviso(`${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`, true);
-    }
-  });
   return d;
-}
-
-// Le puntate cercate da Cerca con il titolo italiano: Sonarr da solo usa quello inglese
-async function cercaPuntate(d) {
-  const box = document.getElementById("serie-puntate");
-  const s = JSON.parse(d.dataset.serie);
-  box.hidden = false;
-  box.innerHTML = '<p class="caricamento">Cerco le puntate sugli indexer… (anche un minuto)</p>';
-  try {
-    const r = await chiama(`/api/serie/${d.dataset.serieId}/torrent?nome=${encodeURIComponent(s.nome || "")}` +
-      `&originale=${encodeURIComponent(s.titolo || "")}`, { attesa: 120000 });
-    if (r.avviso) {
-      box.innerHTML = `<div class="nota"><strong>${esc(r.avviso)}</strong><p>${esc(r.cosa_fare || "")}</p></div>`;
-      return;
-    }
-    const italiani = r.risultati.filter((x) => x.italiano);
-    const altri = r.risultati.filter((x) => !x.italiano);
-    const riga = (x) => `<li><div class="descrizione"><strong>${x.italiano ? '<span class="lingua">ITA</span> ' : ""}` +
-      `${esc(x.contenuto || x.titolo)}</strong><span class="sottotitolo">${esc(x.contenuto ? x.titolo : "")}` +
-      `${x.contenuto ? " · " : ""}${dimensione(x.dimensione)} · seed ${x.seed ?? "?"}</span></div>` +
-      `<div class="azioni"><button class="secondario" data-puntata="${esc(x.id)}">Scarica</button></div></li>`;
-    let html = italiani.length ? `<ul class="risultati">${italiani.slice(0, 25).map(riga).join("")}</ul>`
-      : '<p class="sottotitolo">Nessuna puntata in italiano: queste sono in altre lingue.</p>';
-    if (altri.length) {
-      const lista = `<ul class="risultati">${altri.slice(0, 25).map(riga).join("")}</ul>`;
-      html += italiani.length ? `<details class="altre-lingue"><summary>Mostra anche ${altri.length} in altre lingue</summary>${lista}</details>` : lista;
-    }
-    box.innerHTML = html;
-  } catch (e) {
-    box.innerHTML = htmlErrore(e);
-  }
 }
 
 function apriSerie(dati, linkSonarr) {
@@ -872,13 +818,9 @@ function apriSerie(dati, linkSonarr) {
   document.getElementById("serie-anno").textContent =
     [dati.anno, dati.titolo !== dati.nome ? dati.titolo : ""].filter(Boolean).join(" · ");
   document.getElementById("serie-trama").textContent = dati.trama || "";
-  document.getElementById("serie-sonarr").href = linkSonarr;
   const b = document.getElementById("serie-segui");
   b.disabled = false;
-  b.textContent = "Segui la serie";
-  delete d.dataset.serieId;
-  document.getElementById("serie-cerca").hidden = true;
-  document.getElementById("serie-puntate").hidden = true;
+  b.textContent = "⬇ Download";
   document.getElementById("serie-esito").textContent = "";
   d.showModal();
 }
