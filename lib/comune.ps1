@@ -96,10 +96,11 @@ function Attendi-Docker([int]$Secondi = 600) {
         "Apri Docker Desktop dal menu Start, accetta le condizioni se richiesto, aspetta che diventi verde e rilancia."
 }
 
+# Niente param(): in una funzione "avanzata" PowerShell scambia "-d" (di "up -d") per il suo
+# -Debug e non lo passa a Docker, che allora avvia i servizi in primo piano e non torna più.
 function Invoca-Compose {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Argomenti)
     $generato = Join-Path $script:MediaboxDir "generato"
-    & docker compose --project-directory $generato -f (Join-Path $generato "docker-compose.yml") @Argomenti
+    & docker compose --project-directory $generato -f (Join-Path $generato "docker-compose.yml") @args
 }
 
 function Costruisci-Configuratore {
