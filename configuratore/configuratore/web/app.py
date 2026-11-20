@@ -155,4 +155,33 @@ def crea_app(cartella: Path = CARTELLA_MEDIABOX) -> FastAPI:
             return {"ok": True, "cambiato": False, "messaggio": "Non hai cambiato nulla."}
         return {"ok": True, "cambiato": True}
 
+    # --- aggiornamenti ---------------------------------------------------------------------------
+    def non_connesso() -> JSONResponse:
+        return JSONResponse({"errore": "Accedi di nuovo con la password di amministrazione."}, status_code=401)
+
+    @app.get(f"{BASE}/api/aggiornamento")
+    async def stato_aggiornamento(request: Request):
+        if not connesso(request):
+            return non_connesso()
+        return p.stato_aggiornamenti(cartella)
+
+    @app.post(f"{BASE}/api/aggiornamento/controlla")
+    async def controlla_aggiornamento(request: Request):
+        if not connesso(request):
+            return non_connesso()
+        from starlette.concurrency import run_in_threadpool
+
+        from .. import aggiornamenti
+
+        return await run_in_threadpool(aggiornamenti.controlla, cartella)
+
+    @app.post(f"{BASE}/api/aggiornamento/installa")
+    async def installa_aggiornamento(request: Request):
+        if not connesso(request):
+            return non_connesso()
+        if p.stato_aggiornamenti(cartella)["in_corso"]:
+            return {"ok": True, "messaggio": "L'aggiornamento è già in corso."}
+        p.richiedi_aggiornamento(cartella)
+        return {"ok": True}
+
     return app

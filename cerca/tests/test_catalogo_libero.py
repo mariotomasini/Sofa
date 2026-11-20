@@ -13,6 +13,7 @@ from app.config import Config
 # nei test niente attese tra una richiesta e l'altra
 catalogo_libero._wikidata.intervallo = 0
 catalogo_libero._tvmaze.intervallo = 0
+catalogo_libero._justwatch.intervallo = 0
 
 
 class ArchivioFinto:
@@ -141,7 +142,7 @@ def test_piattaforme():
                 await c.su_piattaforma("tv", 119), await c.su_piattaforma("movie", 4242))
 
     film, netflix, prime, sconosciuta = asyncio.run(prova())
-    assert film[0] == {"id": 8, "nome": "Netflix", "logo": "", "titolo_riga": "Originali Netflix"}
+    assert film[0] == {"id": 8, "nome": "Netflix", "logo": "", "titolo_riga": "Di tendenza su Netflix"}
     assert [f["id"] for f in netflix] == [900, 901]
     assert [s["titolo"] for s in prime] == ["Commedia su Prime"]
     assert sconosciuta == []
@@ -233,3 +234,69 @@ def test_stessa_richiesta_da_piu_righe_parte_una_volta_sola():
 
     asyncio.run(prova())
     assert sum(1 for _, p, _ in richieste if p.endswith("/importlist/movie")) == 1
+
+
+
+# --- JustWatch: le tendenze delle piattaforme -------------------------------------------------
+
+def nodo_jw(tmdb, titolo, tipo="MOVIE", generi=("drm",), durata=110, imdb=True, poster=True, anno=2026):
+    return {"node": {"objectType": tipo, "content": {
+        "title": titolo, "originalTitle": titolo + " (orig)", "originalReleaseYear": anno,
+        "posterUrl": f"/poster/{tmdb}/{{profile}}/x.{{format}}" if poster else None,
+        "shortDescription": "Trama.", "runtime": durata, "genres": [{"shortName": g} for g in generi],
+        "scoring": {"imdbScore": 7.2}, "externalIds": {"tmdbId": str(tmdb), "imdbId": f"tt{tmdb}" if imdb else None},
+    }}}
+
+
+def crea_con_justwatch(richieste):
+    import json as _json
+
+    def gestore(r: httpx.Request) -> httpx.Response:
+        if r.url.host != "apis.justwatch.com":
+            return httpx.Response(404)
+        dati = _json.loads(r.content)
+        richieste.append(dati["variables"])
+        filtro = dati["variables"]["filtro"]
+        if filtro["objectTypes"] == ["SHOW"]:
+            nodi = [nodo_jw(50, "Serie italiana", "SHOW")]
+        elif filtro.get("genres") == ["ani"]:
+            nodi = [nodo_jw(16, "Cartone", generi=("ani", "fml")), nodo_jw(17, "Cartone horror", generi=("ani", "hrr"))]
+        else:
+            nodi = [nodo_jw(1, "Primo"), nodo_jw(2, "Extra", imdb=False), nodo_jw(3, "Corto", durata=20),
+                    nodo_jw(4, "Senza locandina", poster=False), nodo_jw(1, "Primo"), nodo_jw(5, "Secondo")]
+        return httpx.Response(200, json={"data": {"popularTitles": {"edges": nodi}}})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(gestore))
+    config = Config(radarr_url="http://radarr:7878/radarr", radarr_chiave="r", tmdb_chiave="")
+    return CatalogoLibero(config, ArchivioFinto(), client)
+
+
+def test_justwatch_tendenze_sensate_in_italiano():
+    richieste = []
+
+    async def prova():
+        c = crea_con_justwatch(richieste)
+        return (await c.top_settimana("movie"), await c.top_settimana("tv"), await c.su_piattaforma("movie", 8),
+                await c.scopri("movie", 16), await c.scopri("movie", 16, kids=True), await c.appena_usciti("movie"))
+
+    top, serie, netflix, cartoni, kids, nuovi = asyncio.run(prova())
+    # niente extra senza IMDb, corti, titoli senza locandina, doppioni
+    assert [f["id"] for f in top] == [1, 5]
+    assert top[0]["poster"] == "https://images.justwatch.com/poster/1/s332/x.webp"
+    assert serie[0]["serie"] and serie[0]["titolo"] == "Serie italiana"
+    assert serie[0]["titolo_originale"] == "Serie italiana (orig)"
+    assert [f["id"] for f in netflix] == [1, 5] and [f["id"] for f in cartoni] == [16, 17]
+    assert [f["id"] for f in kids] == [16]  # l'horror animato non è per bambini
+    assert [f["id"] for f in nuovi] == [1, 5]
+    filtri = [r["filtro"] for r in richieste]
+    assert all(f["monetizationTypes"] == ["FLATRATE", "FREE", "ADS"] for f in filtri)  # solo in streaming
+    assert {"packages": ["nfx"]}.items() <= next(f for f in filtri if f["packages"] == ["nfx"]).items()
+    assert any(f.get("excludeGenres") == catalogo_libero.justwatch.NO_KIDS for f in filtri)
+    assert any("releaseYear" in f for f in filtri)
+    assert all(r["paese"] == "IT" and r["lingua"] == "it" for r in richieste)
+
+
+def test_senza_justwatch_restano_le_altre_fonti():
+    # crea() risponde 404 a JustWatch: la Top 10 arriva dai film del momento di Radarr
+    top = asyncio.run(crea().top_settimana("movie"))
+    assert [f["id"] for f in top] == [2, 1]

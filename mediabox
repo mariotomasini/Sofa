@@ -125,8 +125,20 @@ remote() {
 }
 
 # Le impostazioni salvate dal browser (/impostazioni): le applica il servizio di sistema
+# Il registro che la pagina delle impostazioni mostra durante l'aggiornamento
+registro_aggiornamento() {
+  printf '\n== %s ==\n' "$(date '+%d/%m/%Y %H:%M')" >> "$MEDIABOX_DIR/aggiornamenti.log"
+}
+
 applica_impostazioni_web() {
   local flag="$MEDIABOX_DIR/.da-applicare" cartella_prima
+  # "Aggiorna ora" dalla pagina delle impostazioni
+  if [[ -f "$MEDIABOX_DIR/.da-aggiornare" ]]; then
+    rm -f "$MEDIABOX_DIR/.da-aggiornare" "$flag"
+    registro_aggiornamento
+    "$MEDIABOX_DIR/mediabox" update >> "$MEDIABOX_DIR/aggiornamenti.log" 2>&1 || true
+    return 0
+  fi
   [[ -f "$flag" ]] || return 0
   cartella_prima="$(cat "$flag")"
   rm -f "$flag"
@@ -191,38 +203,25 @@ case "$comando" in
     fi ;;
   update)
     controlla_installazione; prepara_docker
-    backup
-    if aggiorna_codice; then
-      # il nuovo codice va eseguito dal nuovo script
-      exec "$MEDIABOX_DIR/mediabox" aggiorna-servizi
-    fi
-    "$MEDIABOX_DIR/mediabox" aggiorna-servizi ;;
+    aggiorna_mediabox ;;
   aggiorna-servizi)
+    # avviato da "update" con il codice nuovo
     controlla_installazione; prepara_docker
-    titolo "Aggiorno i servizi"
-    configuratore_genera
-    compose pull -q --ignore-buildable
-    compose build -q --pull cerca
-    applica && ok "mediabox aggiornato alla versione $(versione_installata)" ;;
+    aggiorna_servizi ;;
   aggiorna-automatico)
     # avviato ogni notte dal timer di systemd
     controlla_installazione; prepara_docker
     [[ "$(leggi_env AGGIORNAMENTI_AUTOMATICI "$ENV_FILE")" == "no" ]] && exit 0
-    riga="$(ultima_release)"
-    [[ -n "$riga" ]] && piu_nuova "${riga%% *}" "$(versione_installata)" || exit 0
-    if "$MEDIABOX_DIR/mediabox" update >> "$MEDIABOX_DIR/aggiornamenti.log" 2>&1; then
-      notifica_ntfy "mediabox aggiornato alla versione $(versione_installata)."
-    else
-      notifica_ntfy "L'aggiornamento di mediabox non è riuscito: scrivi \"mediabox update\" sul PC per vedere perché."
-    fi ;;
+    registro_aggiornamento
+    "$MEDIABOX_DIR/mediabox" update >> "$MEDIABOX_DIR/aggiornamenti.log" 2>&1 || true
+    case "$(grep -o '"fase": "[a-z_]*"' "$MEDIABOX_DIR/aggiornamento.stato" 2>/dev/null)" in
+      *fatto*) notifica_ntfy "mediabox aggiornato alla versione $(versione_installata)." ;;
+      *errore*) notifica_ntfy "L'aggiornamento di mediabox non è riuscito: apri le impostazioni (/impostazioni) per vedere perché." ;;
+    esac ;;
   versione)
-    controlla_installazione
+    controlla_installazione; prepara_docker; configuratore_costruisci
     echo "  Versione installata: $(versione_installata)"
-    riga="$(ultima_release)"
-    if [[ -n "$riga" ]]; then
-      echo "  Ultima su GitHub:    ${riga%% *}"
-      piu_nuova "${riga%% *}" "$(versione_installata)" && echo "  Per aggiornare: mediabox update"
-    fi ;;
+    configuratore_aggiornamento controlla | grep -E '"(fonte|id|messaggio|disponibile)"' | sed 's/^ */  /' || true ;;
   backup)
     controlla_installazione; prepara_docker; backup ;;
   restore)

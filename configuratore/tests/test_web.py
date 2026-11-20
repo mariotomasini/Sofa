@@ -226,3 +226,36 @@ def test_con_tanta_memoria_non_cambia_niente(cartella):
     assert leggero.applica(cartella) == []
     assert leggi_env(cartella / ".env")["WITH_BAZARR"] == "si"
     assert not p.scelte_attuali(p.valori(cartella))["poca_memoria"]
+
+
+def test_aggiornamenti_dalla_pagina(cartella, monkeypatch):
+    from configuratore import aggiornamenti
+
+    (cartella / "VERSION").write_text("1.3.0\n")
+    client = TestClient(crea_app(cartella))
+    assert client.post("/impostazioni/api/installa", json=dati_validi()).status_code == 200
+    (cartella / ".da-applicare").unlink(missing_ok=True)
+    (cartella / p.STATO).write_text("fatto")
+
+    senza = TestClient(crea_app(cartella))
+    assert senza.get("/impostazioni/api/aggiornamento").status_code == 401
+    assert senza.post("/impostazioni/api/aggiornamento/installa", json={}).status_code == 401
+
+    d = client.get("/impostazioni/api/aggiornamento").json()
+    assert d["attuale"]["versione"] == "1.3.0" and not d["in_corso"] and d["automatici"]
+
+    monkeypatch.setattr(aggiornamenti, "controlla", lambda c: {"disponibile": True, "ultima": {"fonte": "main"}})
+    assert client.post("/impostazioni/api/aggiornamento/controlla", json={}).json()["disponibile"]
+
+    assert client.post("/impostazioni/api/aggiornamento/installa", json={}).json()["ok"]
+    assert (cartella / ".da-aggiornare").exists() and (cartella / ".da-applicare").exists()
+    d = client.get("/impostazioni/api/aggiornamento").json()
+    assert d["in_corso"] and d["stato"]["fase"] == "in_attesa"
+    r = client.post("/impostazioni/api/aggiornamento/installa", json={}).json()
+    assert "già in corso" in r["messaggio"]
+
+    # il registro mostra solo l'ultimo aggiornamento
+    (cartella / "aggiornamenti.log").write_text("== 19/11 ==\nvecchio\n\n== 20/11 ==\n  · Scarico cerca\n")
+    assert client.get("/impostazioni/api/aggiornamento").json()["registro"] == ["== 20/11 ==", "  · Scarico cerca"]
+    pagina = client.get("/impostazioni/").text
+    assert 'id="agg-verifica"' in pagina and 'id="agg-installa"' in pagina

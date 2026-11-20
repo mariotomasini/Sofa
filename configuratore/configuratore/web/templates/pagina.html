@@ -96,6 +96,17 @@
           {% endfor %}
         </div>
         <p class="messaggio" id="msg-scelte" role="status"></p>
+        <div class="solo-impostazioni aggiornamenti" id="blocco-aggiornamenti">
+          <h2>Aggiornamenti</h2>
+          <p class="versione" id="agg-versione">Versione installata…</p>
+          <p class="aiuto" id="agg-automatici"></p>
+          <p class="messaggio" id="agg-stato" role="status"></p>
+          <div class="comandi-aggiornamento">
+            <button type="button" class="contorno" id="agg-verifica">Verifica aggiornamenti</button>
+            <button type="button" id="agg-installa" hidden>Aggiorna ora</button>
+          </div>
+          <pre class="registro" id="agg-registro" hidden></pre>
+        </div>
       </section>
 
       <section class="passo" data-passo="cartella" aria-labelledby="t-cartella">

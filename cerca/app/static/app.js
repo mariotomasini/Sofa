@@ -389,7 +389,7 @@ function avviaDownload({ soloAttivi }) {
 function htmlScheda(f) {
   let link = `${BASE}/film/${f.id}`;
   let sotto = esc(f.anno || "");
-  if (f.serie) link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo)}`;
+  if (f.serie) link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
   if (f.sottotitolo) {  // episodio da Sonarr
     link = "/jellyfin/";
     sotto = `${esc(f.sottotitolo)}${f.pronto ? ' · <span class="pronto">pronto</span>' : ""}`;
@@ -432,7 +432,7 @@ async function avviaGeneri() {
 }
 
 function htmlTop(f, i) {
-  const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo)}` : `${BASE}/film/${f.id}`;
+  const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}` : `${BASE}/film/${f.id}`;
   return `<a class="scheda-top" href="${link}" aria-label="${i + 1}. ${esc(f.titolo)}">` +
     `<span class="numero" aria-hidden="true">${i + 1}</span>` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) + "</a>";

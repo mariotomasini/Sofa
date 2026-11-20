@@ -93,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     imp_menu = sotto.add_parser("impostazioni")
     imp_menu.add_argument("--prima-volta", action="store_true")
     sotto.add_parser("leggero")
+    agg = sotto.add_parser("aggiornamento")
+    agg.add_argument("azione", choices=["controlla", "installa"])
     web = sotto.add_parser("web")
     web.add_argument("--porta", type=int, default=8080)
     rip = sotto.add_parser("ripristina")
@@ -108,6 +110,11 @@ def main(argv: list[str] | None = None) -> int:
         from .leggero import main as leggero
 
         return leggero(CARTELLA_MEDIABOX)
+
+    if args.comando == "aggiornamento":
+        from .aggiornamenti import main as aggiornamento
+
+        return aggiornamento(CARTELLA_MEDIABOX, args.azione)
 
     if args.comando == "web":
         import uvicorn

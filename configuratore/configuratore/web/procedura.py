@@ -364,3 +364,47 @@ def avanzamento(cartella: Path) -> Avanzamento:
         except (OSError, ValueError):
             pass
     return a
+
+
+# --- aggiornamenti ------------------------------------------------------------------------------
+FLAG_AGGIORNA = ".da-aggiornare"
+REGISTRO_AGGIORNAMENTI = "aggiornamenti.log"
+FASI_IN_CORSO = ("in_attesa", "controllo", "scarico", "installo")
+
+
+def ultime_righe(file: Path, quante: int = 25) -> list[str]:
+    try:
+        righe = file.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    # solo l'ultimo aggiornamento (dopo l'ultima intestazione "== data ==")
+    inizio = max((i for i, r in enumerate(righe) if r.startswith("== ") and r.endswith(" ==")), default=0)
+    return [r for r in righe[inizio:] if r.strip()][-quante:]
+
+
+def stato_aggiornamenti(cartella: Path) -> dict:
+    from .. import aggiornamenti
+
+    v = valori(cartella)
+    stato = aggiornamenti.leggi_stato(cartella)
+    if (cartella / FLAG_AGGIORNA).exists() and stato.get("fase") not in FASI_IN_CORSO:
+        stato = {"fase": "in_attesa", "messaggio": "Aggiornamento richiesto: parte tra pochi secondi…", "quando": ""}
+    return {
+        "attuale": aggiornamenti.installata(cartella),
+        "stato": stato,
+        "in_corso": stato.get("fase") in FASI_IN_CORSO,
+        "registro": ultime_righe(cartella / REGISTRO_AGGIORNAMENTI),
+        "automatici": v.get("AGGIORNAMENTI_AUTOMATICI", "si") != "no",
+    }
+
+
+def richiedi_aggiornamento(cartella: Path) -> None:
+    """Lo fa il PC: scriviamo la richiesta, il controllo delle impostazioni la vede in pochi secondi."""
+    from .. import aggiornamenti
+
+    (cartella / FLAG_AGGIORNA).write_text("", encoding="utf-8")
+    aggiornamenti.scrivi_stato(cartella, "in_attesa", "Aggiornamento richiesto: parte tra pochi secondi…")
+    # i PC installati prima di questa versione guardano solo .da-applicare: lo usiamo come segnale
+    flag = cartella / FLAG_APPLICA
+    if not flag.exists():
+        flag.write_text(valori(cartella).get("MEDIA_DIR", ""), encoding="utf-8")

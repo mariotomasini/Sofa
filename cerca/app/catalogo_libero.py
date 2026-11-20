@@ -25,6 +25,7 @@ from urllib.parse import quote
 
 import httpx
 
+from . import justwatch
 from .config import Config
 from .db import Archivio
 from .rete import AGENTE, ErroreServizio, Limitatore
@@ -34,9 +35,10 @@ log = logging.getLogger("cerca.catalogo")
 
 UN_GIORNO = 24 * 3600
 # Quanto aspettare ogni risposta: meglio un messaggio chiaro che una pagina che carica all'infinito
-TEMPO_MASSIMO = {"Radarr": 15, "Wikidata": 20, "TVmaze": 15}
+TEMPO_MASSIMO = {"Radarr": 15, "Wikidata": 20, "TVmaze": 15, "JustWatch": 15}
 PAUSA_DOPO_ERRORE = 60
 _wikidata = Limitatore(per_secondo=1)
+_justwatch = Limitatore(per_secondo=2)
 _tvmaze = Limitatore(per_secondo=2)  # TVmaze chiede al massimo 20 richieste ogni 10 secondi
 
 # id TMDB, nome italiano, nome inglese (Radarr), genere di Wikidata
@@ -221,8 +223,9 @@ class CatalogoLibero:
         return f"libero2:{url}:{sorted(parametri.items())}"
 
     async def _json(self, url: str, parametri: dict, durata: float, *, intestazioni: dict | None = None,
-                    limitatore: Limitatore | None = None, nome: str = "", snellisci=None) -> object:
-        chiave = self._chiave(url, parametri)
+                    limitatore: Limitatore | None = None, nome: str = "", snellisci=None,
+                    corpo: dict | None = None) -> object:
+        chiave = self._chiave(url, {**parametri, **({"corpo": json.dumps(corpo, sort_keys=True)} if corpo else {})})
         ricordo = self._memoria.get(chiave)
         if ricordo and ricordo[0] > time.monotonic():
             return ricordo[1]
@@ -230,7 +233,7 @@ class CatalogoLibero:
         compito = self._in_volo.get(chiave)
         if compito is None:
             compito = asyncio.ensure_future(
-                self._scarica(chiave, url, parametri, durata, intestazioni, limitatore, nome, snellisci))
+                self._scarica(chiave, url, parametri, durata, intestazioni, limitatore, nome, snellisci, corpo))
             self._in_volo[chiave] = compito
             compito.add_done_callback(lambda _c: self._in_volo.pop(chiave, None))
         return await asyncio.shield(compito)
@@ -240,7 +243,8 @@ class CatalogoLibero:
             self._memoria.pop(next(iter(self._memoria)))
         self._memoria[chiave] = (time.monotonic() + min(durata, MEMORIA_SECONDI), dati)
 
-    async def _scarica(self, chiave, url, parametri, durata, intestazioni, limitatore, nome, snellisci) -> object:
+    async def _scarica(self, chiave, url, parametri, durata, intestazioni, limitatore, nome, snellisci,
+                       corpo=None) -> object:
         # leggere e scrivere la cache in un thread a parte lascia Cerca libero di rispondere agli altri
         in_cache = await asyncio.to_thread(self.archivio.cache_leggi, chiave)
         if in_cache is not None:
@@ -252,8 +256,11 @@ class CatalogoLibero:
         if limitatore:
             await limitatore.attendi()
         try:
-            r = await self.client.get(url, params=parametri, headers=intestazioni or {},
-                                      timeout=httpx.Timeout(TEMPO_MASSIMO.get(nome, 20), connect=5))
+            tempo = httpx.Timeout(TEMPO_MASSIMO.get(nome, 20), connect=5)
+            if corpo is not None:
+                r = await self.client.post(url, json=corpo, headers=intestazioni or {}, timeout=tempo)
+            else:
+                r = await self.client.get(url, params=parametri, headers=intestazioni or {}, timeout=tempo)
         except httpx.HTTPError as exc:
             self._giu[nome] = time.monotonic() + PAUSA_DOPO_ERRORE
             log.warning("%s non risponde: %s", nome, type(exc).__name__)
@@ -298,6 +305,19 @@ class CatalogoLibero:
         return await self._json(f"https://api.tvmaze.com{percorso}", parametri, durata,
                                 intestazioni={"User-Agent": AGENTE}, limitatore=_tvmaze, nome="TVmaze",
                                 snellisci=snellisci_tvmaze)
+
+    async def _jw(self, durata: float = 6 * 3600, **filtri) -> list[dict] | None:
+        """Titoli di tendenza da JustWatch; None se JustWatch non risponde (si usano le altre fonti)."""
+        try:
+            elenco = await self._json(
+                justwatch.INDIRIZZO, {}, durata, corpo=justwatch.corpo(paese=self.config.paese, **filtri),
+                intestazioni={"User-Agent": AGENTE}, limitatore=_justwatch, nome="JustWatch",
+                snellisci=justwatch.titoli,
+            )
+        except ErroreServizio as exc:
+            log.info("JustWatch non disponibile: %s", exc.cosa)
+            return None
+        return list(elenco) if isinstance(elenco, list) else None
 
     # --- film --------------------------------------------------------------------------------
     async def cerca(self, testo: str) -> list[dict]:
@@ -423,6 +443,8 @@ class CatalogoLibero:
         return [riassunto_tvmaze(s) for s in sorted(serie.values(), key=lambda s: s.get("weight") or 0, reverse=True)]
 
     async def tendenze_serie(self) -> list[dict]:
+        if (serie := await self._jw(serie=True)) is not None and serie:
+            return serie[:18]
         return (await self._serie_del_momento())[:18]
 
     # --- home in stile Netflix --------------------------------------------------------------
@@ -435,6 +457,15 @@ class CatalogoLibero:
         return [{"id": g, "nome": NOMI_FILM[g]} for g in GENERI_PER_KIDS if g in NOMI_FILM]
 
     async def scopri(self, tipo: str, genere: int, pagina: int = 1, kids: bool = False) -> list[dict]:
+        # prima JustWatch: i titoli di quel genere di tendenza sulle piattaforme
+        codice = justwatch.GENERI.get(genere)
+        if codice and pagina <= 5:
+            per_pagina = 24
+            elenco = await self._jw(serie=tipo == "tv", generi=[codice], quanti=per_pagina * pagina,
+                                    escludi=justwatch.NO_KIDS if kids else None)
+            if elenco:
+                elenco = [t for t in elenco if adatto_ai_bambini(t)] if kids and tipo != "tv" else elenco
+                return elenco[(pagina - 1) * per_pagina:pagina * per_pagina]
         if tipo == "tv":
             if pagina > 1:
                 return []
@@ -475,12 +506,17 @@ class CatalogoLibero:
         return (await self.scopri("movie", 10751, kids=True))[:18]
 
     async def top_settimana(self, tipo: str) -> list[dict]:
+        if elenco := await self._jw(serie=tipo == "tv", quanti=20):
+            return elenco[:10]
         if tipo == "tv":
             return (await self._serie_del_momento())[:10]
         return (await self.tendenze())[:10]
 
     async def appena_usciti(self, tipo: str, oggi: dt.date | None = None) -> list[dict]:
         oggi = oggi or dt.date.today()
+        # i più visti tra quelli usciti quest'anno e l'anno scorso
+        if elenco := await self._jw(serie=tipo == "tv", dal_anno=oggi.year - 1, quanti=30):
+            return elenco[:10]
         if tipo == "tv":
             dal = (oggi - dt.timedelta(days=120)).isoformat()
             return [s for s in await self._serie_del_momento(oggi) if s["premiere"] >= dal][:10]
@@ -500,13 +536,16 @@ class CatalogoLibero:
         return {n: tabella[n.casefold()] for n in nomi if n.casefold() in tabella}
 
     async def piattaforme(self, tipo: str = "movie") -> list[dict]:
-        return [
-            {"id": i, "nome": nome, "logo": "",
-             "titolo_riga": f"Su {nome}" if tipo == "tv" else f"Originali {nome}"}
-            for i, nome, qid, _ in PIATTAFORME if tipo == "tv" or qid
-        ]
+        return [{"id": i, "nome": nome, "logo": "", "titolo_riga": f"Di tendenza su {nome}"}
+                for i, nome, _ in justwatch.PIATTAFORME]
 
     async def su_piattaforma(self, tipo: str, piattaforma: int, pagina: int = 1) -> list[dict]:
+        codice = justwatch.CODICI.get(piattaforma)
+        if codice and pagina <= 5:
+            per_pagina = 24
+            elenco = await self._jw(serie=tipo == "tv", piattaforme=[codice], quanti=per_pagina * pagina)
+            if elenco is not None:
+                return elenco[(pagina - 1) * per_pagina:pagina * per_pagina]
         voce = next((p for p in PIATTAFORME if p[0] == piattaforma), None)
         if voce is None or pagina > 1:
             return []

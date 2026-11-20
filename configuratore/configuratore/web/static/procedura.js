@@ -325,6 +325,120 @@ async function salvaImpostazioni() {
   } finally { $("salva").disabled = false; }
 }
 
+// --- aggiornamenti ------------------------------------------------------------------------------------
+const FASI_IN_CORSO = ["in_attesa", "controllo", "scarico", "installo"];
+
+function testoVersione(a) {
+  let testo = `Versione installata: ${a.versione}`;
+  if (a.fonte === "main" && a.id) testo += ` (${a.id.slice(0, 7)}${a.data ? ", " + a.data.split("-").reverse().join("/") : ""})`;
+  if (a.fonte === "release" && a.id) testo += ` (${a.id})`;
+  if (!a.id) testo += " (scaricata a mano)";
+  return testo;
+}
+
+function disegnaAggiornamento(d) {
+  $("agg-versione").textContent = testoVersione(d.attuale);
+  $("agg-automatici").textContent = d.automatici
+    ? "Si aggiorna da solo ogni notte verso le 4:30: scarica e installa solo le parti cambiate."
+    : "Gli aggiornamenti automatici sono spenti (li accendi qui sopra, in Manutenzione).";
+  const registro = $("agg-registro");
+  registro.textContent = (d.registro || []).join("\n");
+  registro.hidden = !(d.in_corso || d.stato.fase === "errore") || !d.registro.length;
+  if (d.in_corso) {
+    messaggio("agg-stato", d.stato.messaggio || "Aggiornamento in corso…", "ok");
+  } else if (d.stato.fase === "errore") {
+    messaggio("agg-stato", d.stato.messaggio || "L'ultimo aggiornamento non è riuscito.");
+  }
+  $("agg-verifica").disabled = $("agg-installa").disabled = d.in_corso;
+}
+
+async function seguiAggiornamento() {
+  let senzaRisposta = 0;
+  let partito = Date.now();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 3000));
+    let d;
+    try {
+      d = await api("/api/aggiornamento");
+      senzaRisposta = 0;
+    } catch (e) {
+      // durante l'aggiornamento questa pagina riparte: è normale che per un po' non risponda
+      senzaRisposta += 1;
+      messaggio("agg-stato", "I programmi stanno ripartendo: la pagina torna da sola tra poco…", "ok");
+      continue;
+    }
+    disegnaAggiornamento(d);
+    if (d.stato.fase === "in_attesa" && Date.now() - partito > 90000) {
+      messaggio("agg-stato", "L'aggiornamento non è partito. Sul PC di mediabox scrivi: mediabox update");
+      $("agg-verifica").disabled = $("agg-installa").disabled = false;
+      return;
+    }
+    if (d.stato.fase === "fatto") {
+      messaggio("agg-stato", d.stato.messaggio + " Ricarico la pagina…", "ok");
+      setTimeout(() => location.reload(), 3000);
+      return;
+    }
+    if (d.stato.fase === "aggiornato") {
+      messaggio("agg-stato", "Hai già l'ultima versione.", "ok");
+      $("agg-installa").hidden = true;
+      return;
+    }
+    if (d.stato.fase === "errore") return;  // il messaggio è già sulla pagina
+    if (!d.in_corso) {
+      // finito senza dirci come: ricarichiamo, la pagina mostrerà la versione installata
+      messaggio("agg-stato", "Aggiornamento finito. Ricarico la pagina…", "ok");
+      setTimeout(() => location.reload(), 3000);
+      return;
+    }
+    if (d.stato.fase !== "in_attesa") partito = Date.now();
+  }
+}
+
+async function avviaAggiornamenti() {
+  if (!$("blocco-aggiornamenti")) return;
+  try {
+    const d = await api("/api/aggiornamento");
+    disegnaAggiornamento(d);
+    if (d.in_corso) seguiAggiornamento();
+  } catch (e) { $("blocco-aggiornamenti").hidden = true; }
+
+  $("agg-verifica").addEventListener("click", async () => {
+    $("agg-verifica").disabled = true;
+    messaggio("agg-stato", "Controllo su GitHub…", "ok");
+    try {
+      const r = await api("/api/aggiornamento/controlla", {});
+      if (r.errore) { messaggio("agg-stato", r.errore); return; }
+      if (!r.disponibile) {
+        messaggio("agg-stato", "Hai già l'ultima versione.", "ok");
+        $("agg-installa").hidden = true;
+        return;
+      }
+      const u = r.ultima;
+      const cosa = u.fonte === "release" ? `la versione ${u.versione}` : "una versione nuova";
+      const quando = u.data ? ` del ${u.data.split("-").reverse().join("/")}` : "";
+      messaggio("agg-stato", `C'è ${cosa}${quando}${u.messaggio ? ": " + u.messaggio : ""}.`, "ok");
+      $("agg-installa").hidden = false;
+    } catch (e) {
+      if (e.stato === 401) { location.reload(); return; }
+      messaggio("agg-stato", e.message);
+    } finally { $("agg-verifica").disabled = false; }
+  });
+
+  $("agg-installa").addEventListener("click", async () => {
+    if (!confirm("Aggiorno mediabox adesso? Per qualche minuto alcuni programmi potrebbero non rispondere.")) return;
+    $("agg-installa").disabled = $("agg-verifica").disabled = true;
+    try {
+      const r = await api("/api/aggiornamento/installa", {});
+      messaggio("agg-stato", r.messaggio || "Aggiornamento richiesto: parte tra pochi secondi…", "ok");
+      seguiAggiornamento();
+    } catch (e) {
+      if (e.stato === 401) { location.reload(); return; }
+      messaggio("agg-stato", e.message);
+      $("agg-installa").disabled = $("agg-verifica").disabled = false;
+    }
+  });
+}
+
 $("modulo-accesso").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
@@ -350,6 +464,7 @@ $("esci").addEventListener("click", async () => { await api("/api/esci", {}); lo
       s.hidden = ["benvenuto", "password", "riepilogo"].includes(s.dataset.passo);
     });
     mostraVista("impostazioni");
+    avviaAggiornamenti();
   } else {
     mostraVista("accesso");
   }

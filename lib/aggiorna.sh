@@ -6,27 +6,6 @@ versione_installata() {
   tr -d '[:space:]' < "$MEDIABOX_DIR/VERSION" 2>/dev/null || echo "0.0.0"
 }
 
-# Stampa "tag url_archivio" dell'ultima release pubblicata (niente se non ce ne sono)
-ultima_release() {
-  local repo
-  repo="$(leggi_env MEDIABOX_REPO "$ENV_FILE")"
-  repo="${repo:-mariotomasini/Sofa}"
-  local json tag archivio
-  json="$(curl -fsSL -m 30 -H "Accept: application/vnd.github+json" \
-    "${MEDIABOX_GITHUB_API:-https://api.github.com}/repos/$repo/releases/latest" 2>/dev/null)" || return 0
-  # niente python o jq: bastano due righe del JSON
-  tag="$(printf '%s' "$json" | grep -o '"tag_name": *"[^"]*"' | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')"
-  archivio="$(printf '%s' "$json" | grep -o '"tarball_url": *"[^"]*"' | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')"
-  [[ -n "$tag" && -n "$archivio" ]] && printf '%s %s\n' "$tag" "$archivio"
-  return 0
-}
-
-# Vero se $1 è una versione più nuova di $2 (es. v1.3.0 > 1.2.0)
-piu_nuova() {
-  local a="${1#v}" b="${2#v}"
-  [[ "$a" != "$b" && "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n1)" == "$a" ]]
-}
-
 notifica_ntfy() {
   local topic server
   topic="$(leggi_env NTFY_TOPIC "$ENV_FILE")"
@@ -35,50 +14,94 @@ notifica_ntfy() {
   curl -fsS -m 20 -H "Title: mediabox" -d "$1" "${server:-https://ntfy.sh}/$topic" >/dev/null 2>&1 || true
 }
 
-# Le versioni delle immagini seguono quelle nuove, salvo quelle cambiate a mano nel .env
-aggiorna_versioni_immagini() {
-  local vecchio_esempio="$1" chiave nuovo_valore attuale vecchio_valore
-  while IFS='=' read -r chiave nuovo_valore; do
-    attuale="$(leggi_env "$chiave" "$ENV_FILE")"
-    vecchio_valore="$(leggi_env "$chiave" "$vecchio_esempio")"
-    if [[ -z "$attuale" || "$attuale" == "$vecchio_valore" ]]; then
-      scrivi_env "$chiave" "$nuovo_valore" "$ENV_FILE"
-    fi
-  done < <(grep -E '^IMG_[A-Z_]+=' "$MEDIABOX_DIR/.env.example")
+# Lo stato che la pagina delle impostazioni mostra: fase e messaggio
+# fasi: controllo | scarico | installo | fatto | aggiornato | errore | in_attesa
+stato_aggiornamento() {
+  printf '{"fase": "%s", "messaggio": "%s", "quando": "%s"}\n' "$1" "${2:-}" "$(date +%Y-%m-%dT%H:%M:%S)" \
+    > "$MEDIABOX_DIR/aggiornamento.stato"
 }
 
-# Scarica e installa la nuova versione del codice. Restituisce 1 se non c'è niente di nuovo.
-aggiorna_codice() {
-  local riga tag archivio temporanea vecchio_esempio
-  riga="$(ultima_release)"
-  if [[ -z "$riga" ]]; then
-    info "Nessuna versione pubblicata su GitHub (o GitHub non risponde)."
-    return 1
-  fi
-  tag="${riga%% *}"
-  archivio="${riga#* }"
-  if ! piu_nuova "$tag" "$(versione_installata)"; then
+# Il controllo e il download li fa il configuratore (la stessa logica su Linux e Windows).
+# Codici: 0 = c'è una versione nuova / installata, 3 = niente di nuovo, altro = errore
+configuratore_aggiornamento() {
+  # MEDIABOX_GITHUB_API serve solo per le prove (un GitHub finto)
+  "${DOCKER[@]}" run --rm --user "$(id -u):$(id -g)" -v "$MEDIABOX_DIR:/mediabox" -e MEDIABOX_GITHUB_API \
+    mediabox/configuratore:locale aggiornamento "$1"
+}
+
+# Vero se nel piano dell'aggiornamento c'è da rifare questa parte (cerca, configuratore, configura)
+nel_piano() {
+  grep -q "\"$1\": true" "$MEDIABOX_DIR/generato/aggiornamento.json" 2>/dev/null
+}
+
+# Scarica solo i programmi che mancano (quelli con una versione nuova)
+scarica_mancanti() {
+  local immagine
+  while read -r immagine; do
+    [[ -n "$immagine" ]] || continue
+    "${DOCKER[@]}" image inspect "$immagine" >/dev/null 2>&1 && continue
+    info "Scarico la versione nuova di ${immagine##*/}"
+    "${DOCKER[@]}" pull -q "$immagine" >/dev/null 2>&1 \
+      || avviso "Non riesco a scaricare ${immagine##*/}: riprovo all'avvio."
+  done < <(compose config --images 2>/dev/null | grep -v '^mediabox/' | sort -u)
+}
+
+# Prima parte: controlla, fa il backup e installa i file nuovi. Poi passa al nuovo script.
+aggiorna_mediabox() {
+  local esito=0
+  titolo "Controllo gli aggiornamenti"
+  stato_aggiornamento controllo "Controllo se c'è una versione nuova…"
+  configuratore_costruisci
+  configuratore_aggiornamento controlla >/dev/null || esito=$?
+  if [[ "$esito" -eq 3 ]]; then
+    stato_aggiornamento aggiornato "mediabox è già all'ultima versione."
     ok "mediabox è già all'ultima versione ($(versione_installata))"
-    return 1
+    return 0
+  elif [[ "$esito" -ne 0 ]]; then
+    stato_aggiornamento errore "Non riesco a controllare gli aggiornamenti: manca Internet?"
+    errore "Non riesco a controllare gli aggiornamenti." "Controlla la connessione a Internet e riprova."
   fi
-  titolo "Nuova versione di mediabox: $tag (installata: $(versione_installata))"
-  temporanea="$(mktemp -d)"
-  curl -fsSL -m 300 "$archivio" -o "$temporanea/mediabox.tar.gz" \
-    || { rm -rf "$temporanea"; errore "Non riesco a scaricare la nuova versione." "Riprova più tardi con: mediabox update"; }
-  mkdir "$temporanea/nuova"
-  tar -xzf "$temporanea/mediabox.tar.gz" -C "$temporanea/nuova" --strip-components=1
-  [[ -f "$temporanea/nuova/mediabox" && -f "$temporanea/nuova/VERSION" ]] \
-    || { rm -rf "$temporanea"; errore "L'archivio scaricato non sembra mediabox." "Controlla MEDIABOX_REPO nel file .env."; }
-  vecchio_esempio="$temporanea/vecchio.env.example"
-  cp "$MEDIABOX_DIR/.env.example" "$vecchio_esempio"
-  # il file .env, i file generati e i backup restano dove sono
-  tar -C "$temporanea/nuova" --exclude=.git --exclude=.env --exclude=generato --exclude=backup -cf - . \
-    | tar -C "$MEDIABOX_DIR" -xf -
-  chmod +x "$MEDIABOX_DIR/mediabox" "$MEDIABOX_DIR/install.sh" "$MEDIABOX_DIR"/lib/*.sh
-  aggiorna_versioni_immagini "$vecchio_esempio"
-  rm -rf "$temporanea"
-  ok "Codice aggiornato a $tag"
-  return 0
+  backup
+  esito=0
+  configuratore_aggiornamento installa || esito=$?
+  [[ "$esito" -eq 3 ]] && return 0
+  if [[ "$esito" -ne 0 ]]; then
+    errore "L'aggiornamento non è riuscito." "Riprova più tardi: mediabox continua a funzionare con la versione di prima."
+  fi
+  chmod +x "$MEDIABOX_DIR/mediabox" "$MEDIABOX_DIR/install.sh" "$MEDIABOX_DIR"/lib/*.sh 2>/dev/null || true
+  # il nuovo codice va eseguito dal nuovo script
+  exec "$MEDIABOX_DIR/mediabox" aggiorna-servizi
+}
+
+# Seconda parte (con il nuovo script): rifà solo quello che è cambiato
+aggiorna_servizi() {
+  stato_aggiornamento installo "Aggiorno i programmi cambiati…"
+  titolo "Aggiorno solo quello che è cambiato"
+  configuratore_genera
+  scarica_mancanti
+  if nel_piano cerca; then
+    info "Preparo la nuova versione di Cerca"
+    compose build -q cerca || {
+      stato_aggiornamento errore "Non riesco a preparare la nuova versione di Cerca."
+      errore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova: mediabox update"
+    }
+  fi
+  compose up -d --remove-orphans || {
+    stato_aggiornamento errore "Alcuni servizi non sono ripartiti."
+    errore "Alcuni servizi non sono ripartiti." "Riprova con: mediabox configura"
+  }
+  riavvia_segnati
+  if nel_piano configura; then
+    titolo "Riconfiguro i servizi"
+    stato_aggiornamento installo "Riconfiguro i servizi…"
+    compose run --rm -T configuratore configura || {
+      stato_aggiornamento errore "La configurazione dei servizi non è finita: guarda il registro."
+      return 1
+    }
+  fi
+  rm -f "$MEDIABOX_DIR/generato/aggiornamento.json"
+  stato_aggiornamento fatto "mediabox aggiornato alla versione $(versione_installata)."
+  ok "mediabox aggiornato alla versione $(versione_installata)"
 }
 
 # Timer giornaliero (systemd) che controlla se è uscita una nuova versione

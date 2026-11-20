@@ -7,26 +7,6 @@ function Leggi-VersioneInstallata {
     return "0.0.0"
 }
 
-function Converti-Versione([string]$Testo) {
-    $pulito = ($Testo -replace "^v", "") -replace "[^0-9.].*$", ""
-    try { return [version]$pulito } catch { return [version]"0.0" }
-}
-
-function Trova-UltimaRelease {
-    $repo = Leggi-Env "MEDIABOX_REPO" $script:EnvFile
-    if (-not $repo) { $repo = "mariotomasini/Sofa" }
-    $api = $env:MEDIABOX_GITHUB_API
-    if (-not $api) { $api = "https://api.github.com" }
-    try {
-        $dati = Invoke-RestMethod -Uri "$api/repos/$repo/releases/latest" -Headers @{ Accept = "application/vnd.github+json" } -TimeoutSec 30
-        return @{ Tag = $dati.tag_name; Archivio = $dati.zipball_url }
-    } catch { return $null }
-}
-
-function Test-PiuNuova([string]$Nuova, [string]$Attuale) {
-    return (Converti-Versione $Nuova) -gt (Converti-Versione $Attuale)
-}
-
 function Invia-Ntfy([string]$Messaggio) {
     $topic = Leggi-Env "NTFY_TOPIC" $script:EnvFile
     if (-not $topic) { return }
@@ -36,39 +16,103 @@ function Invia-Ntfy([string]$Messaggio) {
     catch { $null = $_ }  # una notifica mancata non deve fermare l'aggiornamento
 }
 
-# Le versioni delle immagini seguono quelle nuove, salvo quelle cambiate a mano nel .env
-function Aggiorna-VersioniImmagini([string]$VecchioEsempio) {
-    foreach ($riga in (Get-Content (Join-Path $script:MediaboxDir ".env.example") | Where-Object { $_ -match "^IMG_[A-Z_]+=" })) {
-        $chiave, $nuovo = $riga -split "=", 2
-        $attuale = Leggi-Env $chiave $script:EnvFile
-        if (-not $attuale -or $attuale -eq (Leggi-Env $chiave $VecchioEsempio)) { Scrivi-Env $chiave $nuovo $script:EnvFile }
+# Lo stato che la pagina delle impostazioni mostra: fase e messaggio
+# fasi: controllo | scarico | installo | fatto | aggiornato | errore | in_attesa
+function Scrivi-StatoAggiornamento([string]$Fase, [string]$Messaggio = "") {
+    $dati = [ordered]@{ fase = $Fase; messaggio = $Messaggio; quando = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss") }
+    $testo = $dati | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText((Join-Path $script:MediaboxDir "aggiornamento.stato"), $testo, (New-Object System.Text.UTF8Encoding $false))
+}
+
+# Il controllo e il download li fa il configuratore (la stessa logica su Linux e Windows).
+# Codici: 0 = c'è una versione nuova / installata, 3 = niente di nuovo, altro = errore
+function Invoca-Aggiornamento([string]$Azione) {
+    Senza-Stderr { & docker run --rm -v "$($script:MediaboxDir):/mediabox" -e MEDIABOX_GITHUB_API mediabox/configuratore:locale aggiornamento $Azione | Out-Host }
+    return $LASTEXITCODE
+}
+
+# Vero se nel piano dell'aggiornamento c'è da rifare questa parte (cerca, configuratore, configura)
+function Nel-Piano([string]$Parte) {
+    $file = Join-Path $script:MediaboxDir "generato\aggiornamento.json"
+    if (-not (Test-Path $file)) { return $false }
+    try { return [bool]((Get-Content $file -Raw | ConvertFrom-Json).$Parte) } catch { return $false }
+}
+
+# Scarica solo i programmi che mancano (quelli con una versione nuova)
+function Scarica-Mancanti {
+    $immagini = @(Senza-Stderr { Invoca-Compose config --images 2>$null } | Where-Object { $_ -and $_ -notlike "mediabox/*" } | Sort-Object -Unique)
+    foreach ($immagine in $immagini) {
+        Senza-Stderr { & docker image inspect $immagine *> $null }
+        if ($LASTEXITCODE -eq 0) { continue }
+        Scrivi-Info "Scarico la versione nuova di $(($immagine -split '/')[-1])"
+        Senza-Stderr { & docker pull -q $immagine *> $null }
+        if ($LASTEXITCODE -ne 0) { Scrivi-Avviso "Non riesco a scaricare $(($immagine -split '/')[-1]): riprovo all'avvio." }
     }
 }
 
-# Scarica e installa il nuovo codice. Restituisce $true se c'era una versione nuova.
-function Aggiorna-Codice {
-    $release = Trova-UltimaRelease
-    if (-not $release) { Scrivi-Info "Nessuna versione pubblicata su GitHub (o GitHub non risponde)."; return $false }
-    $installata = Leggi-VersioneInstallata
-    if (-not (Test-PiuNuova $release.Tag $installata)) { Scrivi-Ok "mediabox è già all'ultima versione ($installata)"; return $false }
-    Scrivi-Titolo "Nuova versione di mediabox: $($release.Tag) (installata: $installata)"
-    $temporanea = Join-Path $env:TEMP "mediabox-aggiornamento"
-    Remove-Item $temporanea -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Path $temporanea | Out-Null
-    $zip = Join-Path $temporanea "mediabox.zip"
-    Invoke-WebRequest -Uri $release.Archivio -OutFile $zip -UseBasicParsing -TimeoutSec 300
-    Expand-Archive -Path $zip -DestinationPath (Join-Path $temporanea "nuova") -Force
-    $sorgente = Get-ChildItem (Join-Path $temporanea "nuova") -Directory | Select-Object -First 1
-    if (-not $sorgente -or -not (Test-Path (Join-Path $sorgente.FullName "mediabox.ps1"))) {
-        Esci-ConErrore "L'archivio scaricato non sembra mediabox." "Controlla MEDIABOX_REPO nel file .env."
+# Prima parte: controlla, fa il backup e installa i file nuovi.
+# Restituisce $true se ha installato qualcosa (poi va eseguito "aggiorna-servizi" con il nuovo script).
+function Aggiorna-Mediabox {
+    Scrivi-Titolo "Controllo gli aggiornamenti"
+    Scrivi-StatoAggiornamento "controllo" "Controllo se c'è una versione nuova…"
+    Costruisci-Configuratore
+    $esito = Invoca-Aggiornamento "controlla"
+    if ($esito -eq 3) {
+        Scrivi-StatoAggiornamento "aggiornato" "mediabox è già all'ultima versione."
+        Scrivi-Ok "mediabox è già all'ultima versione ($(Leggi-VersioneInstallata))"
+        return $false
     }
-    $vecchioEsempio = Join-Path $temporanea "vecchio.env.example"
-    Copy-Item (Join-Path $script:MediaboxDir ".env.example") $vecchioEsempio
-    & robocopy $sorgente.FullName $script:MediaboxDir /E /NFL /NDL /NJH /NJS /NP /XD .git generato backup /XF .env | Out-Null
-    Aggiorna-VersioniImmagini $vecchioEsempio
-    Remove-Item $temporanea -Recurse -Force -ErrorAction SilentlyContinue
-    Scrivi-Ok "Codice aggiornato a $($release.Tag)"
+    if ($esito -ne 0) {
+        Scrivi-StatoAggiornamento "errore" "Non riesco a controllare gli aggiornamenti: manca Internet?"
+        Esci-ConErrore "Non riesco a controllare gli aggiornamenti." "Controlla la connessione a Internet e riprova."
+    }
+    [void](Esegui-Backup)
+    $esito = Invoca-Aggiornamento "installa"
+    if ($esito -eq 3) { return $false }
+    if ($esito -ne 0) {
+        Esci-ConErrore "L'aggiornamento non è riuscito." "Riprova più tardi: mediabox continua a funzionare con la versione di prima."
+    }
     return $true
+}
+
+# Seconda parte (con il nuovo script): rifà solo quello che è cambiato
+function Aggiorna-Servizi {
+    Scrivi-StatoAggiornamento "installo" "Aggiorno i programmi cambiati…"
+    Scrivi-Titolo "Aggiorno solo quello che è cambiato"
+    Genera-File
+    Scarica-Mancanti
+    if (Nel-Piano "cerca") {
+        Scrivi-Info "Preparo la nuova versione di Cerca"
+        Invoca-Compose build -q cerca | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Scrivi-StatoAggiornamento "errore" "Non riesco a preparare la nuova versione di Cerca."
+            Esci-ConErrore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova: mediabox update"
+        }
+    }
+    Invoca-Compose up -d --remove-orphans | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Scrivi-StatoAggiornamento "errore" "Alcuni servizi non sono ripartiti."
+        Esci-ConErrore "Alcuni servizi non sono ripartiti." "Riprova con: mediabox configura"
+    }
+    Riavvia-Segnati
+    if (Nel-Piano "configura") {
+        Scrivi-Titolo "Riconfiguro i servizi"
+        Scrivi-StatoAggiornamento "installo" "Riconfiguro i servizi…"
+        Invoca-Compose run --rm -T configuratore configura | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Scrivi-StatoAggiornamento "errore" "La configurazione dei servizi non è finita: guarda il registro."
+            return $false
+        }
+    }
+    Remove-Item (Join-Path $script:MediaboxDir "generato\aggiornamento.json") -Force -ErrorAction SilentlyContinue
+    Scrivi-StatoAggiornamento "fatto" "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)."
+    Scrivi-Ok "mediabox aggiornato alla versione $(Leggi-VersioneInstallata)"
+    return $true
+}
+
+# Il registro che la pagina delle impostazioni mostra durante l'aggiornamento
+function Scrivi-IntestazioneRegistro {
+    Add-Content -Path (Join-Path $script:MediaboxDir "aggiornamenti.log") -Value "`r`n== $(Get-Date -Format 'dd/MM/yyyy HH:mm') ==" -Encoding UTF8
 }
 
 # Attività pianificata: ogni notte controlla se è uscita una nuova versione
