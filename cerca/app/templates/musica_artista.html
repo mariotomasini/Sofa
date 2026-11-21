@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block titolo %}Artista{% endblock %}
+{% block contenuto %}
+<div class="musica" id="pagina-artista" aria-busy="true"><p class="caricamento">Carico…</p></div>
+{% endblock %}
+{% block script %}<script>window.LIDARR = {{ 'true' if lidarr else 'false' }}; avviaArtista({{ id_artista }});</script>{% endblock %}

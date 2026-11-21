@@ -740,53 +740,204 @@ async function avviaDiagnosi() {
   controlla();
 }
 
-// --- pagina Musica --------------------------------------------------------------------
-function tintaDalNome(nome) {
-  let h = 0;
-  for (const c of nome) h = (h * 31 + c.codePointAt(0)) % 360;
-  return h;
+// --- Musica: home, artista, album, ricerca e mini-lettore delle anteprime da 30 secondi ----------
+function durataBrano(s) {
+  const m = Math.floor((s || 0) / 60);
+  return `${m}:${String((s || 0) % 60).padStart(2, "0")}`;
 }
 
-function htmlArtista(a, dettaglio) {
-  const nome = (a.nome || "?").trim();
-  const iniziale = esc(nome.replace(/^the\s+/i, "").charAt(0).toUpperCase());
-  const azione = a.in_libreria
-    ? '<span class="sottotitolo">già in libreria</span>'
-    : (window.LIDARR ? `<button class="secondario" data-mbid="${esc(a.mbid)}">Aggiungi</button>` : "");
-  return `<div class="artista"><div class="iniziale" style="--h:${tintaDalNome(nome)}">${iniziale}</div>` +
-    `<div class="descrizione"><strong>${esc(a.nome)}</strong>` +
-    `<span class="sottotitolo">${esc(dettaglio)}</span>` +
-    `<a class="sottotitolo" href="https://listenbrainz.org/artist/${esc(a.mbid)}" target="_blank" rel="noopener">anteprima ↗</a>` +
-    `</div>${azione}</div>`;
+function saluto() {
+  const ora = new Date().getHours();
+  return ora < 5 ? "Buonanotte" : ora < 12 ? "Buongiorno" : ora < 18 ? "Buon pomeriggio" : "Buonasera";
+}
+
+const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
+const PAUSA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>';
+
+function htmlCartaArtista(a) {
+  return `<a class="carta-musica carta-artista" href="${BASE}/musica/artista/${a.id}">` +
+    `<span class="immagine tonda">${a.foto ? `<img src="${esc(a.foto)}" alt="" loading="lazy">` : ""}</span>` +
+    `<span class="nome">${esc(a.nome)}</span><span class="dettaglio">Artista</span></a>`;
+}
+
+function htmlCartaAlbum(a) {
+  const sotto = [a.anno, a.artista].filter(Boolean).join(" • ");
+  return `<a class="carta-musica" href="${BASE}/musica/album/${a.id}">` +
+    `<span class="immagine">${a.copertina ? `<img src="${esc(a.copertina)}" alt="" loading="lazy">` : ""}` +
+    `<span class="play-tondo" aria-hidden="true">${PLAY}</span></span>` +
+    `<span class="nome">${esc(a.titolo)}</span><span class="dettaglio">${esc(sotto)}</span></a>`;
+}
+
+function htmlCartaBrano(t, coda) {
+  return `<button type="button" class="carta-musica" data-brano="${t.id}" data-coda="${coda}">` +
+    `<span class="immagine">${t.copertina ? `<img src="${esc(t.copertina)}" alt="" loading="lazy">` : ""}` +
+    `<span class="play-tondo" aria-hidden="true">${PLAY}</span></span>` +
+    `<span class="nome">${esc(t.titolo)}</span><span class="dettaglio">${esc(t.artista)}</span></button>`;
+}
+
+function htmlRigaBrano(t, i, coda, conCopertina = true) {
+  return `<button type="button" class="riga-brano" data-brano="${t.id}" data-coda="${coda}">` +
+    `<span class="numero">${t.numero || i + 1}</span>` +
+    (conCopertina ? `<img src="${esc(t.copertina)}" alt="" loading="lazy">` : "") +
+    `<span class="testi"><span class="titolo">${esc(t.titolo)}</span><span class="artista">${esc(t.artista)}</span></span>` +
+    `<span class="durata">${durataBrano(t.durata)}</span></button>`;
+}
+
+function htmlRigaMusica(r) {
+  const coda = r.tipo === "brani" ? r.elementi.map((t) => t.id).join(",") : "";
+  const carte = r.elementi.map((x) =>
+    r.tipo === "artisti" ? htmlCartaArtista(x) : r.tipo === "album" ? htmlCartaAlbum(x) : htmlCartaBrano(x, coda)).join("");
+  return `<section class="riga-musica"><h2>${esc(r.titolo)}</h2>` +
+    (r.sottotitolo ? `<p class="sottotitolo">${esc(r.sottotitolo)}</p>` : "") +
+    `<div class="striscia-musica">${carte}</div></section>`;
+}
+
+// Il mini-lettore in basso: si apre al primo brano e passa da solo al successivo
+const lettore = {
+  audio: null, coda: [], posto: 0,
+  elemento() {
+    let el = document.getElementById("lettore");
+    if (el) return el;
+    document.body.insertAdjacentHTML("beforeend",
+      '<div id="lettore" class="lettore" hidden><img id="lettore-copertina" alt="">' +
+      '<span class="testi"><span id="lettore-titolo" class="titolo"></span><span id="lettore-artista" class="artista"></span></span>' +
+      `<button type="button" id="lettore-play" class="lettore-play" aria-label="Pausa">${PAUSA}</button>` +
+      '<span class="lettore-barra"><span id="lettore-avanzamento"></span></span></div>');
+    el = document.getElementById("lettore");
+    this.audio = new Audio();
+    this.audio.addEventListener("timeupdate", () => {
+      const a = this.audio;
+      document.getElementById("lettore-avanzamento").style.width = a.duration ? `${100 * a.currentTime / a.duration}%` : "0";
+    });
+    this.audio.addEventListener("ended", () => this.prossimo());
+    this.audio.addEventListener("play", () => this.icona());
+    this.audio.addEventListener("pause", () => this.icona());
+    document.getElementById("lettore-play").addEventListener("click", () => {
+      if (this.audio.paused) this.audio.play(); else this.audio.pause();
+    });
+    return el;
+  },
+  icona() {
+    const b = document.getElementById("lettore-play");
+    b.innerHTML = this.audio.paused ? PLAY : PAUSA;
+    b.setAttribute("aria-label", this.audio.paused ? "Riproduci" : "Pausa");
+    document.querySelectorAll("[data-brano]").forEach((x) => x.classList.toggle("in-ascolto",
+      !this.audio.paused && Number(x.dataset.brano) === this.coda[this.posto]));
+  },
+  async suona(id, coda) {
+    const el = this.elemento();
+    this.coda = coda && coda.length ? coda : [id];
+    this.posto = Math.max(0, this.coda.indexOf(id));
+    try {
+      const t = await chiama(`/api/musica/anteprima/${id}`);
+      document.getElementById("lettore-copertina").src = t.copertina || "";
+      document.getElementById("lettore-titolo").textContent = t.titolo;
+      document.getElementById("lettore-artista").textContent = `${t.artista} · anteprima`;
+      el.hidden = false;
+      document.body.classList.add("con-lettore");
+      this.audio.src = t.url;
+      await this.audio.play();
+    } catch (e) {
+      avviso(`${e.errore || "Non riesco a riprodurre questo brano."} ${e.cosa_fare || ""}`, true);
+    }
+  },
+  prossimo() {
+    if (this.posto + 1 < this.coda.length) this.suona(this.coda[this.posto + 1], this.coda);
+  },
+};
+
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-brano]");
+  if (!b) return;
+  ev.preventDefault();
+  const coda = (b.dataset.coda || "").split(",").filter(Boolean).map(Number);
+  lettore.suona(Number(b.dataset.brano), coda);
+});
+
+async function seguiArtista(b) {
+  b.disabled = true;
+  try {
+    avviso((await inviaJSON("/api/musica/segui", { nome: b.dataset.nome })).messaggio);
+    b.textContent = "Lo segui";
+    b.classList.add("seguito");
+  } catch (e) { avviso(`${e.errore} ${e.cosa_fare || ""}`, true); b.disabled = false; }
 }
 
 function avviaMusica() {
-  const perTe = document.getElementById("per-te");
-  const tendenze = document.getElementById("tendenze-musica");
-  chiama("/api/musica/per-te").then((d) => {
-    if (d.avviso) { perTe.innerHTML = `<div class="nota"><p>${esc(d.avviso)}</p></div>`; return; }
-    document.getElementById("partenza").textContent = d.partenza.length
-      ? "Partendo da: " + d.partenza.join(", ") : "";
-    perTe.innerHTML = d.suggerimenti.length
-      ? d.suggerimenti.map((a) => htmlArtista(a, "simile a " + a.simile_a.join(", "))).join("")
-      : "<p>Nessun suggerimento per ora: ascolta qualche brano in Jellyfin e riprova.</p>";
-  }).catch((e) => { perTe.innerHTML = htmlErrore(e); });
+  document.getElementById("saluto").textContent = saluto();
+  const scorciatoie = document.getElementById("scorciatoie");
+  const righe = document.getElementById("righe-musica");
+  conMemoria("musica:home", "/api/musica/home", (d) => {
+    scorciatoie.innerHTML = d.scorciatoie.map((a) =>
+      `<a class="scorciatoia" href="${BASE}/musica/artista/${a.id}">` +
+      `${a.foto ? `<img src="${esc(a.foto)}" alt="">` : "<span></span>"}<span>${esc(a.nome)}</span></a>`).join("");
+    righe.innerHTML = d.righe.map(htmlRigaMusica).join("") +
+      (d.avviso && !d.righe.length ? `<div class="nota"><p>${esc(d.avviso)}</p></div>` : "");
+    righe.removeAttribute("aria-busy");
+  }, (e) => { righe.innerHTML = htmlErrore(e); righe.removeAttribute("aria-busy"); }, "Carico la tua musica…", righe);
+}
 
-  chiama("/api/musica/tendenze").then((d) => {
-    tendenze.innerHTML = d.artisti.map((a) =>
-      htmlArtista(a, Number(a.ascolti).toLocaleString("it-IT") + " ascolti")).join("");
-  }).catch((e) => { tendenze.innerHTML = htmlErrore(e); });
+async function avviaArtista(id) {
+  const pagina = document.getElementById("pagina-artista");
+  try {
+    const a = await chiama(`/api/musica/artista/${id}`);
+    document.title = `${a.nome} · mediabox`;
+    const coda = a.popolari.map((t) => t.id).join(",");
+    const fan = a.fan ? `${Number(a.fan).toLocaleString("it-IT")} fan` : "";
+    pagina.innerHTML =
+      `<header class="testa-musica testa-artista" style="--sfondo-artista:url('${esc(a.foto_grande)}')">` +
+      `<div class="testa-testo"><p class="etichetta-musica">Artista</p><h1>${esc(a.nome)}</h1><p class="dettaglio">${esc(fan)}</p></div></header>` +
+      `<div class="azioni-musica">` +
+      (a.popolari.length ? `<button type="button" class="play-grande" data-brano="${a.popolari[0].id}" data-coda="${coda}" aria-label="Ascolta i brani popolari">${PLAY}</button>` : "") +
+      (window.LIDARR ? `<button type="button" class="segui" data-nome="${esc(a.nome)}">Segui</button>` : "") + `</div>` +
+      (a.popolari.length ? `<section class="riga-musica"><h2>Popolari</h2><div class="elenco-brani">` +
+        a.popolari.map((t, i) => htmlRigaBrano(t, i, coda)).join("") + `</div></section>` : "") +
+      (a.album.length ? htmlRigaMusica({ tipo: "album", titolo: "Album", elementi: a.album }) : "") +
+      (a.singoli.length ? htmlRigaMusica({ tipo: "album", titolo: "Singoli ed EP", elementi: a.singoli }) : "") +
+      (a.simili.length ? htmlRigaMusica({ tipo: "artisti", titolo: "Ti potrebbe piacere", elementi: a.simili }) : "");
+    const b = pagina.querySelector("button.segui");
+    if (b) b.addEventListener("click", () => seguiArtista(b));
+  } catch (e) { pagina.innerHTML = htmlErrore(e); }
+  pagina.removeAttribute("aria-busy");
+}
 
-  document.querySelector("main").addEventListener("click", async (ev) => {
-    const b = ev.target.closest("button[data-mbid]");
-    if (!b) return;
-    b.disabled = true;
-    try {
-      const r = await inviaJSON("/api/musica/lidarr", { mbid: b.dataset.mbid });
-      avviso(r.messaggio);
-      b.textContent = "✓ Aggiunto";
-    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
-  });
+async function avviaAlbum(id) {
+  const pagina = document.getElementById("pagina-album");
+  try {
+    const a = await chiama(`/api/musica/album/${id}`);
+    document.title = `${a.titolo} · mediabox`;
+    const coda = a.brani.map((t) => t.id).join(",");
+    const minuti = Math.round((a.durata || 0) / 60);
+    const sotto = [a.anno, `${a.brani.length} brani`, minuti ? `${minuti} min` : ""].filter(Boolean).join(" • ");
+    pagina.innerHTML =
+      `<header class="testa-musica testa-album"><img src="${esc(a.copertina_grande || a.copertina)}" alt="">` +
+      `<div class="testa-testo"><p class="etichetta-musica">${a.tipo === "album" ? "Album" : "Singolo"}</p><h1>${esc(a.titolo)}</h1>` +
+      `<p class="dettaglio"><a href="${BASE}/musica/artista/${a.artista_id}">${esc(a.artista)}</a> • ${esc(sotto)}</p></div></header>` +
+      `<div class="azioni-musica">` +
+      (a.brani.length ? `<button type="button" class="play-grande" data-brano="${a.brani[0].id}" data-coda="${coda}" aria-label="Ascolta l'album">${PLAY}</button>` : "") +
+      (window.LIDARR ? `<button type="button" class="segui" data-nome="${esc(a.artista)}">Segui l'artista</button>` : "") + `</div>` +
+      `<div class="elenco-brani">${a.brani.map((t, i) => htmlRigaBrano(t, i, coda, false)).join("")}</div>` +
+      (a.etichetta ? `<p class="sottotitolo piccolo">${esc(a.etichetta)}</p>` : "");
+    const b = pagina.querySelector("button.segui");
+    if (b) b.addEventListener("click", () => seguiArtista(b));
+  } catch (e) { pagina.innerHTML = htmlErrore(e); }
+  pagina.removeAttribute("aria-busy");
+}
+
+async function avviaCercaMusica(q) {
+  const box = document.getElementById("risultati-musica");
+  if (!q) { box.innerHTML = ""; return; }
+  box.innerHTML = '<p class="caricamento">Cerco…</p>';
+  try {
+    const d = await chiama(`/api/musica/cerca?q=${encodeURIComponent(q)}`);
+    const coda = d.brani.map((t) => t.id).join(",");
+    box.innerHTML =
+      (d.brani.length ? `<section class="riga-musica"><h2>Brani</h2><div class="elenco-brani">` +
+        d.brani.map((t, i) => htmlRigaBrano(t, i, coda)).join("") + `</div></section>` : "") +
+      (d.artisti.length ? htmlRigaMusica({ tipo: "artisti", titolo: "Artisti", elementi: d.artisti }) : "") +
+      (d.album.length ? htmlRigaMusica({ tipo: "album", titolo: "Album", elementi: d.album }) : "") ||
+      `<p>Nessun risultato per "${esc(q)}".</p>`;
+  } catch (e) { box.innerHTML = htmlErrore(e); }
 }
 
 // --- pagina Spazio ----------------------------------------------------------------

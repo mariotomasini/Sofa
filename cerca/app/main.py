@@ -27,6 +27,7 @@ from .avvisami import Avvisami
 from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
+from .deezer import Deezer
 from .download import GestoreDownload, e_magnet, nome_da_magnet
 from .gruppi_download import raggruppa
 from .jellyfin import Jellyfin
@@ -85,6 +86,7 @@ class Servizi:
         self.download.serie = self.serie
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
+        self.deezer = Deezer(self.archivio, client)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
 
@@ -202,11 +204,16 @@ def in_kids(request: Request) -> bool:
     return request.cookies.get(COOKIE_KIDS) == "si"
 
 
+PAGINE_INIZIALI = {"home.html", "mondo.html", "musica.html"}
+
+
 def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     s = servizi(request)
     contesto.setdefault("errore", None)
     contesto.setdefault("mondo", "kids" if in_kids(request) else "film")
     contesto.setdefault("sezione", "cerca")
+    # il tasto "‹ Indietro" in alto a sinistra: ovunque tranne nelle pagine iniziali dei mondi
+    contesto.setdefault("indietro", nome not in PAGINE_INIZIALI)
     attivi = [d for d in s.archivio.elenco_download(60) if d["stato"] in ("in_corso", "completato", "importazione")]
     return modelli.TemplateResponse(
         request,
@@ -354,6 +361,21 @@ async def pagina_download(request: Request):
 @app.get("/musica", response_class=HTMLResponse)
 async def pagina_musica(request: Request):
     return solo_adulti(request) or pagina(request, "musica.html", mondo="musica")
+
+
+@app.get("/musica/artista/{id_artista}", response_class=HTMLResponse)
+async def pagina_artista(request: Request, id_artista: int):
+    return solo_adulti(request) or pagina(request, "musica_artista.html", mondo="musica", id_artista=id_artista)
+
+
+@app.get("/musica/album/{id_album}", response_class=HTMLResponse)
+async def pagina_album_musica(request: Request, id_album: int):
+    return solo_adulti(request) or pagina(request, "musica_album.html", mondo="musica", id_album=id_album)
+
+
+@app.get("/musica/cerca", response_class=HTMLResponse)
+async def pagina_cerca_musica(request: Request, q: str = ""):
+    return solo_adulti(request) or pagina(request, "musica_cerca.html", mondo="musica", q=q.strip())
 
 
 @app.get("/spazio", response_class=HTMLResponse)
@@ -506,6 +528,42 @@ async def api_genere(request: Request, genere: int, mondo: str = "film", pagina:
 @app.get("/api/musica/per-te")
 async def api_musica_per_te(request: Request):
     return await servizi(request).musica.per_te()
+
+
+@app.get("/api/musica/home")
+async def api_musica_home(request: Request):
+    s = servizi(request)
+    return await s.musica.home(s.deezer)
+
+
+@app.get("/api/musica/artista/{id_artista}")
+async def api_musica_artista(request: Request, id_artista: int):
+    return await servizi(request).deezer.pagina_artista(id_artista)
+
+
+@app.get("/api/musica/album/{id_album}")
+async def api_musica_album(request: Request, id_album: int):
+    return await servizi(request).deezer.pagina_album(id_album)
+
+
+@app.get("/api/musica/cerca")
+async def api_musica_cerca(request: Request, q: str):
+    return await servizi(request).deezer.cerca(q.strip())
+
+
+@app.get("/api/musica/anteprima/{id_brano}")
+async def api_musica_anteprima(request: Request, id_brano: int):
+    return await servizi(request).deezer.anteprima(id_brano)
+
+
+class RichiestaSeguiArtista(BaseModel):
+    nome: str
+
+
+@app.post("/api/musica/segui")
+async def api_musica_segui(request: Request, dati: RichiestaSeguiArtista):
+    """"Segui" un artista: Lidarr scarica i suoi album."""
+    return {"messaggio": await servizi(request).musica.segui_per_nome(dati.nome.strip())}
 
 
 @app.get("/api/musica/tendenze")

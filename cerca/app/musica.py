@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import logging
 import re
 import unicodedata
 
@@ -30,6 +32,9 @@ ALGORITMO_SIMILI = "session_based_days_7500_session_300_contribution_5_threshold
 _limite_mb = Limitatore(per_secondo=1)
 _limite_lb = Limitatore(per_secondo=3)
 SEI_ORE = 6 * 3600
+
+
+log = logging.getLogger("cerca.musica")
 
 
 def normalizza(nome: str) -> str:
@@ -170,6 +175,55 @@ class Musica:
             "suggerimenti": unisci_simili(elenco, da_escludere),
             "partenza": [a["nome"] for a in validi],
         }
+
+    # --- la home in stile app musicale --------------------------------------------------------
+    async def home(self, deezer, oggi: dt.date | None = None) -> dict:
+        """Scorciatoie, i tuoi artisti, consigliati, Top 50 Italia, uscite recenti e tendenze.
+
+        Ogni parte è indipendente: se Jellyfin, ListenBrainz o Deezer non rispondono,
+        mancano solo le righe che dipendono da loro.
+        """
+        oggi = oggi or dt.date.today()
+
+        async def mai_errore(coro, predefinito, secondi: float = 20):
+            try:
+                return await asyncio.wait_for(coro, secondi)
+            except Exception as exc:  # noqa: BLE001 - una riga che manca non deve rompere la pagina
+                log.info("Musica: una parte della home non è disponibile (%s)", exc)
+                return predefinito
+
+        ascoltati, consigli, top, dischi, famosi = await asyncio.gather(
+            mai_errore(self.jellyfin.artisti_piu_ascoltati(limite=12), []),
+            mai_errore(self.per_te(), {}),
+            mai_errore(deezer.top_italia(), []),
+            mai_errore(deezer.album_di_tendenza(), []),
+            mai_errore(deezer.artisti_di_tendenza(), []),
+        )
+        tuoi, per_te = await asyncio.gather(
+            mai_errore(deezer.con_foto([a["nome"] for a in ascoltati]), []),
+            mai_errore(deezer.con_foto([a["nome"] for a in (consigli.get("suggerimenti") or [])[:16]]), []),
+        )
+        dal = (oggi - dt.timedelta(days=120)).isoformat()
+        uscite = await mai_errore(deezer.uscite_recenti([a["id"] for a in tuoi[:8]], dal), []) if tuoi else []
+        righe = [
+            {"tipo": "artisti", "titolo": "I tuoi artisti", "elementi": tuoi},
+            {"tipo": "artisti", "titolo": "Consigliati per te", "sottotitolo": "Simili a quelli che ascolti",
+             "elementi": per_te},
+            {"tipo": "brani", "titolo": "Top 50 Italia", "elementi": top},
+            {"tipo": "album", "titolo": "Uscite recenti per te", "elementi": uscite[:20]},
+            {"tipo": "album", "titolo": "Album di tendenza", "elementi": dischi},
+            {"tipo": "artisti", "titolo": "Artisti di tendenza", "elementi": famosi},
+        ]
+        return {"scorciatoie": (tuoi or famosi)[:8], "righe": [r for r in righe if r["elementi"]],
+                "avviso": consigli.get("avviso", "")}
+
+    async def segui_per_nome(self, nome: str) -> str:
+        """Aggiunge a Lidarr un artista conosciuto per nome (da Deezer): Lidarr vuole l'id MusicBrainz."""
+        mbid = await self.mbid_da_nome(nome)
+        if not mbid:
+            raise ErroreServizio(f"Non trovo \"{nome}\" su MusicBrainz, il catalogo che usa Lidarr.",
+                                 "Prova ad aggiungerlo da Lidarr cercandolo con un nome diverso.")
+        return await self.aggiungi_a_lidarr(mbid)
 
     # --- Lidarr --------------------------------------------------------------------------
     async def aggiungi_a_lidarr(self, mbid: str) -> str:
