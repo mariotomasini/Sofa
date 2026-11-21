@@ -33,6 +33,7 @@ from .gruppi_download import raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
 from .musica import Musica
+from .musica_download import ScaricaMusica
 from .ordine_download import OrdineDownload
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
@@ -89,6 +90,7 @@ class Servizi:
         self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.deezer = Deezer(self.archivio, client)
+        self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
 
@@ -621,6 +623,18 @@ async def api_serie_scarica(request: Request, dati: RichiestaPuntate):
     )
     return {"id": id_download,
             "messaggio": "Download avviato: lo segui nella pagina Download. Quando finisce, la puntata va in Jellyfin."}
+
+
+class RichiestaMusica(BaseModel):
+    tipo: str = Field(pattern="^(brano|album)$")
+    id: int
+
+
+@app.post("/api/musica/scarica")
+async def api_musica_scarica(request: Request, dati: RichiestaMusica):
+    """Scarica la canzone completa (o l'album) dagli indexer e la mette nella Musica di Jellyfin."""
+    s = servizi(request)
+    return await (s.scarica_musica.brano(dati.id) if dati.tipo == "brano" else s.scarica_musica.album(dati.id))
 
 
 class RichiestaArtista(BaseModel):

@@ -783,13 +783,40 @@ function htmlCartaBrano(t, coda) {
     `<span class="nome">${esc(t.titolo)}</span><span class="dettaglio">${esc(t.artista)}</span></button>`;
 }
 
+const SCARICA = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 6.5v8.2m0 0-3.4-3.4m3.4 3.4 3.4-3.4M7.5 17.5h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SCARICATO = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="m7.5 12.3 3 3 6-6.3" fill="none" stroke="#121212" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function htmlRigaBrano(t, i, coda, conCopertina = true) {
-  return `<button type="button" class="riga-brano" data-brano="${t.id}" data-coda="${coda}">` +
+  return `<div class="riga-con-scarica"><button type="button" class="riga-brano" data-brano="${t.id}" data-coda="${coda}">` +
     `<span class="numero">${t.numero || i + 1}</span>` +
     (conCopertina ? `<img src="${esc(t.copertina)}" alt="" loading="lazy">` : "") +
     `<span class="testi"><span class="titolo">${esc(t.titolo)}</span><span class="artista">${esc(t.artista)}</span></span>` +
-    `<span class="durata">${durataBrano(t.durata)}</span></button>`;
+    `<span class="durata">${durataBrano(t.durata)}</span></button>` +
+    `<button type="button" class="scarica-musica" data-scarica="brano" data-id="${t.id}" ` +
+    `aria-label="Scarica la canzone completa: ${esc(t.titolo)}" title="Scarica la canzone completa">${SCARICA}</button></div>`;
 }
+
+// Scarica la canzone completa (o l'album): Cerca la cerca sugli indexer e la mette nella Musica di Jellyfin
+async function scaricaMusica(b) {
+  if (b.classList.contains("fatto") || b.disabled) return;
+  b.disabled = true;
+  b.classList.add("in-corso");
+  try {
+    avviso((await inviaJSON("/api/musica/scarica", { tipo: b.dataset.scarica, id: Number(b.dataset.id) })).messaggio);
+    b.classList.add("fatto");
+    if (b.dataset.scarica === "brano") b.innerHTML = SCARICATO;
+    else b.innerHTML = `${SCARICATO}<span>In download</span>`;
+  } catch (e) {
+    avviso(`${e.errore} ${e.cosa_fare || ""}`, true);
+    b.disabled = false;
+  }
+  b.classList.remove("in-corso");
+}
+
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-scarica]");
+  if (b) { ev.preventDefault(); scaricaMusica(b); }
+});
 
 function htmlRigaMusica(r) {
   const coda = r.tipo === "brani" ? r.elementi.map((t) => t.id).join(",") : "";
@@ -923,6 +950,7 @@ async function avviaAlbum(id) {
       `<p class="dettaglio"><a href="${BASE}/musica/artista/${a.artista_id}">${esc(a.artista)}</a> • ${esc(sotto)}</p></div></header>` +
       `<div class="azioni-musica">` +
       (a.brani.length ? `<button type="button" class="play-grande" data-brano="${a.brani[0].id}" data-coda="${coda}" aria-label="Ascolta l'album">${PLAY}</button>` : "") +
+      `<button type="button" class="scarica-musica scarica-album" data-scarica="album" data-id="${a.id}">${SCARICA}<span>${a.tipo === "album" ? "Scarica l'album" : "Scarica"}</span></button>` +
       (window.LIDARR ? `<button type="button" class="segui" data-nome="${esc(a.artista)}">Segui l'artista</button>` : "") + `</div>` +
       `<div class="elenco-brani">${a.brani.map((t, i) => htmlRigaBrano(t, i, coda, false)).join("")}</div>` +
       (a.etichetta ? `<p class="sottotitolo piccolo">${esc(a.etichetta)}</p>` : "");

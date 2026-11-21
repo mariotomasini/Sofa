@@ -1059,6 +1059,20 @@ body[data-mondo="musica"] .indietro-ios { color: #fff; }
 
 /* elenchi di brani */
 .elenco-brani { display: flex; flex-direction: column; }
+.riga-con-scarica { display: flex; align-items: center; gap: .2rem; }
+.riga-con-scarica .riga-brano { flex: 1; min-width: 0; }
+.scarica-musica {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-width: 44px; min-height: 44px; color: #b3b3b3; cursor: pointer; border-radius: 999px;
+}
+.scarica-musica svg { width: 24px; height: 24px; flex: none; }
+.scarica-musica:hover { color: #fff; }
+.scarica-musica:focus-visible { outline: var(--focus); }
+.scarica-musica.fatto { color: var(--verde-musica, #1ed760); cursor: default; }
+.scarica-musica.in-corso svg { animation: pulsa 1s ease-in-out infinite; }
+.scarica-album { padding: 0 1rem 0 .6rem; border: 1px solid #878787; color: #fff; font-size: .9rem; min-height: 36px; }
+.scarica-album svg { width: 22px; height: 22px; }
+.scarica-album.fatto { border-color: var(--verde-musica, #1ed760); }
 .riga-brano {
   all: unset; box-sizing: border-box; display: grid; grid-template-columns: 28px auto 1fr auto; align-items: center; gap: .9rem;
   padding: .45rem .6rem; border-radius: 6px; cursor: pointer; color: #fff;
