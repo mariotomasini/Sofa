@@ -79,6 +79,23 @@ class Radarr:
         await self._r("POST", "command", json={"name": "MoviesSearch", "movieIds": [film["id"]]})
         return film
 
+    async def annulla(self, id_film: int) -> str:
+        """Ferma tutto: download in corso e ricerca. Se il file non c'era ancora, il film esce da Radarr."""
+        film = await self._r("GET", f"movie/{id_film}")
+        coda = await self._r("GET", "queue/details", params={"movieId": id_film}) or []
+        for voce in coda:
+            if voce.get("id"):
+                await self._r("DELETE", f"queue/{voce['id']}", params={"removeFromClient": "true", "blocklist": "false"})
+        if not film.get("hasFile"):
+            await self._r("DELETE", f"movie/{id_film}", params={"deleteFiles": "true", "addImportExclusion": "false"})
+            return f"Annullato: \"{film.get('title', '')}\" non viene più cercato."
+        await self._r("PUT", "movie/editor", json={"movieIds": [id_film], "monitored": False})
+        return f"Annullato: tengo la versione che hai già di \"{film.get('title', '')}\" e non cerco più di meglio."
+
+    async def cerca_di_nuovo(self, id_film: int) -> None:
+        await self._r("PUT", "movie/editor", json={"movieIds": [id_film], "monitored": True})
+        await self._r("POST", "command", json={"name": "MoviesSearch", "movieIds": [id_film]})
+
     async def importa(self, percorso: str, id_film: int) -> str:
         """Importa (spostando) il video principale trovato in `percorso`."""
         cartella = percorso if os.path.isdir(percorso) else os.path.dirname(percorso)

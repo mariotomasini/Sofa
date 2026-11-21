@@ -82,7 +82,7 @@ class Servizi:
         self.download.notifica = self.avvisami.notifica
         self.serie = Serie(config, client)
         self.download.serie = self.serie
-        self.automatici = Automatici(config, self.radarr, self.serie)
+        self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
@@ -728,16 +728,83 @@ class RichiestaAssocia(BaseModel):
 
 @app.get("/api/automatici")
 async def api_automatici(request: Request):
-    """Cosa scaricano Radarr/Sonarr e cosa aspetta ancora la lingua preferita."""
+    """Cosa scaricano o cercano Radarr/Sonarr e cosa aspetta ancora la lingua preferita."""
     s = servizi(request)
     coda, attesa = await asyncio.gather(s.automatici.coda(), s.automatici.in_attesa())
     return {"coda": coda, "attesa": attesa, "lingua_preferita": s.automatici.preferita}
+
+
+class RichiestaAutomatici(BaseModel):
+    tipo: str = "film"
+    ids: list[int] = []
+
+
+@app.post("/api/automatici/annulla")
+async def api_automatici_annulla(request: Request, dati: RichiestaAutomatici):
+    return {"messaggio": await servizi(request).automatici.annulla(dati.tipo, dati.ids)}
+
+
+@app.post("/api/automatici/riprova")
+async def api_automatici_riprova(request: Request, dati: RichiestaAutomatici):
+    return {"messaggio": await servizi(request).automatici.cerca_di_nuovo(dati.tipo, dati.ids)}
 
 
 @app.post("/api/automatici/cerca")
 async def api_automatici_cerca(request: Request):
     await servizi(request).automatici.cerca_tutto()
     return {"messaggio": "Ricerca avviata: Radarr e Sonarr cercano le versioni migliori."}
+
+
+@app.get("/api/film/{tmdb_id}/stato")
+async def api_film_stato(request: Request, tmdb_id: int):
+    return await servizi(request).automatici.stato_film(tmdb_id)
+
+
+@app.post("/api/serie/apri")
+async def api_serie_apri(request: Request, dati: RichiestaSerie):
+    """La serie in Sonarr con stagioni e puntate, per scegliere cosa scaricare."""
+    if in_kids(request):
+        return JSONResponse({"errore": "In modalità Kids non si aggiungono serie."}, status_code=403)
+    s = servizi(request)
+    serie = await s.serie.prepara(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
+    return {"serie_id": serie["id"], "stagioni": await s.serie.puntate(serie["id"])}
+
+
+@app.get("/api/serie/{serie_id}/puntate")
+async def api_serie_puntate(request: Request, serie_id: int):
+    return {"serie_id": serie_id, "stagioni": await servizi(request).serie.puntate(serie_id)}
+
+
+class SceltaPuntate(BaseModel):
+    puntate: list[int] = []
+    stagione: int | None = None
+    tutte: bool = False
+
+
+@app.post("/api/serie/{serie_id}/scarica")
+async def api_serie_scarica_puntate(request: Request, serie_id: int, dati: SceltaPuntate):
+    s = servizi(request)
+    if dati.tutte:
+        await s.serie.scarica_tutte(serie_id)
+        messaggio = "Scarico tutte le puntate, e anche quelle nuove appena escono."
+    elif dati.stagione is not None:
+        await s.serie.scarica_tutte(serie_id, dati.stagione)
+        messaggio = f"Scarico la stagione {dati.stagione}."
+    else:
+        await s.serie.scarica_puntate(dati.puntate)
+        messaggio = "Scarico la puntata." if len(dati.puntate) == 1 else f"Scarico {len(dati.puntate)} puntate."
+    return {"messaggio": messaggio}
+
+
+@app.post("/api/serie/{serie_id}/annulla")
+async def api_serie_annulla_puntate(request: Request, serie_id: int, dati: SceltaPuntate):
+    s = servizi(request)
+    puntate = dati.puntate
+    if dati.stagione is not None or dati.tutte:
+        stagioni = await s.serie.puntate(serie_id)
+        puntate = [p["id"] for st in stagioni if dati.tutte or st["numero"] == dati.stagione for p in st["puntate"]]
+    await s.serie.annulla_puntate(puntate)
+    return {"messaggio": "Annullato: non le cerco e non le scarico più (quelle già in Jellyfin restano)."}
 
 
 @app.post("/api/download/{id_download}/associa")
