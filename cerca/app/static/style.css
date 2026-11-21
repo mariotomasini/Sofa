@@ -932,3 +932,5 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
 .puntata .stato-puntata { font-size: .85rem; color: var(--testo-2); }
 .puntata button { padding: .35rem .8rem; }
 .serie-puntate { max-height: 55vh; overflow-y: auto; }
+.stato-film .lingua { align-self: flex-start; }
+.stagione summary button { white-space: nowrap; padding: .35rem .8rem; font-size: .9rem; flex-shrink: 0; }
