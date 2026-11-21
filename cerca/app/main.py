@@ -82,7 +82,7 @@ class Servizi:
         self.download.notifica = self.avvisami.notifica
         self.serie = Serie(config, client)
         self.download.serie = self.serie
-        self.automatici = Automatici(config, self.radarr, self.serie)
+        self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)

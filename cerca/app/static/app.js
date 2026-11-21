@@ -265,10 +265,25 @@ function htmlStatoAutomatico(x) {
   const icona = ICONE_STATO[x.stato] || "";
   let html = `<span class="riga-stato stato-auto-${esc(x.stato || "")}"><span class="stato">${icona} ${esc(x.stato_testo || "")}</span></span>`;
   if (x.stato === "download") {
+    const pezzi = [`${Math.round(x.percentuale)}%${x.dimensione ? " di " + dimensione(x.dimensione) : ""}`];
+    if (x.velocita) pezzi.push(`${dimensione(x.velocita)}/s`);
+    if (x.rimanente) pezzi.push(`mancano ${tempoRimanente(x.rimanente)}`);
     html += `<div class="barra"><span style="width:${x.percentuale}%"></span></div>` +
-      `<span class="sottotitolo">${Math.round(x.percentuale)}%${x.dimensione ? " di " + dimensione(x.dimensione) : ""}</span>`;
+      `<span class="sottotitolo">${pezzi.map(esc).join(" · ")}</span>`;
   }
   return html;
+}
+
+function tempoRimanente(s) {
+  if (s < 60) return "meno di un minuto";
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  const ore = Math.floor(s / 3600), min = Math.round((s % 3600) / 60);
+  return ore >= 24 ? `${Math.round(ore / 24)} giorni` : `${ore} h${min ? " " + min + " min" : ""}`;
+}
+
+function etichettaFonte(x) {
+  if (!x.fonte) return "";
+  return `<span class="fonte fonte-${x.fonte.toLowerCase()}">${x.fonte === "Telegram" ? "✈ Telegram" : "Torrent"}</span>`;
 }
 
 function htmlAutomatico(x, inCorso) {
@@ -281,7 +296,7 @@ function htmlAutomatico(x, inCorso) {
     : "";
   const altra = !x.senza_lingua && x.lingua && !x.preferita;
   return `<article class="download${altra ? " non-preferita" : ""}"><div class="descrizione">` +
-    `<strong>${etichettaLingua(x)} ${esc(x.titolo)}</strong>` +
+    `<strong>${etichettaLingua(x)}${etichettaFonte(x)} ${esc(x.titolo)}</strong>` +
     (inCorso ? htmlStatoAutomatico(x) : "") +
     (x.dettaglio ? `<span class="sottotitolo">${esc(x.dettaglio)}</span>` : "") + nota +
     `</div>${azioni ? `<div class="azioni">${azioni}</div>` : ""}</article>`;
@@ -335,7 +350,7 @@ function htmlStatoFilm(d) {
   if (d.stato !== "pronto" || d.migliorabile) azioni += `<button class="secondario" data-annulla-auto ${dati}>Annulla</button>`;
   const nota = d.stato === "pronto" && d.migliorabile
     ? `<span class="sottotitolo">Cerco ancora la versione in ${esc(d.lingua_preferita.toLowerCase())}: la sostituisco da sola.</span>` : "";
-  return `<div class="stato-film">${etichettaLingua(d)}${htmlStatoAutomatico(d)}${nota}` +
+  return `<div class="stato-film"><span>${etichettaLingua(d)}${etichettaFonte(d)}</span>${htmlStatoAutomatico(d)}${nota}` +
     `${azioni ? `<div class="azioni-riga">${azioni}</div>` : ""}</div>`;
 }
 

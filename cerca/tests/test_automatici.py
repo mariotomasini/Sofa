@@ -60,3 +60,23 @@ def test_stato_in_parole_semplici():
     assert stato_coda({"status": "completed", "trackedDownloadState": "importPending"})[0] == "importazione"
     problema = stato_coda({"trackedDownloadStatus": "warning", "statusMessages": [{"messages": ["Nessun seed"]}]})
     assert problema == ("problema", "Problema: Nessun seed")
+
+
+def test_velocita_tempo_e_fonte():
+    from app.automatici import fonte, secondi
+
+    assert secondi("01:02:03") == 3723 and secondi("1.00:00:10") == 86410 and secondi(None) == 0
+    assert fonte({"downloadClient": "Telegram (tgarr)"}) == "Telegram"
+    assert fonte({"protocol": "torrent", "downloadClient": "qBittorrent"}) == "Torrent"
+
+    class Qbit:
+        async def tutti(self):
+            return [{"hash": "abc", "dlspeed": 2_000_000}]
+
+    a = Automatici(Config(), FintoRadarr(), FintaSerie(), Qbit())
+    asyncio.run(a._leggi_qbit())
+    torrent = a._da_coda({"downloadId": "ABC", "status": "downloading", "size": 100, "sizeleft": 50}, "X", "film", [1])
+    assert torrent["velocita"] == 2_000_000 and torrent["fonte"] == "Torrent"
+    telegram = a._da_coda({"downloadId": "t1", "status": "downloading", "size": 1000, "sizeleft": 600,
+                           "timeleft": "00:01:00", "downloadClient": "Telegram (tgarr)"}, "Y", "film", [2])
+    assert telegram["velocita"] == 10 and telegram["rimanente"] == 60 and telegram["fonte"] == "Telegram"

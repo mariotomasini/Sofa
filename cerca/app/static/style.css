@@ -934,3 +934,8 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
 .serie-puntate { max-height: 55vh; overflow-y: auto; }
 .stato-film .lingua { align-self: flex-start; }
 .stagione summary button { white-space: nowrap; padding: .35rem .8rem; font-size: .9rem; flex-shrink: 0; }
+
+/* fonte del download */
+.fonte { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 4px; font-size: .75em;
+  font-weight: 700; vertical-align: middle; background: var(--pannello-2); color: var(--testo); }
+.fonte-telegram { background: #229ed9; color: #fff; }

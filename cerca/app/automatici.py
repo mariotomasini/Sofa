@@ -66,6 +66,25 @@ def stato_coda(r: dict) -> tuple[str, str]:
     return "download", "In download"
 
 
+def secondi(testo: str | None) -> int:
+    """Il tempo rimanente di Radarr/Sonarr ("01:02:03" o "1.02:03:04") in secondi."""
+    if not testo:
+        return 0
+    giorni, ore = "0", testo
+    if "." in testo.split(":")[0]:
+        giorni, ore = testo.split(".", 1)
+    try:
+        h, m, s = (int(float(x)) for x in ore.split(":"))
+        return int(giorni) * 86400 + h * 3600 + m * 60 + s
+    except ValueError:
+        return 0
+
+
+def fonte(r: dict) -> str:
+    client = (r.get("downloadClient") or "").lower()
+    return "Telegram" if "tgarr" in client or "telegram" in client or r.get("protocol") == "usenet" else "Torrent"
+
+
 def percentuale(totale: float, mancante: float) -> float:
     return round(100 * (1 - mancante / totale), 1) if totale else 0.0
 
@@ -76,8 +95,11 @@ def episodio(e: dict | None) -> str:
 
 
 class Automatici:
-    def __init__(self, config: Config, radarr: Radarr, serie: Serie) -> None:
+    def __init__(self, config: Config, radarr: Radarr, serie: Serie, qbit=None) -> None:
         self.config = config
+        self.qbit = qbit
+        self._campioni: dict[str, tuple[float, int]] = {}
+        self._velocita_qbit: dict[str, int] = {}
         self.radarr = radarr
         self.serie = serie
         self._attesa: tuple[float, list[dict]] | None = None
@@ -95,15 +117,44 @@ class Automatici:
             "preferita": lingua == self.preferita, "lingua_preferita": self.preferita, **altro,
         }
 
+    def _velocita(self, r: dict) -> int:
+        """Byte al secondo: da qBittorrent se è un torrent, se no da quanto è sceso o dal tempo rimanente."""
+        hash_torrent = (r.get("downloadId") or "").lower()
+        if hash_torrent in self._velocita_qbit:
+            return self._velocita_qbit[hash_torrent]
+        mancante = int(r.get("sizeleft") or 0)
+        chiave = f"{r.get('downloadId')}|{r.get('id')}"
+        adesso = time.monotonic()
+        prima = self._campioni.get(chiave)
+        self._campioni[chiave] = (adesso, mancante)
+        if prima and adesso - prima[0] > 1 and prima[1] > mancante:
+            return int((prima[1] - mancante) / (adesso - prima[0]))
+        rimanente = secondi(r.get("timeleft"))
+        return int(mancante / rimanente) if rimanente and mancante else 0
+
     def _da_coda(self, r: dict, titolo: str, tipo: str, ids: list[int]) -> dict:
         stato, testo = stato_coda(r)
+        velocita = self._velocita(r) if stato == "download" else 0
+        mancante = int(r.get("sizeleft") or 0)
+        rimanente = secondi(r.get("timeleft")) or (int(mancante / velocita) if velocita else 0)
         return self._voce(titolo, r.get("title", ""), self._lingua(r), tipo=tipo, ids=ids, stato=stato,
                           stato_testo=testo, percentuale=percentuale(r.get("size", 0), r.get("sizeleft", 0)),
-                          dimensione=r.get("size", 0), annullabile=True, ricercabile=False)
+                          dimensione=r.get("size", 0), velocita=velocita, rimanente=rimanente, fonte=fonte(r),
+                          annullabile=True, ricercabile=False)
+
+    async def _leggi_qbit(self) -> None:
+        if self.qbit is None:
+            return
+        try:
+            torrent = await self.qbit.tutti()
+            self._velocita_qbit = {t.get("hash", "").lower(): int(t.get("dlspeed") or 0) for t in torrent}
+        except Exception:  # noqa: BLE001 - senza qBittorrent la velocità si stima
+            self._velocita_qbit = {}
 
     async def coda(self) -> list[dict]:
         """Tutto quello che Radarr e Sonarr stanno scaricando o cercando, con lo stato in parole semplici."""
         voci: list[dict] = []
+        await self._leggi_qbit()
         in_coda_film: set[int] = set()
         in_coda_puntate: set[int] = set()
         try:
@@ -174,6 +225,7 @@ class Automatici:
             return {"stato": "nessuno"}
         coda = await self.radarr._r("GET", "queue/details", params={"movieId": film["id"]}) or []
         if coda:
+            await self._leggi_qbit()
             voce = self._da_coda(coda[0], titolo_film(film), "film", [film["id"]])
             return {**voce, "id": film["id"]}
         if film.get("hasFile"):
