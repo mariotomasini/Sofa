@@ -404,3 +404,58 @@ def test_lingue_audio():
     assert Impostazioni({}).lingue_audio == ["it", "es", "en"]
     assert Impostazioni({"LINGUE_AUDIO": "es, it ,xx,es"}).lingue_audio == ["es", "it"]
     assert Impostazioni({"LINGUE_AUDIO": "zz"}).lingue_audio == ["it", "es", "en"]
+
+
+def test_tgarr_entra_in_prowlarr_anche_senza_risultati(monkeypatch):
+    """Prowlarr rifiuta (400) un indexer acceso che alla prova non trova niente: tgarr appena installato."""
+    from configuratore.impostazioni import Impostazioni
+    from configuratore.riepilogo import Esito
+    from configuratore.servizi import tgarr
+
+    class ProwlarrFinto:
+        def __init__(self):
+            self.indexer = []
+            self.chiamate = []
+
+        def attendi(self):
+            pass
+
+        def get(self, percorso, *a, **kw):
+            if percorso == "indexer":
+                return self.indexer
+            if percorso == "indexer/schema":
+                return [{"name": "Generic Newznab", "implementation": "Newznab",
+                         "fields": [{"name": "baseUrl"}, {"name": "apiPath"}, {"name": "apiKey"}]}]
+            if percorso == "appprofile":
+                return [{"id": 1}]
+            raise AssertionError(percorso)
+
+        def post(self, percorso, dati, cosa="", params=None, **kw):
+            self.chiamate.append(("POST", dati["enable"], params))
+            if dati["enable"]:  # Prowlarr fa la prova anche con forceSave
+                raise ErroreMediabox("Prowlarr non accetta", "no results were returned")
+            self.indexer.append({**dati, "id": 7})
+            return self.indexer[-1]
+
+        def put(self, percorso, dati, cosa="", params=None, **kw):
+            assert percorso == "indexer/7" and params == {"forceSave": "true"}  # alla modifica niente prova
+            self.chiamate.append(("PUT", dati["enable"], params))
+            self.indexer[0] = dati
+            return dati
+
+    finto = ProwlarrFinto()
+    monkeypatch.setattr(tgarr, "attendi", lambda *a, **kw: None)
+    monkeypatch.setattr(tgarr, "collega_arr", lambda *a, **kw: None)
+    monkeypatch.setattr(tgarr, "radarr", lambda imp: None)
+    monkeypatch.setattr(tgarr, "prowlarr", lambda imp: finto)
+    imp = Impostazioni({"TGARR_API_KEY": "chiave", "WITH_SONARR": "no"})
+    tgarr.configura(imp, Esito())
+    assert [c[:2] for c in finto.chiamate] == [("POST", False), ("PUT", True)]
+    assert finto.indexer[0]["enable"] and finto.indexer[0]["name"] == "Telegram (tgarr)"
+    campi = {f["name"]: f.get("value") for f in finto.indexer[0]["fields"]}
+    assert campi == {"baseUrl": "http://tgarr:8088/newznab", "apiPath": "/api", "apiKey": "chiave"}
+
+    # di nuovo (mediabox configura): c'è già ed è acceso, non si tocca
+    finto.chiamate.clear()
+    tgarr.configura(imp, Esito())
+    assert finto.chiamate == []

@@ -75,7 +75,16 @@ def configura(imp: Impostazioni, esito) -> None:
         profili = p.get("appprofile")
         etichette: list[int] = []
         dati = prepara_indexer(schema, NOME, campi, profili[0]["id"] if profili else 1, PRIORITA_TORZNAB, etichette)
-        p.post("indexer", dati, "aggiungere Telegram (tgarr) come indexer", params={"forceSave": "true"})
+        # Prowlarr, quando si aggiunge un indexer acceso, fa una ricerca di prova e lo rifiuta (errore 400,
+        # "no results were returned") se non trova niente: è il caso di tgarr appena installato, che non ha
+        # ancora un account Telegram collegato. Anche con forceSave la prova si fa alla creazione, non alla
+        # modifica: lo creiamo spento e lo accendiamo subito dopo con una modifica.
+        dati["enable"] = False
+        esistente = p.post("indexer", dati, "aggiungere Telegram (tgarr) come indexer", params={"forceSave": "true"})
+    if not esistente.get("enable"):
+        esistente["enable"] = True
+        p.put(f"indexer/{esistente['id']}", esistente, "accendere Telegram (tgarr) come indexer",
+              params={"forceSave": "true"})
     ok("Prowlarr: Telegram aggiunto come indexer (priorità massima), passa da solo a Radarr e Sonarr")
 
     porta = imp.get("TGARR_PORT", "8765")
