@@ -44,18 +44,25 @@ MULTI = re.compile(rf"\b(multi|dual)\b(?![ ._-]*({SUB})\b)|\b(multi|dual)audio\b
 MULTI_SUB = re.compile(r"\b(multi[ ._-]*subs?|multisubs?)\b", re.I)
 
 
+def multi_ignoto(nome: str) -> bool:
+    """ "MULTi" senza lingue scritte: può avere anche la prima lingua."""
+    return bool(MULTI.search(nome)) and not STRANIERO.search(nome)
+
+
 def lingue_audio(nome: str) -> set[str]:
-    """Le lingue dell'audio; inglese se il nome non ne indica nessun'altra."""
+    """Le lingue dell'audio scritte nel nome; inglese se non ne indica nessuna (e non è un MULTi)."""
     trovate = {c for c, r in AUDIO.items() if r.search(nome)}
-    return trovate or ({"en"} if not STRANIERO.search(nome) else set())
+    return trovate or ({"en"} if not STRANIERO.search(nome) and not MULTI.search(nome) else set())
 
 
 def lingue_sottotitoli(nome: str) -> set[str]:
     return {c for c, r in SOTTOTITOLI.items() if r.search(nome)}
 
 
-def valuta(nome: str, lingue: tuple[str, ...] | list[str]) -> tuple[int, bool, int, bool]:
-    """Più alto è meglio: (lingua dell'audio, MULTI, lingua dei sottotitoli, multi-sub)."""
-    def posto(trovate: set[str]) -> int:
+def valuta(nome: str, lingue: tuple[str, ...] | list[str]) -> tuple[float, bool, float, bool]:
+    """Più alto è meglio: (lingua dell'audio, MULTI, lingua dei sottotitoli, multi-sub).
+    Un MULTi senza lingue scritte sta tra la prima e la seconda lingua, come in Radarr e Sonarr."""
+    def posto(trovate: set[str]) -> float:
         return -min((lingue.index(c) for c in trovate if c in lingue), default=len(lingue))
-    return posto(lingue_audio(nome)), bool(MULTI.search(nome)), posto(lingue_sottotitoli(nome)), bool(MULTI_SUB.search(nome))
+    audio = -0.5 if multi_ignoto(nome) else posto(lingue_audio(nome))
+    return audio, bool(MULTI.search(nome)), posto(lingue_sottotitoli(nome)), bool(MULTI_SUB.search(nome))

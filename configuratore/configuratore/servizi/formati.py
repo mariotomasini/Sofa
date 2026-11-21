@@ -51,8 +51,7 @@ LINGUE: dict[str, tuple[str, str | None]] = {
     "pt": ("Portoghese", "portuguese|por|pt-?br|dublado"),
     "en": ("Inglese", None),
 }
-# altre lingue frequenti: se ci sono, la release non è "solo inglese". "MULTi" senza
-# lingue elencate conta come inglese (c'è quasi sempre) più il bonus MULTI.
+# altre lingue frequenti: se ci sono, la release non è "solo inglese"
 ALTRE_LINGUE = "rus|russian|hindi|hin|tamil|telugu|kor|korean|jap|japanese|chi|chinese|tur|turkish|pol|polish"
 LINGUE_PREDEFINITE = ["it", "es", "en"]
 
@@ -84,6 +83,8 @@ RE_3D = r"(?i)\b(3d|sbs|half[ ._-]?ou)\b"
 PUNTI_LINGUA = [64000, 32000, 16000, 8000, 4000, 2000]
 PUNTI_SUB = [400, 150, 50]  # sottotitoli nella prima, seconda, terza lingua
 PUNTI_MULTI = 1000
+PUNTI_MULTI_IGNOTO = (PUNTI_LINGUA[0] + PUNTI_LINGUA[1]) // 2
+NOME_MULTI_IGNOTO = "Lingua · MULTI (lingue non scritte)"
 PUNTI_MULTI_SUB = 100
 PUNTI_1080P = 200
 PUNTI_720P = 100
@@ -103,8 +104,8 @@ def nomi_lingue(lingue: list[str]) -> str:
 
 def condizioni_lingua(codice: str) -> list[Condizione]:
     parole = LINGUE[codice][1]
-    if parole is None:  # inglese: nessun'altra lingua nel nome
-        return [("titolo", RE_STRANIERO, True, True)]
+    if parole is None:  # inglese: nessun'altra lingua nel nome (e non "MULTi": quello è a parte)
+        return [("titolo", RE_STRANIERO, True, True), ("titolo", RE_MULTI, True, True)]
     return [("titolo", audio(parole), False, False)]
 
 
@@ -126,6 +127,11 @@ def formati(lingue: list[str]) -> dict[str, tuple[int, list[Condizione]]]:
         elenco[f"Sottotitoli · {nome}"] = (_per_posto(PUNTI_SUB, lingue, codice),
                                            [("titolo", sottotitoli(PAROLE_SUB[codice]), False, False)])
     elenco.update({
+        # "MULTi" senza lingue scritte può avere la prima lingua: sta tra la prima e la seconda.
+        # Resta sotto il limite, quindi si cerca ancora una versione che la dichiari; se le tracce
+        # audio del file scaricato hanno la prima lingua, Cerca ferma la ricerca (automatici.py).
+        NOME_MULTI_IGNOTO: (PUNTI_MULTI_IGNOTO, [("titolo", RE_MULTI, False, True),
+                                                 ("titolo", RE_STRANIERO, True, True)]),
         "Lingua · MULTI": (PUNTI_MULTI, [("titolo", RE_MULTI, False, False)]),
         "Sottotitoli · Multi": (PUNTI_MULTI_SUB, [("titolo", RE_MULTI_SUB, False, False)]),
         "Qualità · 1080p": (PUNTI_1080P, [("risoluzione", 1080, False, True)]),

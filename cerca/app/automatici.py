@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import re
 import time
 
 from .config import Config
@@ -25,16 +26,28 @@ NOMI = {"it": "Italiano", "es": "Spagnolo", "fr": "Francese", "de": "Tedesco", "
 DA_INGLESE = {"Italian": "Italiano", "Spanish": "Spagnolo", "French": "Francese", "German": "Tedesco",
               "Portuguese": "Portoghese", "English": "Inglese"}
 PREFISSO = "Lingua · "
+# Le tracce audio vere del file, come le legge Radarr/Sonarr (mediaInfo.audioLanguages = "eng/ita")
+DA_ISO = {"ita": "Italiano", "spa": "Spagnolo", "fre": "Francese", "fra": "Francese", "ger": "Tedesco",
+          "deu": "Tedesco", "por": "Portoghese", "eng": "Inglese"}
+OGNI_CONTROLLO_TRACCE = 1800
 ORA_RICERCA = 4  # di notte, quando nessuno guarda
 CACHE_ATTESA = 600
 
 
+def tracce_audio(media: dict | None) -> list[str]:
+    """Le lingue delle tracce audio del file ("eng/ita" → ["Inglese", "Italiano"])."""
+    codici = re.split(r"[/,| ]+", ((media or {}).get("audioLanguages") or "").lower())
+    return list(dict.fromkeys(DA_ISO[c] for c in codici if c in DA_ISO))
+
+
 def lingua_da(formati: list[dict] | None, lingue: list[dict] | None = None,
-              ordine: tuple[str, ...] = ("it", "es", "en")) -> str:
-    """La lingua dell'audio: dai formati di mediabox ("Lingua · Spagnolo"), se no da quella letta da Radarr.
+              ordine: tuple[str, ...] = ("it", "es", "en"), media: dict | None = None) -> str:
+    """La lingua dell'audio: dalle tracce vere del file se ci sono, se no dai formati di mediabox
+    ("Lingua · Spagnolo"), se no da quella letta da Radarr.
     Con più lingue (es. ITA.SPA) conta quella più in alto nelle preferenze."""
-    trovate = [f.get("name", "").removeprefix(PREFISSO) for f in formati or []
-               if f.get("name", "").startswith(PREFISSO) and f.get("name") != PREFISSO + "MULTI"]
+    trovate = tracce_audio(media) or [
+        f.get("name", "").removeprefix(PREFISSO) for f in formati or []
+        if f.get("name", "").startswith(PREFISSO) and not f.get("name", "").startswith(PREFISSO + "MULTI")]
     if not trovate:
         trovate = [DA_INGLESE[x["name"]] for x in lingue or [] if x.get("name") in DA_INGLESE]
     if not trovate:
@@ -131,7 +144,8 @@ class Automatici:
         return NOMI.get(self.config.lingue_audio[0], "Italiano")
 
     def _lingua(self, dati: dict) -> str:
-        return lingua_da(dati.get("customFormats"), dati.get("languages"), self.config.lingue_audio)
+        return lingua_da(dati.get("customFormats"), dati.get("languages"), self.config.lingue_audio,
+                         dati.get("mediaInfo"))
 
     def _voce(self, titolo: str, dettaglio: str, lingua: str, **altro) -> dict:
         return {
@@ -315,6 +329,49 @@ class Automatici:
             await self.serie._api("POST", "command", json={"name": "CutoffUnmetEpisodeSearch"})
             await self.serie._api("POST", "command", json={"name": "MissingEpisodeSearch"})
         self._attesa = None
+
+    def _gia_buono(self, file: dict) -> bool:
+        """Il nome non dichiara la prima lingua (es. "MULTi"), ma le tracce audio del file sì."""
+        prima = self.preferita
+        dichiarata = any(f.get("name") == PREFISSO + prima for f in file.get("customFormats") or [])
+        return not dichiarata and prima in tracce_audio(file.get("mediaInfo"))
+
+    async def controlla_tracce(self) -> int:
+        """Ferma la ricerca di una versione migliore per i file che hanno già l'audio nella prima lingua.
+
+        Radarr e Sonarr giudicano dal nome: un "MULTi" con dentro l'italiano resterebbe "da
+        migliorare" per sempre e verrebbe sostituito senza motivo. Restano scaricati e in
+        Jellyfin; non si cercano più (film o puntata non più "monitorati").
+        """
+        fermati = 0
+        try:
+            dati = await self.radarr._r("GET", "wanted/cutoff", params={"pageSize": 200})
+            film = [m["id"] for m in (dati or {}).get("records", []) if self._gia_buono(m.get("movieFile") or {})]
+            if film:
+                await self.radarr._r("PUT", "movie/editor", json={"movieIds": film, "monitored": False})
+                fermati += len(film)
+        except Exception:  # noqa: BLE001
+            log.warning("Controllo delle tracce audio in Radarr non riuscito", exc_info=True)
+        if self.serie.attivo:
+            try:
+                dati = await self.serie._api("GET", "wanted/cutoff", params={
+                    "pageSize": 500, "includeEpisodeFile": "true"})
+                puntate = [e["id"] for e in (dati or {}).get("records", [])
+                           if self._gia_buono(e.get("episodeFile") or {})]
+                if puntate:
+                    await self.serie._api("PUT", "episode/monitor", json={"episodeIds": puntate, "monitored": False})
+                    fermati += len(puntate)
+            except Exception:  # noqa: BLE001
+                log.warning("Controllo delle tracce audio in Sonarr non riuscito", exc_info=True)
+        if fermati:
+            log.info("%s file hanno già l'audio in %s: non cerco altre versioni", fermati, self.preferita.lower())
+            self._attesa = None
+        return fermati
+
+    async def ciclo_tracce(self) -> None:
+        while True:
+            await self.controlla_tracce()
+            await asyncio.sleep(OGNI_CONTROLLO_TRACCE)
 
     async def ricerca_notturna(self) -> None:
         while True:

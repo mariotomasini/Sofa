@@ -26,12 +26,14 @@ def test_prima_l_audio_poi_multi_poi_sottotitoli():
         "Serie.S01E01.1080p.ITA.MULTi.Audio",
         "Serie.S01E01.1080p.ITA.ENG.Sub.ITA",
         "Serie.S01E01.1080p.SPA",
+        "Serie.S01E01.1080p.MULTi",
     ]
     ordinati = sorted(nomi, key=lambda n: valuta(n, LINGUE), reverse=True)
     assert ordinati == [
         "Serie.S01E01.1080p.ITA.MULTi.Audio",
         "Serie.S01E01.1080p.ITA.ENG.Sub.ITA",
         "Serie.S01E01.720p.ITA",
+        "Serie.S01E01.1080p.MULTi",
         "Serie.S01E01.1080p.SPA",
         "Serie.S01E01.1080p.ENG.Sub.ITA",
         "Serie.S01E01.1080p.ENG.Multi.Sub",

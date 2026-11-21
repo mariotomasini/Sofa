@@ -129,6 +129,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(90, servizi.serie.sorveglia_importazioni(servizi.jellyfin))),
             asyncio.create_task(servizi.automatici.ricerca_notturna()),
             asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
+            asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
         ]
         log.info("Cerca è pronto")
         yield

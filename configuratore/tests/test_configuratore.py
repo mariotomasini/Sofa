@@ -503,12 +503,13 @@ def test_solo_sottotitoli_non_raggiunge_il_limite():
     limite = PUNTI_LINGUA[0] + PUNTI_1080P
     assert _punti("Serie.S01E02.1080p.WEB.ENG.ITA.SUB") < limite
     assert _punti("Serie.S01E02.1080p.WEB.ITA.ENG") >= limite
+    assert _punti("Serie.S01E02.1080p.WEB.MULTi") < limite  # si cerca ancora una versione con ITA scritto
 
 
 @pytest.mark.parametrize("migliore, peggiore", [
     # la prima lingua dell'audio vince sempre, anche contro MULTI, multi-sub e sottotitoli
     ("Serie.S01E01.720p.ITA", "Serie.S01E01.1080p.MULTi.Audio.SPA.Multi.Sub.Sub.ITA"),
-    ("Serie.S01E01.720p.SPA", "Serie.S01E01.1080p.MULTi.Multi.Subs.ENG.Sub.ITA"),
+    ("Serie.S01E01.720p.SPA", "Serie.S01E01.1080p.MULTi.GER.Multi.Subs.ENG.Sub.ITA"),
     # stesso audio: prima i sottotitoli nella prima lingua, poi i multi-sub
     ("Serie.S01E01.1080p.ITA.ENG.Sub.ITA", "Serie.S01E01.1080p.ITA.ENG"),
     ("Serie.S01E01.1080p.ENG.Sub.ITA", "Serie.S01E01.1080p.ENG.Sub.SPA"),
@@ -516,9 +517,12 @@ def test_solo_sottotitoli_non_raggiunge_il_limite():
     ("Serie.S01E01.1080p.ENG.Multi.Sub", "Serie.S01E01.1080p.ENG"),
     # stessa lingua: multi audio prima del solo audio
     ("Serie.S01E01.1080p.ITA.MULTi.Audio", "Serie.S01E01.1080p.ITA"),
-    # "MULTi" senza lingue: almeno inglese, ma sotto lo spagnolo
+    # "MULTi" senza lingue può avere la prima: tra la prima e la seconda lingua
+    ("Serie.S01E01.720p.ITA", "Serie.S01E01.1080p.MULTi.Multi.Sub.Sub.ITA"),
+    ("Serie.S01E01.720p.MULTi", "Serie.S01E01.1080p.SPA.Sub.ITA"),
     ("Serie.S01E01.1080p.MULTi", "Serie.S01E01.1080p.ENG"),
-    ("Serie.S01E01.1080p.SPA", "Serie.S01E01.1080p.MULTi"),
+    # "MULTi" con le lingue scritte vale per quelle
+    ("Serie.S01E01.1080p.MULTi", "Serie.S01E01.1080p.MULTi.SPA.ENG"),
 ])
 def test_prima_l_audio_poi_i_sottotitoli(migliore, peggiore):
     assert _punti(migliore) > _punti(peggiore)
