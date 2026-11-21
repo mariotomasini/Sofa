@@ -94,7 +94,8 @@ def raggruppa(coda: list[dict], attesa: list[dict], cerca: list[dict], lingua: s
         if d.get("stato") == "importato" and adesso - (d.get("aggiornato") or 0) > PRONTI_PER:
             continue
         chiave, titolo = _chiave_cerca(d)
-        aggiungi(chiave, titolo, "serie" if d.get("serie") else "film", d.get("poster", ""), _voce_cerca(d))
+        tipo = "serie" if d.get("serie") else "musica" if d.get("categoria") == "musica" else "film"
+        aggiungi(chiave, titolo, tipo, d.get("poster", ""), _voce_cerca(d))
 
     risultato = []
     for g in gruppi.values():

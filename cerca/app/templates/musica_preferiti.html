@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block titolo %}Brani preferiti{% endblock %}
+{% block contenuto %}
+<div class="musica" id="pagina-preferiti" aria-busy="true"><p class="caricamento">Carico…</p></div>
+{% endblock %}
+{% block script %}<script>avviaPreferiti();</script>{% endblock %}

@@ -12,12 +12,10 @@
   <h1 class="saluto" id="saluto">Ciao</h1>
   <div id="scorciatoie" class="scorciatoie"></div>
   <div id="righe-musica" class="righe-musica" aria-busy="true"><p class="caricamento">Carico la tua musica…</p></div>
-  {% if not lidarr %}
 <div class="nota">
-  <strong>Vuoi scaricare la musica?</strong>
-  <p>Accendi "Musica da scaricare (Lidarr)" nelle impostazioni (/impostazioni): comparirà il pulsante "Segui" sugli artisti.</p>
+  <strong>Vuoi la canzone intera?</strong>
+  <p>Tocca l'icona di download accanto a un brano (o "Scarica l'album"): quando è pronta la trovi in "Brani preferiti".</p>
 </div>
-{% endif %}
 </div>
 {% endblock %}
 {% block script %}<script>window.LIDARR = {{ 'true' if lidarr else 'false' }}; avviaMusica();</script>{% endblock %}

@@ -783,15 +783,72 @@ function htmlCartaBrano(t, coda) {
     `<span class="nome">${esc(t.titolo)}</span><span class="dettaglio">${esc(t.artista)}</span></button>`;
 }
 
+const SCARICA = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 6.5v8.2m0 0-3.4-3.4m3.4 3.4 3.4-3.4M7.5 17.5h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SCARICATO = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="m7.5 12.3 3 3 6-6.3" fill="none" stroke="#121212" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function htmlRigaBrano(t, i, coda, conCopertina = true) {
-  return `<button type="button" class="riga-brano" data-brano="${t.id}" data-coda="${coda}">` +
+  return `<div class="riga-con-scarica"><button type="button" class="riga-brano" data-brano="${t.id}" data-coda="${coda}">` +
     `<span class="numero">${t.numero || i + 1}</span>` +
     (conCopertina ? `<img src="${esc(t.copertina)}" alt="" loading="lazy">` : "") +
     `<span class="testi"><span class="titolo">${esc(t.titolo)}</span><span class="artista">${esc(t.artista)}</span></span>` +
-    `<span class="durata">${durataBrano(t.durata)}</span></button>`;
+    `<span class="durata">${durataBrano(t.durata)}</span></button>` +
+    `<button type="button" class="scarica-musica" data-scarica="brano" data-id="${t.id}" ` +
+    `aria-label="Scarica la canzone completa: ${esc(t.titolo)}" title="Scarica la canzone completa">${SCARICA}</button></div>`;
+}
+
+// Scarica la canzone completa (o l'album): Cerca la cerca sugli indexer e la mette nella Musica di Jellyfin
+async function scaricaMusica(b) {
+  if (b.classList.contains("fatto") || b.disabled) return;
+  b.disabled = true;
+  b.classList.add("in-corso");
+  try {
+    avviso((await inviaJSON("/api/musica/scarica", { tipo: b.dataset.scarica, id: Number(b.dataset.id) })).messaggio);
+    b.classList.add("fatto");
+    if (b.dataset.scarica === "brano") b.innerHTML = SCARICATO;
+    else b.innerHTML = `${SCARICATO}<span>In download</span>`;
+  } catch (e) {
+    avviso(`${e.errore} ${e.cosa_fare || ""}`, true);
+    b.disabled = false;
+  }
+  b.classList.remove("in-corso");
+}
+
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-scarica]");
+  if (b) { ev.preventDefault(); scaricaMusica(b); }
+});
+
+// Brani preferiti: quelli scaricati, nella Musica di Jellyfin. Si ascoltano interi.
+const CUORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.4 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 5.6 3.5 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z" fill="currentColor"/></svg>';
+
+function copertinaJf(t) {
+  return t.copertina_jf ? `${BASE}/api/musica/copertina/${t.copertina_jf}` : "";
+}
+
+function htmlRigaPreferito(t, i, coda) {
+  const copertina = copertinaJf(t);
+  return `<div class="riga-con-scarica"><button type="button" class="riga-brano" data-brano="jf:${esc(t.id)}" data-coda="${coda}" ` +
+    `data-titolo="${esc(t.titolo)}" data-artista="${esc(t.artista)}" data-copertina="${esc(copertina)}">` +
+    `<span class="numero">${i + 1}</span>` +
+    (copertina ? `<img src="${esc(copertina)}" alt="" loading="lazy">` : `<span class="copertina-vuota" aria-hidden="true">♪</span>`) +
+    `<span class="testi"><span class="titolo">${esc(t.titolo)}</span><span class="artista">${esc(t.artista)}</span></span>` +
+    `<span class="durata">${durataBrano(t.durata)}</span></button>` +
+    `<span class="scarica-musica fatto" title="Scaricato" aria-label="Scaricato">${SCARICATO}</span></div>`;
+}
+
+function codaPreferiti(brani) {
+  return brani.map((t) => `jf:${t.id}`).join(",");
 }
 
 function htmlRigaMusica(r) {
+  if (r.tipo === "preferiti") {
+    const coda = codaPreferiti(r.elementi);
+    return `<section class="riga-musica"><h2><a href="${BASE}/musica/preferiti">${esc(r.titolo)}</a></h2>` +
+      `<p class="sottotitolo">${esc(r.sottotitolo)}</p><div class="elenco-brani">` +
+      r.elementi.map((t, i) => htmlRigaPreferito(t, i, coda)).join("") + `</div>` +
+      (r.quanti > r.elementi.length ? `<a class="vedi-tutti" href="${BASE}/musica/preferiti">Vedi tutti (${r.quanti})</a>` : "") +
+      `</section>`;
+  }
   const coda = r.tipo === "brani" ? r.elementi.map((t) => t.id).join(",") : "";
   const carte = r.elementi.map((x) =>
     r.tipo === "artisti" ? htmlCartaArtista(x) : r.tipo === "album" ? htmlCartaAlbum(x) : htmlCartaBrano(x, coda)).join("");
@@ -830,20 +887,36 @@ const lettore = {
     b.innerHTML = this.audio.paused ? PLAY : PAUSA;
     b.setAttribute("aria-label", this.audio.paused ? "Riproduci" : "Pausa");
     document.querySelectorAll("[data-brano]").forEach((x) => x.classList.toggle("in-ascolto",
-      !this.audio.paused && Number(x.dataset.brano) === this.coda[this.posto]));
+      !this.audio.paused && x.dataset.brano === String(this.coda[this.posto])));
+  },
+  // "jf:<id>" = brano scaricato, intero (da Jellyfin); un numero = anteprima da 30 s (Deezer)
+  async info(id) {
+    if (String(id).startsWith("jf:")) {
+      const riga = document.querySelector(`[data-brano="${CSS.escape(id)}"][data-titolo]`);
+      const d = riga ? riga.dataset : {};
+      return { titolo: d.titolo || "", artista: d.artista || "", copertina: d.copertina || "",
+        url: `${BASE}/api/musica/ascolta/${id.slice(3)}`, intero: true };
+    }
+    return chiama(`/api/musica/anteprima/${id}`);
   },
   async suona(id, coda) {
     const el = this.elemento();
     this.coda = coda && coda.length ? coda : [id];
     this.posto = Math.max(0, this.coda.indexOf(id));
     try {
-      const t = await chiama(`/api/musica/anteprima/${id}`);
+      const t = await this.info(id);
       document.getElementById("lettore-copertina").src = t.copertina || "";
       document.getElementById("lettore-titolo").textContent = t.titolo;
-      document.getElementById("lettore-artista").textContent = `${t.artista} · anteprima`;
+      document.getElementById("lettore-artista").textContent = t.intero ? t.artista : `${t.artista} · anteprima`;
       el.hidden = false;
       document.body.classList.add("con-lettore");
       this.audio.src = t.url;
+      if ("mediaSession" in navigator) {  // titolo e copertina anche sulla schermata di blocco
+        navigator.mediaSession.metadata = new MediaMetadata({ title: t.titolo, artist: t.artista,
+          artwork: t.copertina ? [{ src: t.copertina, sizes: "400x400" }] : [] });
+        navigator.mediaSession.setActionHandler("nexttrack", () => this.prossimo());
+        navigator.mediaSession.setActionHandler("previoustrack", () => this.precedente());
+      }
       await this.audio.play();
     } catch (e) {
       avviso(`${e.errore || "Non riesco a riprodurre questo brano."} ${e.cosa_fare || ""}`, true);
@@ -852,14 +925,19 @@ const lettore = {
   prossimo() {
     if (this.posto + 1 < this.coda.length) this.suona(this.coda[this.posto + 1], this.coda);
   },
+  precedente() {
+    if (this.audio.currentTime > 3 || this.posto === 0) this.audio.currentTime = 0;
+    else this.suona(this.coda[this.posto - 1], this.coda);
+  },
 };
 
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-brano]");
   if (!b) return;
   ev.preventDefault();
-  const coda = (b.dataset.coda || "").split(",").filter(Boolean).map(Number);
-  lettore.suona(Number(b.dataset.brano), coda);
+  const id = (x) => (/^\d+$/.test(x) ? Number(x) : x);
+  const coda = (b.dataset.coda || "").split(",").filter(Boolean).map(id);
+  lettore.suona(id(b.dataset.brano), coda);
 });
 
 async function seguiArtista(b) {
@@ -876,7 +954,9 @@ function avviaMusica() {
   const scorciatoie = document.getElementById("scorciatoie");
   const righe = document.getElementById("righe-musica");
   conMemoria("musica:home", "/api/musica/home", (d) => {
-    scorciatoie.innerHTML = d.scorciatoie.map((a) =>
+    const preferiti = d.preferiti
+      ? `<a class="scorciatoia scorciatoia-preferiti" href="${BASE}/musica/preferiti"><span class="cuore">${CUORE}</span><span>Brani preferiti</span></a>` : "";
+    scorciatoie.innerHTML = preferiti + d.scorciatoie.slice(0, preferiti ? 7 : 8).map((a) =>
       `<a class="scorciatoia" href="${BASE}/musica/artista/${a.id}">` +
       `${a.foto ? `<img src="${esc(a.foto)}" alt="">` : "<span></span>"}<span>${esc(a.nome)}</span></a>`).join("");
     righe.innerHTML = d.righe.map(htmlRigaMusica).join("") +
@@ -923,11 +1003,31 @@ async function avviaAlbum(id) {
       `<p class="dettaglio"><a href="${BASE}/musica/artista/${a.artista_id}">${esc(a.artista)}</a> • ${esc(sotto)}</p></div></header>` +
       `<div class="azioni-musica">` +
       (a.brani.length ? `<button type="button" class="play-grande" data-brano="${a.brani[0].id}" data-coda="${coda}" aria-label="Ascolta l'album">${PLAY}</button>` : "") +
+      `<button type="button" class="scarica-musica scarica-album" data-scarica="album" data-id="${a.id}">${SCARICA}<span>${a.tipo === "album" ? "Scarica l'album" : "Scarica"}</span></button>` +
       (window.LIDARR ? `<button type="button" class="segui" data-nome="${esc(a.artista)}">Segui l'artista</button>` : "") + `</div>` +
       `<div class="elenco-brani">${a.brani.map((t, i) => htmlRigaBrano(t, i, coda, false)).join("")}</div>` +
       (a.etichetta ? `<p class="sottotitolo piccolo">${esc(a.etichetta)}</p>` : "");
     const b = pagina.querySelector("button.segui");
     if (b) b.addEventListener("click", () => seguiArtista(b));
+  } catch (e) { pagina.innerHTML = htmlErrore(e); }
+  pagina.removeAttribute("aria-busy");
+}
+
+async function avviaPreferiti() {
+  const pagina = document.getElementById("pagina-preferiti");
+  try {
+    const { brani } = await chiama("/api/musica/preferiti");
+    const coda = codaPreferiti(brani);
+    const minuti = Math.round(brani.reduce((n, t) => n + (t.durata || 0), 0) / 60);
+    const sotto = [`${brani.length} ${brani.length === 1 ? "brano" : "brani"}`, minuti ? `${minuti} min` : ""].filter(Boolean).join(" • ");
+    pagina.innerHTML =
+      `<header class="testa-musica testa-album testa-preferiti"><span class="copertina-preferiti">${CUORE}</span>` +
+      `<div class="testa-testo"><p class="etichetta-musica">Playlist</p><h1>Brani preferiti</h1><p class="dettaglio">${esc(sotto)}</p></div></header>` +
+      (brani.length
+        ? `<div class="azioni-musica"><button type="button" class="play-grande" data-brano="jf:${esc(brani[0].id)}" data-coda="${coda}" ` +
+          `aria-label="Ascolta i brani preferiti">${PLAY}</button></div>` +
+          `<div class="elenco-brani">${brani.map((t, i) => htmlRigaPreferito(t, i, coda)).join("")}</div>`
+        : `<div class="nota"><p>Ancora nessun brano. Cerca una canzone e tocca l'icona di download: quando è scaricata compare qui e la ascolti intera.</p></div>`);
   } catch (e) { pagina.innerHTML = htmlErrore(e); }
   pagina.removeAttribute("aria-busy");
 }

@@ -47,6 +47,7 @@ class Config:
     indirizzo_pubblico: str = field(default_factory=lambda: _env("INDIRIZZO_PUBBLICO", "http://mediabox.local"))
     cartella_dati: Path = field(default_factory=lambda: Path(_env("CARTELLA_DATI", "/dati")))
     cartella_download: Path = field(default_factory=lambda: Path(_env("CARTELLA_DOWNLOAD", "/data/downloads")))
+    cartella_musica: str = field(default_factory=lambda: _env("CARTELLA_MUSICA", "/data/media/musica"))
     cartella_film_radarr: str = field(default_factory=lambda: _env("CARTELLA_FILM_RADARR", "/data/media/film"))
     root_path: str = field(default_factory=lambda: _env("ROOT_PATH", "/cerca"))
 
