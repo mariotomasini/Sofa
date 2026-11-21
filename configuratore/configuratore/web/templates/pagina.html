@@ -85,6 +85,28 @@
           <input id="lingue" name="lingue" type="text" value="{{ s.lingue or 'it,en' }}" autocomplete="off" spellcheck="false">
           <p class="aiuto">Codici di due lettere: it italiano, en inglese, ja giapponese, es spagnolo, fr francese.</p>
         </div>
+        <h2>Download</h2>
+        <div class="lingue">
+          <label class="campo" for="lingue-audio">Lingue dell'audio, in ordine di preferenza</label>
+          <input id="lingue-audio" type="text" value="{{ s.lingue_audio or 'it,es,en' }}" autocomplete="off" spellcheck="false">
+          <p class="aiuto">it italiano, es spagnolo, en inglese, fr francese, de tedesco, pt portoghese. Se non c'è la prima, scarico la successiva e la sostituisco appena esce.</p>
+          <label class="campo" for="dimensione-max">Peso massimo di un film (GB, per un film 1080p di 2 ore)</label>
+          <input id="dimensione-max" type="text" inputmode="decimal" value="{{ s.dimensione_max_gb or '10' }}" autocomplete="off">
+          <p class="aiuto">Le serie in proporzione alla durata delle puntate. Di solito scelgo file intorno alla metà.</p>
+        </div>
+        <div class="lingue" id="blocco-telegram">
+          <h2>Telegram</h2>
+          <p class="aiuto">Con "Telegram come fonte" acceso, mediabox cerca anche nei canali e nei gruppi a cui è iscritto il tuo account Telegram, privati compresi: per aggiungere un gruppo privato basta iscriverti con quell'account.</p>
+          <a class="bottone contorno solo-impostazioni" href="{{ s.telegram.indirizzo if s.telegram else '#' }}" target="_blank" rel="noopener">Collega il tuo account Telegram ↗</a>
+          <p class="aiuto solo-impostazioni">Si apre tgarr: entra con la password di amministrazione e accedi a Telegram con il QR o con il numero e il codice.</p>
+          <label class="campo" for="tg-api-id">API ID (facoltativo)</label>
+          <input id="tg-api-id" type="text" inputmode="numeric" value="{{ s.telegram.api_id if s.telegram else '' }}" autocomplete="off">
+          <label class="campo" for="tg-api-hash">API hash (facoltativo)</label>
+          <input id="tg-api-hash" type="password" autocomplete="off" spellcheck="false" placeholder="{{ 'Lascia vuoto per tenere quello attuale' if s.telegram and s.telegram.hash_impostato else '32 caratteri' }}">
+          <p class="aiuto">Li trovi su <a href="https://my.telegram.org/apps" target="_blank" rel="noopener">my.telegram.org ↗</a> → API development tools. Se li lasci vuoti, tgarr te li chiede la prima volta.</p>
+          <label class="campo" for="tg-telefono">Numero di telefono dell'account (facoltativo)</label>
+          <input id="tg-telefono" type="tel" value="{{ s.telegram.telefono if s.telegram else '' }}" placeholder="+393331234567" autocomplete="off">
+        </div>
         <h2>Manutenzione</h2>
         <div class="schede-scelta">
           {% for v in s.voci or [] if v.gruppo == "pc" %}

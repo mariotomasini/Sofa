@@ -14,7 +14,23 @@ CARTELLE = [{"id": 1, "path": "/data/media/serie"}, {"id": 2, "path": "/data/med
 PROFILI = [{"id": 1, "name": "Any"}, {"id": 4, "name": "HD-1080p"}, {"id": 6, "name": "HD - 720p/1080p"}]
 
 
-def sonarr(serie_per_termine, aggiunte, gia_seguite=()):
+EPISODI = [
+    {"id": 1, "seasonNumber": 1, "episodeNumber": 1, "title": "Segreti", "airDateUtc": "2017-12-01T00:00:00Z",
+     "hasFile": True, "monitored": True},
+    {"id": 2, "seasonNumber": 1, "episodeNumber": 2, "title": "Bugie", "airDateUtc": "2017-12-01T00:00:00Z",
+     "hasFile": False, "monitored": True},
+    {"id": 3, "seasonNumber": 1, "episodeNumber": 3, "title": "Passato", "airDateUtc": "2017-12-01T00:00:00Z",
+     "hasFile": False, "monitored": False},
+    {"id": 4, "seasonNumber": 2, "episodeNumber": 1, "title": "", "airDateUtc": "2099-01-01T00:00:00Z",
+     "hasFile": False, "monitored": False},
+    {"id": 5, "seasonNumber": 0, "episodeNumber": 1, "title": "Speciale", "airDateUtc": "", "hasFile": False,
+     "monitored": False},
+]
+
+
+def sonarr(serie_per_termine, aggiunte, gia_seguite=(), comandi=None):
+    comandi = comandi if comandi is not None else []
+
     def gestore(r: httpx.Request) -> httpx.Response:
         assert r.headers["X-Api-Key"] == "chiave"
         percorso = r.url.path.removeprefix("/sonarr/api/v3/")
@@ -29,6 +45,17 @@ def sonarr(serie_per_termine, aggiunte, gia_seguite=()):
         if percorso == "series" and r.method == "POST":
             aggiunte.append(json.loads(r.content))
             return httpx.Response(201, json={"id": 99})
+        if percorso == "series/7":
+            if r.method == "PUT":
+                comandi.append(("serie", json.loads(r.content)))
+            return httpx.Response(200, json={"id": 7, "seasons": [{"seasonNumber": 0}, {"seasonNumber": 1}]})
+        if percorso == "episode":
+            return httpx.Response(200, json=EPISODI)
+        if percorso == "queue/details":
+            return httpx.Response(200, json=[{"id": 50, "episodeId": 2, "size": 100, "sizeleft": 25}])
+        if percorso in ("episode/monitor", "command") or percorso.startswith("queue/"):
+            comandi.append((percorso, json.loads(r.content) if r.content else dict(r.url.params)))
+            return httpx.Response(200, json={})
         return httpx.Response(404)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(gestore))
@@ -67,9 +94,12 @@ def test_anime_nella_cartella_degli_anime_e_titolo_come_ultima_risorsa():
 
 
 def test_gia_seguita_e_errori():
-    aggiunte = []
-    s = sonarr({"tvdb:334824": [DARK]}, aggiunte, gia_seguite={334824})
+    aggiunte, comandi = [], []
+    s = sonarr({"tvdb:334824": [DARK]}, aggiunte, gia_seguite={334824}, comandi=comandi)
     assert not asyncio.run(s.segui(tvdb=334824))["nuova"] and aggiunte == []
+    # già presente: "Scarica tutte" la fa seguire tutta e cerca, senza gli speciali
+    assert ("command", {"name": "SeriesSearch", "seriesId": 7}) in comandi
+    assert ("episode/monitor", {"episodeIds": [1, 2, 3, 4], "monitored": True}) in comandi
     with pytest.raises(ErroreServizio, match="non trova"):
         asyncio.run(sonarr({}, []).segui(titolo="Inesistente"))
     spenta = Serie(Config(sonarr_url="", sonarr_chiave=""), httpx.AsyncClient())
@@ -247,3 +277,26 @@ def test_jellyfin_si_aggiorna_quando_sonarr_importa_da_solo():
     except StopIteration:
         pass
     assert JellyfinFinto.volte == 1  # non all'avvio, una volta quando arriva una puntata nuova
+
+
+def test_prepara_aggiunge_senza_scaricare():
+    aggiunte = []
+    asyncio.run(sonarr({"tvdb:334824": [DARK]}, aggiunte).prepara(tvdb=334824))
+    assert aggiunte[0]["addOptions"]["monitor"] == "none" and not aggiunte[0]["addOptions"]["searchForMissingEpisodes"]
+
+
+def test_puntate_con_lo_stato():
+    stagioni = asyncio.run(sonarr({}, []).puntate(7))
+    assert [st["numero"] for st in stagioni] == [1, 2]  # gli speciali no
+    stati = {p["id"]: (p["stato"], p["percentuale"]) for st in stagioni for p in st["puntate"]}
+    assert stati == {1: ("pronta", 0), 2: ("download", 75.0), 3: ("libera", 0), 4: ("non_uscita", 0)}
+
+
+def test_scarica_e_annulla_puntate():
+    comandi = []
+    s = sonarr({}, [], comandi=comandi)
+    asyncio.run(s.scarica_puntate([3]))
+    assert ("command", {"name": "EpisodeSearch", "episodeIds": [3]}) in comandi
+    asyncio.run(s.annulla_puntate([2]))
+    assert ("episode/monitor", {"episodeIds": [2], "monitored": False}) in comandi
+    assert any(c[0] == "queue/50" for c in comandi)

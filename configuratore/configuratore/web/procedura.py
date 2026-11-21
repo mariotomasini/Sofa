@@ -63,6 +63,41 @@ TITOLI_RIEPILOGO = {"Indirizzi di mediabox", "Cosa è attivo", "Cosa non è anda
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
+LINGUE_AUDIO = ("it", "es", "en", "fr", "de", "pt")
+
+
+def lingue_audio_valide(testo: str) -> str | None:
+    codici = [c.strip().lower() for c in testo.replace(" ", ",").split(",") if c.strip()]
+    if not codici or not all(c in LINGUE_AUDIO for c in codici):
+        return None
+    return ",".join(dict.fromkeys(codici))
+
+
+def dimensione_valida(testo: str) -> str | None:
+    try:
+        gb = float(testo.strip().replace(",", "."))
+    except ValueError:
+        return None
+    return f"{gb:g}" if 1 <= gb <= 100 else None
+
+
+def telegram_valido(dati: dict) -> dict[str, str]:
+    """Credenziali Telegram (tutte facoltative). L'hash vuoto vuol dire "tieni quello di prima"."""
+    api_id = str(dati.get("api_id") or "").strip()
+    api_hash = str(dati.get("api_hash") or "").strip()
+    telefono = re.sub(r"[\s.-]", "", str(dati.get("telefono") or ""))
+    if api_id and not api_id.isdigit():
+        raise DatiNonValidi("telegram", "L'API ID di Telegram è fatto solo di numeri (lo trovi su my.telegram.org).")
+    if api_hash and not re.fullmatch(r"[0-9a-fA-F]{32}", api_hash):
+        raise DatiNonValidi("telegram", "L'API hash di Telegram è un codice di 32 caratteri (lettere a-f e numeri).")
+    if telefono and not re.fullmatch(r"\+\d{8,15}", telefono):
+        raise DatiNonValidi("telegram", "Scrivi il numero con il prefisso, es. +393331234567.")
+    scelte = {"TG_API_ID": api_id, "TG_PHONE": telefono}
+    if api_hash:
+        scelte["TG_API_HASH"] = api_hash.lower()
+    return scelte
+
+
 class DatiNonValidi(ValueError):
     """Un campo non va bene: il messaggio si mostra così com'è."""
 
@@ -127,6 +162,14 @@ def scelte_attuali(v: dict[str, str]) -> dict:
         "ntfy": v.get("NTFY_TOPIC", ""),
         "cartella": v.get("MEDIA_DIR", ""),
         "tmdb_impostata": bool(v.get("TMDB_API_KEY")),
+        "lingue_audio": v.get("LINGUE_AUDIO", "it,es,en"),
+        "dimensione_max_gb": v.get("DIMENSIONE_MAX_GB", "10"),
+        "telegram": {
+            "api_id": v.get("TG_API_ID", ""),
+            "hash_impostato": bool(v.get("TG_API_HASH")),
+            "telefono": v.get("TG_PHONE", ""),
+            "indirizzo": f"http://{v.get('NOME_HOST') or 'mediabox.local'}:{v.get('TGARR_PORT') or '8765'}",
+        },
         "windows": windows(v),
         "memoria_gb": memoria_gb(v),
         "poca_memoria": poca_memoria(v),
@@ -193,6 +236,18 @@ def modifiche_da_scelte(v: dict[str, str], dati: dict) -> dict[str, str]:
         scelte["LINGUE_SOTTOTITOLI"] = lingue
     if "ntfy" in dati:
         scelte["NTFY_TOPIC"] = pulisci_ntfy(str(dati["ntfy"]))
+    if "lingue_audio" in dati:
+        audio = lingue_audio_valide(str(dati["lingue_audio"]))
+        if not audio:
+            raise DatiNonValidi("lingue_audio", "Scrivi le lingue dell'audio (it, es, en, fr, de, pt) separate da virgole.")
+        scelte["LINGUE_AUDIO"] = audio
+    if "dimensione_max_gb" in dati:
+        gb = dimensione_valida(str(dati["dimensione_max_gb"]))
+        if gb is None:
+            raise DatiNonValidi("dimensione_max_gb", "Scrivi un numero di GB tra 1 e 100 (es. 10).")
+        scelte["DIMENSIONE_MAX_GB"] = gb
+    if isinstance(dati.get("telegram"), dict):
+        scelte.update(telegram_valido(dati["telegram"]))
     if "cartella" in dati:
         cartella = percorso_valido(str(dati["cartella"]), windows(v))
         if not cartella:

@@ -42,6 +42,30 @@ def lingua_da(formati: list[dict] | None, lingue: list[dict] | None = None,
     return min(trovate, key=lambda n: posto.get(n, len(posto)))
 
 
+def titolo_film(film: dict, riserva: str = "") -> str:
+    return f"{film.get('title') or riserva} ({film.get('year') or ''})".replace(" ()", "")
+
+
+def stato_coda(r: dict) -> tuple[str, str]:
+    """Lo stato di un download di Radarr/Sonarr detto in parole semplici."""
+    if r.get("trackedDownloadStatus") in ("warning", "error") or r.get("status") in ("warning", "failed"):
+        messaggi = [m for s in r.get("statusMessages") or [] for m in s.get("messages") or []]
+        return "problema", "Problema: " + (messaggi[0] if messaggi else r.get("errorMessage") or "controlla qBittorrent")
+    fase = r.get("trackedDownloadState") or ""
+    if fase in ("importPending", "importing"):
+        return "importazione", "Scaricato: lo sto mettendo in Jellyfin"
+    if fase == "importBlocked":
+        return "problema", "Scaricato, ma non riesco a metterlo in Jellyfin da solo"
+    stato = r.get("status") or ""
+    if stato == "delay":
+        return "coda", "Trovato: parte tra poco"
+    if stato in ("queued", "paused"):
+        return "coda", "In coda: parte appena finiscono gli altri"
+    if stato == "completed":
+        return "importazione", "Scaricato: lo sto mettendo in Jellyfin"
+    return "download", "In download"
+
+
 def percentuale(totale: float, mancante: float) -> float:
     return round(100 * (1 - mancante / totale), 1) if totale else 0.0
 
@@ -71,31 +95,98 @@ class Automatici:
             "preferita": lingua == self.preferita, "lingua_preferita": self.preferita, **altro,
         }
 
+    def _da_coda(self, r: dict, titolo: str, tipo: str, ids: list[int]) -> dict:
+        stato, testo = stato_coda(r)
+        return self._voce(titolo, r.get("title", ""), self._lingua(r), tipo=tipo, ids=ids, stato=stato,
+                          stato_testo=testo, percentuale=percentuale(r.get("size", 0), r.get("sizeleft", 0)),
+                          dimensione=r.get("size", 0), annullabile=True, ricercabile=False)
+
     async def coda(self) -> list[dict]:
+        """Tutto quello che Radarr e Sonarr stanno scaricando o cercando, con lo stato in parole semplici."""
         voci: list[dict] = []
+        in_coda_film: set[int] = set()
+        in_coda_puntate: set[int] = set()
         try:
-            dati = await self.radarr._r("GET", "queue", params={"pageSize": 50, "includeMovie": "true"})
+            dati = await self.radarr._r("GET", "queue", params={"pageSize": 100, "includeMovie": "true"})
             for r in (dati or {}).get("records", []):
                 film = r.get("movie") or {}
-                titolo = f"{film.get('title', r.get('title', ''))} ({film.get('year', '')})".replace(" ()", "")
-                voci.append(self._voce(titolo, r.get("title", ""), self._lingua(r),
-                                       tipo="film", percentuale=percentuale(r.get("size", 0), r.get("sizeleft", 0)),
-                                       stato=r.get("trackedDownloadState") or r.get("status", "")))
+                in_coda_film.add(r.get("movieId"))
+                voci.append(self._da_coda(r, titolo_film(film, r.get("title", "")), "film", [r.get("movieId")]))
+            mancanti = await self.radarr._r("GET", "wanted/missing", params={"pageSize": 100, "monitored": "true"})
+            for m in (mancanti or {}).get("records", []):
+                if m.get("id") in in_coda_film:
+                    continue
+                uscito = m.get("isAvailable", True)
+                voci.append(self._voce(
+                    titolo_film(m), "", "", tipo="film", ids=[m["id"]], stato="cerco" if uscito else "non_uscito",
+                    stato_testo=("Cerco una fonte: riprovo da solo appena esce una versione e ogni notte" if uscito
+                                 else "Non è ancora uscito: lo scarico appena è disponibile"),
+                    percentuale=0, dimensione=0, annullabile=True, ricercabile=uscito, senza_lingua=True))
         except Exception:  # noqa: BLE001 - se Radarr non risponde la pagina mostra il resto
             log.warning("Coda di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
             try:
                 dati = await self.serie._api("GET", "queue", params={
-                    "pageSize": 50, "includeSeries": "true", "includeEpisode": "true"})
+                    "pageSize": 100, "includeSeries": "true", "includeEpisode": "true"})
                 for r in (dati or {}).get("records", []):
+                    in_coda_puntate.add(r.get("episodeId"))
                     titolo = f"{(r.get('series') or {}).get('title', '')} · {episodio(r.get('episode'))}"
-                    voci.append(self._voce(titolo, r.get("title", ""),
-                                           self._lingua(r),
-                                           tipo="serie", percentuale=percentuale(r.get("size", 0), r.get("sizeleft", 0)),
-                                           stato=r.get("trackedDownloadState") or r.get("status", "")))
+                    voci.append(self._da_coda(r, titolo, "serie", [r.get("episodeId")]))
+                mancanti = await self.serie._api("GET", "wanted/missing", params={
+                    "pageSize": 200, "monitored": "true", "includeSeries": "true"})
+                per_serie: dict[str, list[int]] = {}
+                for e in (mancanti or {}).get("records", []):
+                    if e.get("id") not in in_coda_puntate:
+                        per_serie.setdefault((e.get("series") or {}).get("title", "Serie"), []).append(e["id"])
+                for nome, ids in per_serie.items():
+                    quante = "1 puntata" if len(ids) == 1 else f"{len(ids)} puntate"
+                    voci.append(self._voce(
+                        f"{nome} · {quante} da trovare", "", "", tipo="serie", ids=ids, stato="cerco",
+                        stato_testo="Cerco una fonte: riprovo da solo appena escono e ogni notte",
+                        percentuale=0, dimensione=0, annullabile=True, ricercabile=True, senza_lingua=True))
             except Exception:  # noqa: BLE001
                 log.warning("Coda di Sonarr non disponibile", exc_info=True)
         return voci
+
+    async def annulla(self, tipo: str, ids: list[int]) -> str:
+        if tipo == "serie":
+            await self.serie.annulla_puntate(ids)
+            messaggio = "Annullato: quelle puntate non vengono più cercate né scaricate."
+        else:
+            messaggio = ""
+            for i in ids:
+                messaggio = await self.radarr.annulla(i)
+        self._attesa = None
+        return messaggio
+
+    async def cerca_di_nuovo(self, tipo: str, ids: list[int]) -> str:
+        if tipo == "serie":
+            await self.serie.scarica_puntate(ids)
+        else:
+            for i in ids:
+                await self.radarr.cerca_di_nuovo(i)
+        return "Ricerca avviata: se trovo una versione parte da sola."
+
+    async def stato_film(self, tmdb_id: int) -> dict:
+        """Lo stato del film per la sua scheda: niente, cerco, in download, pronto."""
+        film = await self.radarr.film(tmdb_id)
+        if not film or not film.get("id"):
+            return {"stato": "nessuno"}
+        coda = await self.radarr._r("GET", "queue/details", params={"movieId": film["id"]}) or []
+        if coda:
+            voce = self._da_coda(coda[0], titolo_film(film), "film", [film["id"]])
+            return {**voce, "id": film["id"]}
+        if film.get("hasFile"):
+            lingua = self._lingua(film.get("movieFile") or {})
+            return {**self._voce(titolo_film(film), "", lingua, stato="pronto",
+                                 stato_testo="Pronto in Jellyfin"), "id": film["id"],
+                    "migliorabile": bool(film.get("monitored")) and lingua != self.preferita}
+        if film.get("monitored"):
+            uscito = film.get("isAvailable", True)
+            return {"stato": "cerco" if uscito else "non_uscito", "id": film["id"],
+                    "stato_testo": ("Cerco una fonte: riprovo da solo appena esce una versione e ogni notte" if uscito
+                                    else "Non è ancora uscito: lo scarico appena è disponibile")}
+        return {"stato": "nessuno", "id": film["id"]}
 
     async def in_attesa(self) -> list[dict]:
         """Già scaricati ma non nella lingua preferita (Radarr/Sonarr li sostituiscono da soli)."""

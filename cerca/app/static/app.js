@@ -81,16 +81,37 @@ function avviaFilm(tmdbId) {
       .catch((e) => { provider.innerHTML = htmlErrore(e); });
   }
 
-  // Un solo tasto: Radarr sceglie la versione migliore (prima ITA) e fa tutto da solo
+  // Un solo tasto: Radarr sceglie la versione migliore (prima ITA) e fa tutto da solo.
+  // Dopo il clic il tasto lascia il posto allo stato: in coda, in download, cerco, pronto.
   const auto = document.getElementById("scarica-auto");
-  if (auto) auto.addEventListener("click", async () => {
-    auto.disabled = true;
+  const statoBox = document.getElementById("stato-film");
+  async function aggiornaStato() {
+    if (!statoBox) return;
     try {
-      const r = await inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId });
-      avviso(r.messaggio);
-      auto.textContent = "✓ In download";
-    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); auto.disabled = false; }
-  });
+      const d = await chiama(`/api/film/${tmdbId}/stato`);
+      statoBox.innerHTML = htmlStatoFilm(d);
+      auto.hidden = d.stato !== "nessuno";
+      auto.disabled = false;
+      auto.textContent = "⬇ Download";
+    } catch (e) { /* Radarr spento: resta il tasto */ }
+  }
+  if (auto) {
+    aggiornaStato();
+    setInterval(aggiornaStato, 5000);
+    auto.addEventListener("click", async () => {
+      auto.disabled = true;
+      auto.textContent = "Avvio…";
+      try {
+        const r = await inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId });
+        avviso(r.messaggio);
+        aggiornaStato();
+      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); auto.disabled = false; auto.textContent = "⬇ Download"; }
+    });
+    statoBox.addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-tipo]");
+      if (b) azioneAutomatico(b, aggiornaStato);
+    });
+  }
 
   const avvisami = document.getElementById("avvisami");
   if (avvisami) avvisami.addEventListener("click", async () => {
@@ -233,17 +254,48 @@ function htmlDownload(d, compatto = false) {
 
 // Download di Radarr/Sonarr: la lingua sempre in vista, in giallo se non è quella preferita
 function etichettaLingua(x) {
+  if (x.senza_lingua || !x.lingua) return "";
   if (x.preferita) return `<span class="lingua">${esc(x.lingua)}</span>`;
   return `<span class="lingua altra">⚠ ${esc(x.lingua)} · non in ${esc(x.lingua_preferita.toLowerCase())}</span>`;
 }
 
+const ICONE_STATO = { download: "⬇", coda: "⏳", importazione: "📥", problema: "⚠", cerco: "🔎", non_uscito: "📅", pronto: "✓" };
+
+function htmlStatoAutomatico(x) {
+  const icona = ICONE_STATO[x.stato] || "";
+  let html = `<span class="riga-stato stato-auto-${esc(x.stato || "")}"><span class="stato">${icona} ${esc(x.stato_testo || "")}</span></span>`;
+  if (x.stato === "download") {
+    html += `<div class="barra"><span style="width:${x.percentuale}%"></span></div>` +
+      `<span class="sottotitolo">${Math.round(x.percentuale)}%${x.dimensione ? " di " + dimensione(x.dimensione) : ""}</span>`;
+  }
+  return html;
+}
+
 function htmlAutomatico(x, inCorso) {
-  const avanzamento = inCorso ? `${Math.round(x.percentuale)}%${x.stato ? " · " + esc(x.stato) : ""}` : "";
-  const nota = !x.preferita
+  const nota = !inCorso && !x.preferita
     ? `<span class="sottotitolo">Lo sostituisco da solo appena esce in ${esc(x.lingua_preferita.toLowerCase())}.</span>` : "";
-  return `<article class="download${x.preferita ? "" : " non-preferita"}"><div class="descrizione">` +
+  const dati = `data-tipo="${esc(x.tipo)}" data-ids="${esc((x.ids || []).join(","))}"`;
+  const azioni = inCorso
+    ? (x.ricercabile ? `<button class="secondario" data-riprova ${dati}>Cerca di nuovo</button>` : "") +
+      (x.annullabile ? `<button class="secondario" data-annulla-auto ${dati}>Annulla</button>` : "")
+    : "";
+  const altra = !x.senza_lingua && x.lingua && !x.preferita;
+  return `<article class="download${altra ? " non-preferita" : ""}"><div class="descrizione">` +
     `<strong>${etichettaLingua(x)} ${esc(x.titolo)}</strong>` +
-    `<span class="sottotitolo">${esc(x.dettaglio)}${avanzamento ? " · " + avanzamento : ""}</span>${nota}</div></article>`;
+    (inCorso ? htmlStatoAutomatico(x) : "") +
+    (x.dettaglio ? `<span class="sottotitolo">${esc(x.dettaglio)}</span>` : "") + nota +
+    `</div>${azioni ? `<div class="azioni">${azioni}</div>` : ""}</article>`;
+}
+
+async function azioneAutomatico(b, dopo) {
+  const corpo = { tipo: b.dataset.tipo, ids: b.dataset.ids.split(",").filter(Boolean).map(Number) };
+  if (b.dataset.annullaAuto !== undefined && !confirm("Annullo? Smetto di cercarlo e fermo il download (quello che è già in Jellyfin resta).")) return;
+  b.disabled = true;
+  try {
+    const percorso = b.dataset.annullaAuto !== undefined ? "/api/automatici/annulla" : "/api/automatici/riprova";
+    avviso((await inviaJSON(percorso, corpo)).messaggio);
+    if (dopo) dopo();
+  } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
 }
 
 function avviaAutomatici() {
@@ -253,21 +305,38 @@ function avviaAutomatici() {
   async function aggiorna() {
     try {
       const d = await chiama("/api/automatici");
-      document.getElementById("sezione-automatici").hidden = !d.coda.length;
-      coda.innerHTML = d.coda.map((x) => htmlAutomatico(x, true)).join("");
+      coda.innerHTML = d.coda.length ? d.coda.map((x) => htmlAutomatico(x, true)).join("")
+        : '<p class="vuoto">Niente in corso. Cerca un film o una serie e premi Download.</p>';
       document.getElementById("sezione-attesa").hidden = !d.attesa.length;
       document.getElementById("titolo-attesa").textContent =
         `In attesa della versione in ${d.lingua_preferita.toLowerCase()} (${d.attesa.length})`;
       attesa.innerHTML = d.attesa.map((x) => htmlAutomatico(x, false)).join("");
-    } catch (e) { /* Radarr spento: restano i download di Cerca */ }
+    } catch (e) { coda.innerHTML = htmlErrore(e); }
   }
   aggiorna();
-  setInterval(aggiorna, 10000);
+  setInterval(aggiorna, 5000);
+  coda.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tipo]");
+    if (b) azioneAutomatico(b, aggiorna);
+  });
   document.getElementById("cerca-ora").addEventListener("click", async (ev) => {
     ev.target.disabled = true;
     try { avviso((await chiama("/api/automatici/cerca", { method: "POST" })).messaggio); }
     catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); ev.target.disabled = false; }
   });
+}
+
+// Scheda film: il tasto Download diventa lo stato del film (in coda, in download, cerco, pronto)
+function htmlStatoFilm(d) {
+  if (!d || d.stato === "nessuno") return "";
+  const dati = `data-tipo="film" data-ids="${d.id}"`;
+  let azioni = "";
+  if (["cerco"].includes(d.stato)) azioni += `<button class="secondario" data-riprova ${dati}>Cerca di nuovo</button>`;
+  if (d.stato !== "pronto" || d.migliorabile) azioni += `<button class="secondario" data-annulla-auto ${dati}>Annulla</button>`;
+  const nota = d.stato === "pronto" && d.migliorabile
+    ? `<span class="sottotitolo">Cerco ancora la versione in ${esc(d.lingua_preferita.toLowerCase())}: la sostituisco da sola.</span>` : "";
+  return `<div class="stato-film">${etichettaLingua(d)}${htmlStatoAutomatico(d)}${nota}` +
+    `${azioni ? `<div class="azioni-riga">${azioni}</div>` : ""}</div>`;
 }
 
 function avviaDownload({ soloAttivi }) {
@@ -750,6 +819,32 @@ function attrSerie(f) {
   return ` data-serie="${esc(JSON.stringify(dati))}"`;
 }
 
+const STATI_PUNTATA = {
+  pronta: "✓ In Jellyfin", download: "⬇ In download", cerco: "🔎 Cerco una fonte",
+  in_arrivo: "📅 La scarico appena esce", libera: "", non_uscita: "Non ancora uscita",
+};
+
+function htmlPuntate(stagioni) {
+  if (!stagioni.length) return '<p class="sottotitolo">Sonarr non ha ancora l\'elenco delle puntate: riprova tra poco.</p>';
+  return stagioni.map((st) => {
+    const pronte = st.puntate.filter((p) => p.stato === "pronta").length;
+    const seguite = st.puntate.some((p) => p.seguita && p.stato !== "pronta");
+    const righe = st.puntate.map((p) => {
+      let bottone = "";
+      if (p.stato === "libera") bottone = `<button data-puntata="${p.id}">⬇</button>`;
+      else if (["download", "cerco", "in_arrivo"].includes(p.stato)) bottone = `<button class="secondario" data-annulla-puntata="${p.id}">Annulla</button>`;
+      const stato = p.stato === "download" ? `⬇ In download ${Math.round(p.percentuale)}%` : STATI_PUNTATA[p.stato];
+      return `<div class="puntata"><div class="descrizione"><span><strong>${p.numero}.</strong> ${esc(p.titolo || "Puntata " + p.numero)}</span>` +
+        `<span class="stato-puntata">${esc(stato || "")}${p.data ? (stato ? " · " : "") + esc(p.data) : ""}</span></div>${bottone}</div>`;
+    }).join("");
+    const azione = seguite
+      ? `<button class="secondario" data-annulla-stagione="${st.numero}">Annulla stagione</button>`
+      : (pronte < st.puntate.length ? `<button data-stagione="${st.numero}">⬇ Stagione</button>` : "");
+    return `<details class="stagione"${stagioni.length === 1 ? " open" : ""}><summary><span>Stagione ${st.numero} ` +
+      `<span class="sottotitolo">${pronte}/${st.puntate.length} in Jellyfin</span></span>${azione}</summary>${righe}</details>`;
+  }).join("");
+}
+
 function dialogoSerie() {
   let d = document.getElementById("dialogo-serie");
   if (d) return d;
@@ -758,41 +853,70 @@ function dialogoSerie() {
   <div class="modulo">
     <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
     <p id="serie-trama" class="serie-trama"></p>
-    <button type="button" id="serie-segui" class="scarica-grande">⬇ Download</button>
-    <p class="sottotitolo">Scarica tutte le puntate già uscite e, da ora in poi, quelle nuove appena escono:
-      sceglie da solo la versione migliore (prima in italiano) e le mette in Jellyfin con i sottotitoli.</p>
+    <button type="button" id="serie-tutte" class="scarica-grande">⬇ Scarica tutte</button>
+    <p class="sottotitolo">Tutte le puntate già uscite e quelle nuove appena escono. Oppure scegli qui sotto
+      una stagione o una puntata. Prima la versione in italiano.</p>
     <p id="serie-esito" class="messaggio-serie" role="status"></p>
+    <div id="serie-puntate" class="serie-puntate"></div>
     <div class="azioni-riga">
+      <button type="button" class="secondario" id="serie-annulla-tutte" hidden>Annulla tutte</button>
       <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
     </div>
   </div>
 </dialog>`);
   d = document.getElementById("dialogo-serie");
+  const box = document.getElementById("serie-puntate");
+  const esito = document.getElementById("serie-esito");
+  d.addEventListener("close", () => clearInterval(d._aggiorna));
   document.getElementById("serie-chiudi").addEventListener("click", () => d.close());
-  document.getElementById("serie-segui").addEventListener("click", async () => {
-    const b = document.getElementById("serie-segui");
-    const esito = document.getElementById("serie-esito");
-    b.disabled = true;
-    esito.className = "messaggio-serie";
-    esito.textContent = "Chiedo a Sonarr… (può volerci qualche secondo)";
+
+  async function invia(percorso, corpo, conferma) {
+    if (conferma && !confirm(conferma)) return;
     try {
-      const s = JSON.parse(d.dataset.serie);
-      const r = await inviaJSON("/api/serie/segui", { titolo: s.titolo, imdb: s.imdb, tvdb: s.tvdb, tmdb: s.tmdb });
+      const r = await inviaJSON(`/api/serie/${d.dataset.serieId}/${percorso}`, corpo);
       esito.className = "messaggio-serie ok";
       esito.textContent = r.messaggio;
-      b.textContent = "✓ In download";
+      await aggiornaPuntate(d);
     } catch (e) {
       esito.className = "messaggio-serie errore";
       esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
-      b.disabled = false;
     }
+  }
+  const annulla = "Annullo? Smetto di cercarle e fermo i download (quelle già in Jellyfin restano).";
+  document.getElementById("serie-tutte").addEventListener("click", () => invia("scarica", { tutte: true }));
+  document.getElementById("serie-annulla-tutte").addEventListener("click", () => invia("annulla", { tutte: true }, annulla));
+  box.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    ev.preventDefault();  // il clic sul tasto della stagione non apre/chiude l'elenco
+    b.disabled = true;
+    if (b.dataset.puntata) invia("scarica", { puntate: [Number(b.dataset.puntata)] });
+    else if (b.dataset.annullaPuntata) invia("annulla", { puntate: [Number(b.dataset.annullaPuntata)] }, annulla);
+    else if (b.dataset.stagione) invia("scarica", { stagione: Number(b.dataset.stagione) });
+    else if (b.dataset.annullaStagione) invia("annulla", { stagione: Number(b.dataset.annullaStagione) }, annulla);
   });
   return d;
 }
 
-function apriSerie(dati, linkSonarr) {
+async function aggiornaPuntate(d) {
+  if (!d.dataset.serieId) return;
+  const box = document.getElementById("serie-puntate");
+  try {
+    const r = await chiama(`/api/serie/${d.dataset.serieId}/puntate`);
+    const aperteNumeri = new Set([...box.querySelectorAll("details[open] summary")].map((x) => x.textContent.match(/Stagione (\d+)/)?.[1]));
+    box.innerHTML = htmlPuntate(r.stagioni);
+    box.querySelectorAll("details").forEach((x) => {
+      if (aperteNumeri.has(x.querySelector("summary").textContent.match(/Stagione (\d+)/)?.[1])) x.open = true;
+    });
+    const tutte = r.stagioni.flatMap((st) => st.puntate);
+    document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
+  } catch (e) { /* riprova al prossimo giro */ }
+}
+
+async function apriSerie(dati) {
   const d = dialogoSerie();
   d.dataset.serie = JSON.stringify(dati);
+  delete d.dataset.serieId;
   const poster = document.getElementById("serie-poster");
   poster.hidden = !dati.poster;
   if (dati.poster) poster.src = dati.poster;
@@ -800,11 +924,28 @@ function apriSerie(dati, linkSonarr) {
   document.getElementById("serie-anno").textContent =
     [dati.anno, dati.titolo !== dati.nome ? dati.titolo : ""].filter(Boolean).join(" · ");
   document.getElementById("serie-trama").textContent = dati.trama || "";
-  const b = document.getElementById("serie-segui");
-  b.disabled = false;
-  b.textContent = "⬇ Download";
-  document.getElementById("serie-esito").textContent = "";
+  const esito = document.getElementById("serie-esito");
+  esito.className = "messaggio-serie";
+  esito.textContent = "";
+  const box = document.getElementById("serie-puntate");
+  box.innerHTML = '<p class="caricamento">Carico stagioni e puntate…</p>';
+  document.getElementById("serie-tutte").disabled = true;
+  document.getElementById("serie-annulla-tutte").hidden = true;
   d.showModal();
+  try {
+    const r = await inviaJSON("/api/serie/apri", { titolo: dati.titolo, imdb: dati.imdb, tvdb: dati.tvdb, tmdb: dati.tmdb });
+    d.dataset.serieId = r.serie_id;
+    box.innerHTML = htmlPuntate(r.stagioni);
+    document.getElementById("serie-tutte").disabled = false;
+    const tutte = r.stagioni.flatMap((st) => st.puntate);
+    document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
+    clearInterval(d._aggiorna);
+    d._aggiorna = setInterval(() => aggiornaPuntate(d), 8000);
+  } catch (e) {
+    box.innerHTML = "";
+    esito.className = "messaggio-serie errore";
+    esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
+  }
 }
 
 document.addEventListener("click", (ev) => {

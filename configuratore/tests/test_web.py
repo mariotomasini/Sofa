@@ -273,3 +273,24 @@ def test_cache_del_browser(cartella):
     statico = client.get(f"/impostazioni/static/procedura.js?v={v}")
     assert statico.status_code == 200 and "immutable" in statico.headers["cache-control"]
     assert client.get("/impostazioni/static/logo.svg").headers["cache-control"] == "public, max-age=604800"
+
+
+def test_impostazioni_download_e_telegram(cartella):
+    assert p.salva_impostazioni(cartella, {
+        "lingue_audio": "es, it", "dimensione_max_gb": "8,5",
+        "telegram": {"api_id": "12345", "api_hash": "A" * 32, "telefono": "+39 333 123 4567"},
+    })
+    env = leggi_env(cartella / ".env")
+    assert env["LINGUE_AUDIO"] == "es,it" and env["DIMENSIONE_MAX_GB"] == "8.5"
+    assert env["TG_API_ID"] == "12345" and env["TG_API_HASH"] == "a" * 32 and env["TG_PHONE"] == "+393331234567"
+    # hash vuoto: resta quello di prima
+    p.salva_impostazioni(cartella, {"telegram": {"api_id": "12345", "api_hash": "", "telefono": ""}})
+    assert leggi_env(cartella / ".env")["TG_API_HASH"] == "a" * 32
+    with pytest.raises(p.DatiNonValidi):
+        p.salva_impostazioni(cartella, {"lingue_audio": "klingon"})
+    with pytest.raises(p.DatiNonValidi):
+        p.salva_impostazioni(cartella, {"dimensione_max_gb": "500"})
+    with pytest.raises(p.DatiNonValidi):
+        p.salva_impostazioni(cartella, {"telegram": {"api_id": "abc"}})
+    scelte = p.scelte_attuali(leggi_env(cartella / ".env"))
+    assert scelte["telegram"]["hash_impostato"] and "api_hash" not in scelte["telegram"]

@@ -49,3 +49,14 @@ def test_coda_e_attesa(monkeypatch):
 def test_lingua_preferita_cambia(monkeypatch):
     monkeypatch.setenv("LINGUE_AUDIO", "es,it")
     assert Automatici(Config(), FintoRadarr(), FintaSerie()).preferita == "Spagnolo"
+
+
+def test_stato_in_parole_semplici():
+    from app.automatici import stato_coda
+
+    assert stato_coda({"status": "downloading"}) == ("download", "In download")
+    assert stato_coda({"status": "queued"})[0] == "coda"
+    assert stato_coda({"status": "delay"})[1] == "Trovato: parte tra poco"
+    assert stato_coda({"status": "completed", "trackedDownloadState": "importPending"})[0] == "importazione"
+    problema = stato_coda({"trackedDownloadStatus": "warning", "statusMessages": [{"messages": ["Nessun seed"]}]})
+    assert problema == ("problema", "Problema: Nessun seed")

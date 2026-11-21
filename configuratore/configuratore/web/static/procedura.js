@@ -71,6 +71,9 @@ function datiModulo() {
     password2: $("password2").value,
     voci, voci_windows: vociWindows,
     lingue: $("lingue").value,
+    lingue_audio: $("lingue-audio").value,
+    dimensione_max_gb: $("dimensione-max").value,
+    telegram: { api_id: $("tg-api-id").value, api_hash: $("tg-api-hash").value, telefono: $("tg-telefono").value },
     ntfy: $("usa-ntfy").checked ? $("ntfy").value.trim() : "",
     cartella: cartellaScelta(),
   };
@@ -80,6 +83,8 @@ function aggiornaDipendenze(ev) {
   const bazarr = document.querySelector('[data-voce="WITH_BAZARR"]');
   $("blocco-lingue").hidden = bazarr && !bazarr.checked;
   $("blocco-ntfy").hidden = !$("usa-ntfy").checked;
+  const tgarr = document.querySelector('[data-voce="WITH_TGARR"]');
+  $("blocco-telegram").hidden = !tgarr || !tgarr.checked;
   const anime = document.querySelector('[data-voce="WITH_ANIME"]');
   const sonarr = document.querySelector('[data-voce="WITH_SONARR"]');
   if (anime && sonarr && anime.checked && !sonarr.checked) {
@@ -181,7 +186,7 @@ $("modulo").addEventListener("submit", async (ev) => {
     avviaAvanzamento();
   } catch (e) {
     avviso(e.message);
-    const indice = passi.indexOf({ tmdb: "tmdb", password: "password", password2: "password", lingue: "scelte", cartella: "cartella" }[e.campo]);
+    const indice = passi.indexOf({ tmdb: "tmdb", password: "password", password2: "password", lingue: "scelte", lingue_audio: "scelte", dimensione_max_gb: "scelte", telegram: "scelte", cartella: "cartella" }[e.campo]);
     if (indice >= 0) { mostraPasso(indice); messaggio(`msg-${passi[indice]}`, e.message); }
   } finally { $("avanti").disabled = false; }
 });

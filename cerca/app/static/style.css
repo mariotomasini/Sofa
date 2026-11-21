@@ -917,3 +917,18 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
 /* lingua non preferita: si vede subito */
 .lingua.altra { background: var(--giallo); color: #1a1400; }
 .download.non-preferita { border-left: 4px solid var(--giallo); }
+
+/* stato dei download automatici */
+.stato-film { margin-top: .9rem; display: flex; flex-direction: column; gap: .35rem; }
+.stato-film .stato { font-size: 1.1rem; font-weight: 700; }
+.stato-auto-problema .stato { color: var(--rosso, #ff6b6b); }
+.stato-auto-pronto .stato, .stato-auto-importazione .stato { color: var(--verde); }
+.stato-auto-cerco .stato, .stato-auto-coda .stato, .stato-auto-non_uscito .stato { color: var(--giallo); }
+/* serie: stagioni e puntate */
+.stagione { border-top: 1px solid var(--pannello-2); padding: .5rem 0; }
+.stagione summary { display: flex; align-items: center; justify-content: space-between; gap: .6rem; cursor: pointer; font-weight: 700; }
+.puntata { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .45rem 0; }
+.puntata .descrizione { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.puntata .stato-puntata { font-size: .85rem; color: var(--testo-2); }
+.puntata button { padding: .35rem .8rem; }
+.serie-puntate { max-height: 55vh; overflow-y: auto; }

@@ -110,19 +110,12 @@ class Serie:
                 return risultati[0]
         return None
 
-    async def segui(self, *, tvdb: int | None = None, tmdb: int | None = None, imdb: str = "",
-                    titolo: str = "") -> dict:
-        """Aggiunge la serie a Sonarr e fa cercare tutte le puntate: si scaricano da sole."""
+    def _controlla_attivo(self) -> None:
         if not self.attivo:
             raise ErroreServizio("Le serie TV non sono attive.",
                                  "Accendile nelle impostazioni di mediabox (/impostazioni), voce \"Serie TV\".")
-        serie = await self.trova(tvdb=tvdb, tmdb=tmdb, imdb=imdb, titolo=titolo)
-        if serie is None:
-            raise ErroreServizio(f"Sonarr non trova \"{titolo}\".", "Prova a cercarla con il titolo originale.")
-        nome = serie.get("title") or titolo
-        if serie.get("id"):  # è già tra le serie seguite
-            return {"messaggio": f"Segui già \"{nome}\": le puntate nuove arrivano da sole in Jellyfin.",
-                    "nuova": False, "serie_id": serie["id"]}
+
+    async def _aggiungi(self, serie: dict, *, tutte: bool) -> dict:
         profili, cartelle = await asyncio.gather(self._api("GET", "qualityprofile"), self._api("GET", "rootfolder"))
         anime = e_anime(serie)
         serie.update(
@@ -131,11 +124,103 @@ class Serie:
             seriesType="anime" if anime else "standard",
             monitored=True,
             seasonFolder=True,
-            addOptions={"monitor": "all", "searchForMissingEpisodes": True, "searchForCutoffUnmetEpisodes": False},
+            # "none": la serie c'è ma non scarica niente finché non scegli le puntate
+            monitorNewItems="all" if tutte else "none",
+            addOptions={"monitor": "all" if tutte else "none", "searchForMissingEpisodes": tutte,
+                        "searchForCutoffUnmetEpisodes": False},
         )
-        aggiunta = await self._api("POST", "series", json=serie)
-        return {"messaggio": f"Fatto! Sonarr cerca le puntate di \"{nome}\": quando sono scaricate le trovi in Jellyfin.",
-                "nuova": True, "serie_id": (aggiunta or {}).get("id")}
+        return await self._api("POST", "series", json=serie) or {}
+
+    async def prepara(self, *, tvdb: int | None = None, tmdb: int | None = None, imdb: str = "",
+                      titolo: str = "") -> dict:
+        """La serie in Sonarr (aggiunta senza scaricare nulla, se manca), per scegliere le puntate."""
+        self._controlla_attivo()
+        serie = await self.trova(tvdb=tvdb, tmdb=tmdb, imdb=imdb, titolo=titolo)
+        if serie is None:
+            raise ErroreServizio(f"Sonarr non trova \"{titolo}\".", "Prova a cercarla con il titolo originale.")
+        if not serie.get("id"):
+            serie = await self._aggiungi(serie, tutte=False)
+        return serie
+
+    async def segui(self, *, tvdb: int | None = None, tmdb: int | None = None, imdb: str = "",
+                    titolo: str = "") -> dict:
+        """Tutte le puntate, anche quelle nuove che usciranno: si scaricano da sole."""
+        self._controlla_attivo()
+        serie = await self.trova(tvdb=tvdb, tmdb=tmdb, imdb=imdb, titolo=titolo)
+        if serie is None:
+            raise ErroreServizio(f"Sonarr non trova \"{titolo}\".", "Prova a cercarla con il titolo originale.")
+        nome = serie.get("title") or titolo
+        if not serie.get("id"):
+            aggiunta = await self._aggiungi(serie, tutte=True)
+            return {"messaggio": f"Fatto! Cerco tutte le puntate di \"{nome}\" e anche quelle nuove: le trovi in Jellyfin.",
+                    "nuova": True, "serie_id": aggiunta.get("id")}
+        await self.scarica_tutte(serie["id"])
+        return {"messaggio": f"Fatto! Cerco tutte le puntate di \"{nome}\" e anche quelle nuove.",
+                "nuova": False, "serie_id": serie["id"]}
+
+    async def scarica_tutte(self, serie_id: int, stagione: int | None = None) -> None:
+        """Tutte le puntate (o una stagione). Con tutte, anche le nuove che usciranno."""
+        serie = await self._api("GET", f"series/{serie_id}")
+        serie["monitored"] = True
+        for st in serie.get("seasons", []):
+            if stagione is None or st.get("seasonNumber") == stagione:
+                st["monitored"] = stagione is not None or st.get("seasonNumber", 0) > 0
+        if stagione is None:
+            serie["monitorNewItems"] = "all"
+        await self._api("PUT", f"series/{serie_id}", json=serie)
+        episodi = await self._api("GET", "episode", params={"seriesId": serie_id})
+        scelti = [e["id"] for e in episodi or []
+                  if (e.get("seasonNumber") == stagione if stagione is not None else e.get("seasonNumber", 0) > 0)]
+        if scelti:
+            await self._api("PUT", "episode/monitor", json={"episodeIds": scelti, "monitored": True})
+        if stagione is None:
+            await self._api("POST", "command", json={"name": "SeriesSearch", "seriesId": serie_id})
+        else:
+            await self._api("POST", "command", json={"name": "SeasonSearch", "seriesId": serie_id,
+                                                      "seasonNumber": stagione})
+
+    async def scarica_puntate(self, episodi: list[int]) -> None:
+        await self._api("PUT", "episode/monitor", json={"episodeIds": episodi, "monitored": True})
+        await self._api("POST", "command", json={"name": "EpisodeSearch", "episodeIds": episodi})
+
+    async def annulla_puntate(self, episodi: list[int]) -> None:
+        """Smette di cercarle e ferma i download in corso (i file già in Jellyfin restano)."""
+        await self._api("PUT", "episode/monitor", json={"episodeIds": episodi, "monitored": False})
+        coda = await self._api("GET", "queue/details", params={"includeEpisode": "true"}) or []
+        for voce in coda:
+            if voce.get("episodeId") in episodi and voce.get("id"):
+                await self._api("DELETE", f"queue/{voce['id']}",
+                                params={"removeFromClient": "true", "blocklist": "false"})
+
+    async def puntate(self, serie_id: int) -> list[dict]:
+        """Stagioni e puntate con lo stato di ognuna (pronta, in download, cercata, da scaricare)."""
+        episodi, coda = await asyncio.gather(
+            self._api("GET", "episode", params={"seriesId": serie_id}),
+            self._api("GET", "queue/details", params={"seriesId": serie_id}),
+        )
+        in_coda = {c.get("episodeId"): c for c in coda or []}
+        oggi = dt.datetime.now(dt.UTC)
+        stagioni: dict[int, list[dict]] = {}
+        for e in sorted(episodi or [], key=lambda x: (x.get("seasonNumber", 0), x.get("episodeNumber", 0))):
+            uscita = e.get("airDateUtc") or ""
+            uscito = bool(uscita) and dt.datetime.fromisoformat(uscita.replace("Z", "+00:00")) <= oggi
+            c = in_coda.get(e["id"])
+            if e.get("hasFile"):
+                stato = "pronta"
+            elif c:
+                stato = "download"
+            elif e.get("monitored") and uscito:
+                stato = "cerco"
+            elif e.get("monitored"):
+                stato = "in_arrivo"
+            else:
+                stato = "libera" if uscito else "non_uscita"
+            stagioni.setdefault(e.get("seasonNumber", 0), []).append({
+                "id": e["id"], "numero": e.get("episodeNumber", 0), "titolo": e.get("title") or "",
+                "data": uscita[:10], "stato": stato, "seguita": bool(e.get("monitored")),
+                "percentuale": round(100 * (1 - c.get("sizeleft", 0) / c["size"]), 1) if c and c.get("size") else 0,
+            })
+        return [{"numero": n, "puntate": p} for n, p in sorted(stagioni.items()) if n > 0 or len(stagioni) == 1]
 
     async def titoli(self, serie_id: int) -> list[str]:
         """Il titolo della serie in Sonarr e quelli alternativi (per cercare i torrent)."""
