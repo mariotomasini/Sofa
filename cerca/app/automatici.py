@@ -85,6 +85,26 @@ def fonte(r: dict) -> str:
     return "Telegram" if "tgarr" in client or "telegram" in client or r.get("protocol") == "usenet" else "Torrent"
 
 
+def copertina(oggetto: dict | None) -> str:
+    """La locandina di un film o di una serie di Radarr/Sonarr, nella misura piccola."""
+    for immagine in (oggetto or {}).get("images") or []:
+        if immagine.get("coverType") == "poster":
+            url = immagine.get("remoteUrl") or ""
+            return url.replace("/t/p/original/", "/t/p/w342/")
+    return ""
+
+
+def gruppo_film(film: dict, id_film: int | None) -> dict:
+    return {"gruppo": f"film:{id_film or film.get('id')}", "gruppo_titolo": titolo_film(film),
+            "poster": copertina(film), "voce": "Film"}
+
+
+def gruppo_serie(serie: dict | None, id_serie: int | None, voce: str) -> dict:
+    serie = serie or {}
+    return {"gruppo": f"serie:{id_serie or serie.get('id')}", "gruppo_titolo": serie.get("title") or "Serie",
+            "poster": copertina(serie), "voce": voce}
+
+
 def percentuale(totale: float, mancante: float) -> float:
     return round(100 * (1 - mancante / totale), 1) if totale else 0.0
 
@@ -162,7 +182,8 @@ class Automatici:
             for r in (dati or {}).get("records", []):
                 film = r.get("movie") or {}
                 in_coda_film.add(r.get("movieId"))
-                voci.append(self._da_coda(r, titolo_film(film, r.get("title", "")), "film", [r.get("movieId")]))
+                voci.append({**self._da_coda(r, titolo_film(film, r.get("title", "")), "film", [r.get("movieId")]),
+                             **gruppo_film(film, r.get("movieId"))})
             mancanti = await self.radarr._r("GET", "wanted/missing", params={"pageSize": 100, "monitored": "true"})
             for m in (mancanti or {}).get("records", []):
                 if m.get("id") in in_coda_film:
@@ -172,7 +193,8 @@ class Automatici:
                     titolo_film(m), "", "", tipo="film", ids=[m["id"]], stato="cerco" if uscito else "non_uscito",
                     stato_testo=("Cerco una fonte: riprovo da solo appena esce una versione e ogni notte" if uscito
                                  else "Non è ancora uscito: lo scarico appena è disponibile"),
-                    percentuale=0, dimensione=0, annullabile=True, ricercabile=uscito, senza_lingua=True))
+                    percentuale=0, dimensione=0, annullabile=True, ricercabile=uscito, senza_lingua=True,
+                    **gruppo_film(m, m.get("id"))))
         except Exception:  # noqa: BLE001 - se Radarr non risponde la pagina mostra il resto
             log.warning("Coda di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
@@ -182,19 +204,23 @@ class Automatici:
                 for r in (dati or {}).get("records", []):
                     in_coda_puntate.add(r.get("episodeId"))
                     titolo = f"{(r.get('series') or {}).get('title', '')} · {episodio(r.get('episode'))}"
-                    voci.append(self._da_coda(r, titolo, "serie", [r.get("episodeId")]))
+                    voci.append({**self._da_coda(r, titolo, "serie", [r.get("episodeId")]),
+                                 **gruppo_serie(r.get("series"), r.get("seriesId"), episodio(r.get("episode")))})
                 mancanti = await self.serie._api("GET", "wanted/missing", params={
                     "pageSize": 200, "monitored": "true", "includeSeries": "true"})
-                per_serie: dict[str, list[int]] = {}
+                per_serie: dict[int, tuple[dict, list[int]]] = {}
                 for e in (mancanti or {}).get("records", []):
                     if e.get("id") not in in_coda_puntate:
-                        per_serie.setdefault((e.get("series") or {}).get("title", "Serie"), []).append(e["id"])
-                for nome, ids in per_serie.items():
+                        serie = e.get("series") or {}
+                        per_serie.setdefault(e.get("seriesId") or serie.get("id") or 0, (serie, []))[1].append(e["id"])
+                for id_serie, (serie, ids) in per_serie.items():
                     quante = "1 puntata" if len(ids) == 1 else f"{len(ids)} puntate"
+                    nome = serie.get("title") or "Serie"
                     voci.append(self._voce(
                         f"{nome} · {quante} da trovare", "", "", tipo="serie", ids=ids, stato="cerco",
                         stato_testo="Cerco una fonte: riprovo da solo appena escono e ogni notte",
-                        percentuale=0, dimensione=0, annullabile=True, ricercabile=True, senza_lingua=True))
+                        percentuale=0, dimensione=0, annullabile=True, ricercabile=True, senza_lingua=True,
+                        **gruppo_serie(serie, id_serie, f"{quante} da trovare")))
             except Exception:  # noqa: BLE001
                 log.warning("Coda di Sonarr non disponibile", exc_info=True)
         return voci
@@ -251,7 +277,8 @@ class Automatici:
                 file = m.get("movieFile") or {}
                 lingua = self._lingua(file)
                 titolo = f"{m.get('title', '')} ({m.get('year', '')})".replace(" ()", "")
-                voci.append(self._voce(titolo, file.get("relativePath", ""), lingua, tipo="film"))
+                voci.append(self._voce(titolo, file.get("relativePath", ""), lingua, tipo="film",
+                                       **gruppo_film(m, m.get("id"))))
         except Exception:  # noqa: BLE001
             log.warning("Elenco da migliorare di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
@@ -261,8 +288,8 @@ class Automatici:
                 for e in (dati or {}).get("records", []):
                     file = e.get("episodeFile") or {}
                     titolo = f"{(e.get('series') or {}).get('title', '')} · {episodio(e)}"
-                    voci.append(self._voce(titolo, file.get("relativePath", ""),
-                                           self._lingua(file), tipo="serie"))
+                    voci.append(self._voce(titolo, file.get("relativePath", ""), self._lingua(file), tipo="serie",
+                                           **gruppo_serie(e.get("series"), e.get("seriesId"), episodio(e))))
             except Exception:  # noqa: BLE001
                 log.warning("Elenco da migliorare di Sonarr non disponibile", exc_info=True)
         voci = [v for v in voci if not v["preferita"]]

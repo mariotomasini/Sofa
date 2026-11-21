@@ -313,34 +313,6 @@ async function azioneAutomatico(b, dopo) {
   } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
 }
 
-function avviaAutomatici() {
-  const coda = document.getElementById("elenco-automatici");
-  const attesa = document.getElementById("elenco-attesa");
-  if (!coda) return;
-  async function aggiorna() {
-    try {
-      const d = await chiama("/api/automatici");
-      coda.innerHTML = d.coda.length ? d.coda.map((x) => htmlAutomatico(x, true)).join("")
-        : '<p class="vuoto">Niente in corso. Cerca un film o una serie e premi Download.</p>';
-      document.getElementById("sezione-attesa").hidden = !d.attesa.length;
-      document.getElementById("titolo-attesa").textContent =
-        `In attesa della versione in ${d.lingua_preferita.toLowerCase()} (${d.attesa.length})`;
-      attesa.innerHTML = d.attesa.map((x) => htmlAutomatico(x, false)).join("");
-    } catch (e) { coda.innerHTML = htmlErrore(e); }
-  }
-  aggiorna();
-  setInterval(aggiorna, 5000);
-  coda.addEventListener("click", (ev) => {
-    const b = ev.target.closest("button[data-tipo]");
-    if (b) azioneAutomatico(b, aggiorna);
-  });
-  document.getElementById("cerca-ora").addEventListener("click", async (ev) => {
-    ev.target.disabled = true;
-    try { avviso((await chiama("/api/automatici/cerca", { method: "POST" })).messaggio); }
-    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); ev.target.disabled = false; }
-  });
-}
-
 // Scheda film: il tasto Download diventa lo stato del film (in coda, in download, cerco, pronto)
 function htmlStatoFilm(d) {
   if (!d || d.stato === "nessuno") return "";
@@ -354,48 +326,92 @@ function htmlStatoFilm(d) {
     `${azioni ? `<div class="azioni-riga">${azioni}</div>` : ""}</div>`;
 }
 
-function avviaDownload({ soloAttivi }) {
-  const contenitore = document.getElementById(soloAttivi ? "elenco-attivi" : "elenco-download");
-  const sezione = document.getElementById("attivi");
+// --- pagina Download: una copertina per film o serie, lo stato di ogni voce toccandola ------------
+const COLORE_STATO = { problema: "problema", download: "attivo", importazione: "attivo", coda: "attesa",
+  da_associare: "problema", cerco: "attesa", non_uscito: "attesa", attesa: "attesa", pronto: "pronto" };
+
+function htmlSchedaDownload(g) {
+  const copertina = g.poster ? `<img src="${esc(g.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(g.titolo, "");
+  const barra = g.stato === "download" || g.stato === "importazione" || g.stato === "pronto"
+    ? `<span class="barra-copertina"><span style="width:${g.percentuale}%"></span></span>` : "";
+  const quante = g.tipo === "serie" && g.quante > 1 ? `<span class="conta-puntate">${g.quante}</span>` : "";
+  return `<button type="button" class="scheda-download colore-${COLORE_STATO[g.stato] || "attesa"}" data-gruppo="${esc(g.chiave)}">` +
+    `<span class="poster">${copertina}${barra}${quante}</span>` +
+    `<span class="titolo">${esc(g.titolo)}</span>` +
+    `<span class="stato-breve">${ICONE_STATO[g.stato] || ""} ${esc(g.stato_testo)}</span></button>`;
+}
+
+function htmlVoceDownload(v) {
+  if (v.origine === "cerca") return htmlDownload(v);
+  return htmlAutomatico({ ...v, titolo: v.voce || v.titolo }, v.origine === "auto");
+}
+
+function avviaPaginaDownload() {
+  const griglia = document.getElementById("griglia-download");
+  const dettaglio = document.getElementById("dettaglio-download");
+  let gruppi = [];
+
+  function disegnaDettaglio() {
+    const g = gruppi.find((x) => x.chiave === dettaglio.dataset.gruppo);
+    if (!g) { if (dettaglio.open) dettaglio.close(); return; }
+    document.getElementById("dettaglio-copertina").innerHTML = g.poster ? `<img src="${esc(g.poster)}" alt="">` : "";
+    document.getElementById("dettaglio-titolo").textContent = g.titolo;
+    const pezzi = [g.stato_testo];
+    if (g.velocita) pezzi.push(`${dimensione(g.velocita)}/s`);
+    if (g.rimanente) pezzi.push(`mancano ${tempoRimanente(g.rimanente)}`);
+    document.getElementById("dettaglio-stato").textContent = pezzi.join(" · ");
+    document.getElementById("dettaglio-voci").innerHTML = g.voci.map(htmlVoceDownload).join("");
+  }
 
   async function aggiorna() {
     try {
-      const d = await chiama("/api/download");
-      let elenco = d.download;
-      if (soloAttivi) elenco = elenco.filter((x) => ["in_corso", "completato", "importazione", "da_associare", "errore"].includes(x.stato));
-      if (soloAttivi) sezione.hidden = !elenco.length;
-      contenitore.innerHTML = elenco.length ? elenco.slice(0, soloAttivi ? 3 : 60).map((x) => htmlDownload(x, soloAttivi)).join("")
-        : '<p class="vuoto">Nessun download. Cerca un film o aggiungi un torrent.</p>';
-    } catch (e) {
-      if (!soloAttivi) contenitore.innerHTML = htmlErrore(e);
-    }
+      const d = await chiama("/api/download/gruppi");
+      gruppi = d.gruppi;
+      griglia.innerHTML = gruppi.length ? gruppi.map(htmlSchedaDownload).join("")
+        : '<p class="vuoto">Niente in download. Cerca un film o una serie e premi Download.</p>';
+      if (dettaglio.open) disegnaDettaglio();
+    } catch (e) { if (!gruppi.length) griglia.innerHTML = htmlErrore(e); }
   }
-  aggiorna();
-  setInterval(aggiorna, 4000);
-  if (!soloAttivi) avviaAutomatici();
 
-  contenitore.addEventListener("click", async (ev) => {
+  griglia.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-gruppo]");
+    if (!b) return;
+    dettaglio.dataset.gruppo = b.dataset.gruppo;
+    disegnaDettaglio();
+    dettaglio.showModal();
+  });
+  document.getElementById("dettaglio-chiudi").addEventListener("click", () => dettaglio.close());
+
+  // i pulsanti delle voci: quelle di Radarr/Sonarr hanno data-tipo, quelle di Cerca il numero del download
+  document.getElementById("dettaglio-voci").addEventListener("click", async (ev) => {
     const b = ev.target.closest("button");
     if (!b) return;
+    if (b.dataset.tipo) { await azioneAutomatico(b, aggiorna); return; }
     try {
       if (b.dataset.riprova) {
         avviso((await chiama(`/api/download/${b.dataset.riprova}/riprova`, { method: "POST" })).messaggio);
       } else if (b.dataset.annulla) {
         const domanda = b.dataset.stato === "importato"
-          ? "Tolgo il download dall'elenco? Il film resta in Jellyfin."
+          ? "Tolgo il download dall'elenco? Quello che è in Jellyfin resta."
           : "Annullo il download e cancello i file scaricati finora?";
         if (!confirm(domanda)) return;
         avviso((await chiama(`/api/download/${b.dataset.annulla}/annulla`, { method: "POST" })).messaggio);
       } else if (b.dataset.associa) {
+        dettaglio.close();
         apriAssocia(Number(b.dataset.associa), b.dataset.nome);
       }
       aggiorna();
     } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
   });
 
+  document.getElementById("cerca-ora").addEventListener("click", async (ev) => {
+    ev.target.disabled = true;
+    try { avviso((await chiama("/api/automatici/cerca", { method: "POST" })).messaggio); }
+    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); ev.target.disabled = false; }
+  });
+
   function apriAssocia(idDownload, nome) {
     const dialogo = document.getElementById("dialogo-associa");
-    if (!dialogo) { window.location.href = BASE + "/download"; return; }
     document.getElementById("associa-nome").textContent = nome;
     const campo = document.getElementById("associa-cerca");
     campo.value = nome.replace(/[._]/g, " ").replace(/\b(1080p|720p|2160p|x264|x265|h264|bluray|web-?dl|ita|eng)\b.*$/i, "").trim();
@@ -403,24 +419,23 @@ function avviaDownload({ soloAttivi }) {
     document.getElementById("associa-scelte").innerHTML = "";
     dialogo.showModal();
   }
+  cercatoreFilm(
+    document.getElementById("associa-cerca"),
+    document.getElementById("associa-bottone"),
+    document.getElementById("associa-scelte"),
+    async (tmdbId) => {
+      const dialogo = document.getElementById("dialogo-associa");
+      try {
+        const r = await inviaJSON(`/api/download/${dialogo.dataset.download}/associa`, { tmdb_id: tmdbId });
+        avviso(r.messaggio);
+        dialogo.close();
+        aggiorna();
+      } catch (e) { avviso(e.errore, true); }
+    },
+  );
 
-  if (!soloAttivi && !avviaDownload._cercatore) {
-    avviaDownload._cercatore = true;
-    cercatoreFilm(
-      document.getElementById("associa-cerca"),
-      document.getElementById("associa-bottone"),
-      document.getElementById("associa-scelte"),
-      async (tmdbId) => {
-        const dialogo = document.getElementById("dialogo-associa");
-        try {
-          const r = await inviaJSON(`/api/download/${dialogo.dataset.download}/associa`, { tmdb_id: tmdbId });
-          avviso(r.messaggio);
-          dialogo.close();
-          aggiorna();
-        } catch (e) { avviso(e.errore, true); }
-      },
-    );
-  }
+  aggiorna();
+  setInterval(aggiorna, 4000);
 }
 
 // --- novità nelle pagine iniziali dei mondi -------------------------------------------

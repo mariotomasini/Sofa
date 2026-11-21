@@ -939,3 +939,38 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
 .fonte { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 4px; font-size: .75em;
   font-weight: 700; vertical-align: middle; background: var(--pannello-2); color: var(--testo); }
 .fonte-telegram { background: #229ed9; color: #fff; }
+
+/* --- pagina Download: copertine e dettaglio --- */
+.griglia-download { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 14px; margin-top: 1.2rem; }
+.scheda-download {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: .25rem; cursor: pointer; min-width: 0;
+}
+.scheda-download .poster { position: relative; display: block; border-radius: var(--raggio); overflow: hidden; background: #1a1a1a; }
+.scheda-download .poster > img, .scheda-download .poster > .senza-poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; }
+.scheda-download:hover .poster > img { transform: scale(1.03); transition: transform .18s ease; }
+.scheda-download:focus-visible .poster { outline: var(--focus); outline-offset: 3px; }
+.scheda-download .titolo { font-weight: 700; font-size: .98rem; line-height: 1.2; margin-top: .35rem; overflow-wrap: anywhere; }
+.stato-breve { font-size: .82rem; color: var(--tenue); line-height: 1.3; }
+.colore-problema .stato-breve { color: #ff6b6b; font-weight: 700; }
+.colore-attivo .stato-breve { color: #fff; }
+.colore-pronto .stato-breve { color: var(--verde); }
+.colore-problema .poster { box-shadow: inset 0 0 0 3px #ff6b6b; }
+.barra-copertina { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgb(0 0 0 / .6); }
+.barra-copertina > span { display: block; height: 100%; background: var(--rosso-vivo); transition: width .4s ease; }
+.colore-pronto .barra-copertina > span { background: var(--verde); }
+.conta-puntate {
+  position: absolute; top: 6px; right: 6px; min-width: 26px; padding: 2px 7px; border-radius: 999px; text-align: center;
+  background: rgb(0 0 0 / .75); color: #fff; font-size: .78rem; font-weight: 700;
+}
+#dettaglio-download { width: min(640px, 94vw); max-height: 90vh; max-height: 90dvh; overflow: auto; }
+.dettaglio-testa { display: flex; gap: 1rem; align-items: center; }
+.dettaglio-copertina img { width: 76px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--raggio); }
+.dettaglio-testa h2 { margin: 0 0 .2rem; font-size: 1.35rem; }
+.dettaglio-voci { margin-top: .4rem; }
+.dettaglio-voci .download { background: #1c1c1c; }
+.dettaglio-voci .download > img, .dettaglio-voci .download > .senza-poster { display: none; }
+@media (max-width: 760px) {
+  .griglia-download { grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+  .scheda-download .titolo { font-size: .85rem; }
+  .stato-breve { font-size: .74rem; }
+}

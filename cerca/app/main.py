@@ -28,6 +28,7 @@ from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
 from .download import GestoreDownload, e_magnet, nome_da_magnet
+from .gruppi_download import raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
 from .musica import Musica
@@ -702,6 +703,15 @@ async def api_torrent(
         fonte="manuale", categoria="manuale", film=film, titolo=titolo, magnet=magnet, file_torrent=contenuto
     )
     return {"id": id_download, "messaggio": "Torrent aggiunto: lo trovi nella pagina Download."}
+
+
+@app.get("/api/download/gruppi")
+async def api_download_gruppi(request: Request):
+    """La pagina Download: una scheda per film o serie, con la copertina e lo stato di ogni voce."""
+    s = servizi(request)
+    coda, attesa = await asyncio.gather(s.automatici.coda(), s.automatici.in_attesa())
+    cerca = (await api_download(request))["download"]
+    return {"gruppi": raggruppa(coda, attesa, cerca, s.automatici.preferita), "lingua_preferita": s.automatici.preferita}
 
 
 @app.get("/api/download")
