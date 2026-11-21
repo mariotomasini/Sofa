@@ -467,18 +467,6 @@ dialog::backdrop { background: rgba(0, 0, 0, .65); }
 dialog h2 { margin: 0; }
 
 /* --- musica --------------------------------------------------------------------------------------- */
-.griglia-artisti { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 1rem; }
-.artista { display: flex; gap: 1rem; align-items: center; background: var(--pannello); border-radius: var(--raggio-l); padding: 1rem 1.1rem; }
-.artista .iniziale {
-  --h: 30;
-  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
-  background: oklch(.42 .09 var(--h));
-  box-shadow: inset 0 0 0 6px oklch(.55 .11 calc(var(--h) + 40));
-  color: #fff; font-size: 1.45rem; font-weight: 700;
-}
-.artista .descrizione { flex: 1; min-width: 7rem; display: flex; flex-direction: column; gap: .1rem; overflow-wrap: break-word; }
-.artista .descrizione strong { font-size: 1.15rem; }
-.artista button { flex: 0 0 auto; min-height: 48px; padding: 0 1rem; }
 
 /* --- spazio --------------------------------------------------------------------------------------- */
 .disco { margin-top: 1.4rem; }
@@ -608,7 +596,6 @@ dialog h2 { margin: 0; }
   .download .azioni button { min-height: 44px; font-size: .95rem; padding: 0 1rem; }
   .download.compatto { flex-wrap: nowrap; }
 
-  .artista .iniziale { width: 52px; height: 52px; font-size: 1.2rem; }
   .due-colonne { grid-template-columns: 1fr; gap: 1rem; }
   .cerca-film { flex-direction: column; }
   .nav-voce.esterno { display: none; }
@@ -939,3 +926,177 @@ body[data-tema] .barra-basso [aria-current="page"] { color: var(--colore-piattaf
 .fonte { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 4px; font-size: .75em;
   font-weight: 700; vertical-align: middle; background: var(--pannello-2); color: var(--testo); }
 .fonte-telegram { background: #229ed9; color: #fff; }
+
+/* --- pagina Download: copertine e dettaglio --- */
+.griglia-download { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 14px; margin-top: 1.2rem; }
+.scheda-download {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: .25rem; cursor: pointer; min-width: 0;
+}
+.scheda-download .poster { position: relative; display: block; border-radius: var(--raggio); overflow: hidden; background: #1a1a1a; }
+.scheda-download .poster > img, .scheda-download .poster > .senza-poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; }
+.scheda-download:hover .poster > img { transform: scale(1.03); transition: transform .18s ease; }
+.scheda-download:focus-visible .poster { outline: var(--focus); outline-offset: 3px; }
+.scheda-download .titolo { font-weight: 700; font-size: .98rem; line-height: 1.2; margin-top: .35rem; overflow-wrap: anywhere; }
+.stato-breve { font-size: .82rem; color: var(--tenue); line-height: 1.3; }
+.colore-problema .stato-breve { color: #ff6b6b; font-weight: 700; }
+.colore-attivo .stato-breve { color: #fff; }
+.colore-pronto .stato-breve { color: var(--verde); }
+.colore-problema .poster { box-shadow: inset 0 0 0 3px #ff6b6b; }
+.barra-copertina { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgb(0 0 0 / .6); }
+.barra-copertina > span { display: block; height: 100%; background: var(--rosso-vivo); transition: width .4s ease; }
+.colore-pronto .barra-copertina > span { background: var(--verde); }
+.conta-puntate {
+  position: absolute; top: 6px; right: 6px; min-width: 26px; padding: 2px 7px; border-radius: 999px; text-align: center;
+  background: rgb(0 0 0 / .75); color: #fff; font-size: .78rem; font-weight: 700;
+}
+#dettaglio-download { width: min(640px, 94vw); max-height: 90vh; max-height: 90dvh; overflow: auto; }
+.dettaglio-testa { display: flex; gap: 1rem; align-items: center; }
+.dettaglio-copertina img { width: 76px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--raggio); }
+.dettaglio-testa h2 { margin: 0 0 .2rem; font-size: 1.35rem; }
+.dettaglio-voci { margin-top: .4rem; }
+.dettaglio-voci .download { background: #1c1c1c; }
+.dettaglio-voci .download > img, .dettaglio-voci .download > .senza-poster { display: none; }
+@media (max-width: 760px) {
+  .griglia-download { grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+  .scheda-download .titolo { font-size: .85rem; }
+  .stato-breve { font-size: .74rem; }
+}
+
+/* --- "‹ Indietro" in alto a sinistra, come su iPhone --- */
+.indietro-ios {
+  display: inline-flex; align-items: center; gap: .1rem; margin-left: -.5rem; padding: .35rem .5rem .35rem .2rem;
+  color: var(--accento); text-decoration: none; font-size: 1.05rem; font-weight: 500; border-radius: var(--raggio);
+}
+.indietro-ios svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.indietro-ios:hover { background: rgb(255 255 255 / .06); }
+.testata:has(.indietro-ios) { justify-content: flex-start; }
+.testata:has(.indietro-ios) .nav { margin-left: auto; }
+@media (max-width: 760px) {
+  /* sul telefono a sinistra solo "‹ Indietro", il logo resta piccolo a destra */
+  .logo-con-indietro { margin-left: auto; }
+  .logo-con-indietro span:last-child { display: none; }
+  body[data-tema] .testata:has(.indietro-ios) { display: flex; }
+}
+
+/* =============================================================================
+   Musica, stile app musicale: grigio scuro, verde, copertine quadrate, artisti tondi.
+   (Solo colori e forme: niente loghi, nomi o caratteri di altri servizi.)
+   ============================================================================= */
+body[data-mondo="musica"] {
+  --verde-musica: #1ed760;
+  --sfondo: #121212; --sfondo-rgb: 18 18 18; --pannello: #181818; --pannello-2: #282828;
+  --accento: var(--verde-musica); --rosso-vivo: var(--verde-musica); --su-accento: #000;
+  background: linear-gradient(180deg, #2a2a2a 0, #121212 340px) no-repeat, #121212;
+}
+body[data-mondo="musica"] .mondo[aria-current="page"] { background: var(--verde-musica); border-color: var(--verde-musica); color: #000; }
+body[data-mondo="musica"] .indietro-ios { color: #fff; }
+.musica { max-width: 1100px; margin: 0 auto; }
+.ricerca-musica { position: relative; margin: .4rem 0 1.2rem; }
+.ricerca-musica svg { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; fill: none; stroke: #b3b3b3; stroke-width: 2.4; stroke-linecap: round; }
+.ricerca-musica input { min-height: 52px; padding-left: 3.1rem; border-radius: 999px; background: #242424; border: 2px solid transparent; color: #fff; font-size: 1.02rem; }
+.ricerca-musica input:focus { border-color: #fff; background: #2a2a2a; }
+.saluto { font-size: 1.9rem; margin: .4rem 0 1rem; font-weight: 800; letter-spacing: -.01em; }
+
+/* scorciatoie in alto: due colonne di carte basse */
+.scorciatoie { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 8px; margin-bottom: 1.2rem; }
+.scorciatoia {
+  display: flex; align-items: center; gap: .75rem; height: 56px; overflow: hidden; border-radius: 4px;
+  background: rgb(255 255 255 / .08); color: #fff; text-decoration: none; font-weight: 700; font-size: .92rem;
+  transition: background .15s;
+}
+.scorciatoia:hover { background: rgb(255 255 255 / .18); }
+.scorciatoia img, .scorciatoia > span:first-child { width: 56px; height: 56px; object-fit: cover; flex: 0 0 56px; background: #333; }
+.scorciatoia span:last-child { padding-right: .6rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+
+/* righe e carte */
+.riga-musica { margin-top: 1.6rem; }
+.riga-musica h2 { font-size: 1.4rem; font-weight: 800; margin: 0 0 .7rem; letter-spacing: -.01em; }
+.riga-musica > .sottotitolo { margin: -.5rem 0 .7rem; }
+.striscia-musica {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 6px; overflow-x: auto;
+  margin: 0 -10px; padding: 0 2px 8px; scroll-snap-type: x proximity; scrollbar-width: none;
+}
+.striscia-musica::-webkit-scrollbar { display: none; }
+.carta-musica {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: .25rem; padding: 10px; border-radius: 8px;
+  color: #fff; text-decoration: none; cursor: pointer; scroll-snap-align: start; min-width: 0; transition: background .2s;
+}
+.carta-musica:hover { background: #1f1f1f; }
+.carta-musica:focus-visible { outline: var(--focus); outline-offset: 2px; }
+.carta-musica .immagine { position: relative; display: block; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: #282828; box-shadow: 0 8px 24px rgb(0 0 0 / .5); }
+.carta-musica .immagine.tonda { border-radius: 50%; }
+.carta-musica .immagine img { width: 100%; height: 100%; object-fit: cover; }
+.carta-musica .nome { font-weight: 700; font-size: .95rem; margin-top: .45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carta-musica .dettaglio { color: #b3b3b3; font-size: .82rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.play-tondo {
+  position: absolute; right: 8px; bottom: 8px; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--verde-musica, #1ed760); box-shadow: 0 8px 16px rgb(0 0 0 / .4); opacity: 0; transform: translateY(8px); transition: .2s;
+}
+.play-tondo svg, .play-grande svg, .lettore-play svg { width: 22px; height: 22px; fill: #000; }
+.carta-musica:hover .play-tondo, .carta-musica.in-ascolto .play-tondo { opacity: 1; transform: none; }
+
+/* testata di artista e album */
+.testa-musica { position: relative; display: flex; align-items: flex-end; gap: 1.4rem; margin: 0 0 1rem; }
+.testa-artista {
+  min-height: 300px; margin: -1rem calc(-1 * var(--pagina)) 1rem; padding: 0 var(--pagina) 1.4rem;
+  background: linear-gradient(transparent 30%, rgb(18 18 18 / .9)), var(--sfondo-artista) center 25% / cover no-repeat, #333;
+}
+.testa-testo h1 { font-size: clamp(2.2rem, 7vw, 5.5rem); font-weight: 900; letter-spacing: -.03em; line-height: 1; margin: .2rem 0 .5rem; overflow-wrap: anywhere; }
+.etichetta-musica { font-size: .85rem; font-weight: 700; margin: 0; }
+.testa-musica .dettaglio { color: #e0e0e0; font-size: .95rem; margin: 0; }
+.testa-musica .dettaglio a { color: #fff; font-weight: 700; text-decoration: none; }
+.testa-album img { width: min(232px, 45vw); aspect-ratio: 1; object-fit: cover; box-shadow: 0 8px 40px rgb(0 0 0 / .6); border-radius: 4px; }
+.azioni-musica { display: flex; align-items: center; gap: 1.2rem; margin: .4rem 0 1rem; }
+.play-grande {
+  width: 58px; height: 58px; min-height: 0; padding: 0; border-radius: 50%; background: var(--verde-musica, #1ed760); display: grid; place-items: center;
+  border: 0; box-shadow: 0 8px 16px rgb(0 0 0 / .35); transition: transform .12s;
+}
+.play-grande svg { width: 26px; height: 26px; }
+.play-grande:hover { transform: scale(1.05); filter: none !important; }
+.segui { min-height: 36px; padding: 0 1rem; border-radius: 999px; background: transparent; border: 1px solid #878787; color: #fff; font-size: .9rem; }
+.segui:hover { border-color: #fff; filter: none !important; }
+.segui.seguito { border-color: var(--verde-musica, #1ed760); color: var(--verde-musica, #1ed760); }
+
+/* elenchi di brani */
+.elenco-brani { display: flex; flex-direction: column; }
+.riga-brano {
+  all: unset; box-sizing: border-box; display: grid; grid-template-columns: 28px auto 1fr auto; align-items: center; gap: .9rem;
+  padding: .45rem .6rem; border-radius: 6px; cursor: pointer; color: #fff;
+}
+.riga-brano:not(:has(img)) { grid-template-columns: 28px 1fr auto; }
+.riga-brano:hover { background: rgb(255 255 255 / .1); }
+.riga-brano:focus-visible { outline: var(--focus); }
+.riga-brano .numero { color: #b3b3b3; text-align: right; font-variant-numeric: tabular-nums; }
+.riga-brano img { width: 42px; height: 42px; object-fit: cover; border-radius: 4px; }
+.riga-brano .testi { display: flex; flex-direction: column; min-width: 0; }
+.riga-brano .titolo { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.riga-brano .artista { color: #b3b3b3; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.riga-brano .durata { color: #b3b3b3; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.riga-brano.in-ascolto .titolo, .riga-brano.in-ascolto .numero { color: var(--verde-musica, #1ed760); }
+.piccolo { font-size: .78rem; margin-top: 1rem; }
+
+/* mini-lettore delle anteprime */
+.lettore {
+  position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 35; display: flex; align-items: center; gap: .7rem;
+  padding: 8px 10px 10px; border-radius: 8px; background: #3a2f45; box-shadow: 0 10px 30px rgb(0 0 0 / .6); overflow: hidden;
+}
+.lettore img { width: 42px; height: 42px; border-radius: 4px; object-fit: cover; }
+.lettore .testi { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lettore .titolo { font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lettore .artista { color: #d0d0d0; font-size: .8rem; }
+.lettore-play { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 50%; background: #fff; display: grid; place-items: center; border: 0; }
+.lettore-barra { position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; background: rgb(255 255 255 / .25); border-radius: 2px; }
+.lettore-barra span { display: block; height: 100%; width: 0; background: #fff; border-radius: 2px; }
+body.con-lettore main { padding-bottom: 80px; }
+@media (max-width: 760px) {
+  .lettore { bottom: calc(86px + env(safe-area-inset-bottom)); }
+  body.con-lettore:not([data-kids]) { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+  .striscia-musica { grid-auto-columns: 140px; }
+  .saluto { font-size: 1.5rem; }
+  .scorciatoie { grid-template-columns: 1fr 1fr; }
+  .scorciatoia { height: 52px; font-size: .8rem; }
+  .scorciatoia img, .scorciatoia > span:first-child { width: 52px; height: 52px; flex-basis: 52px; }
+  .testa-artista { min-height: 260px; }
+  .testa-album { flex-direction: column; align-items: flex-start; }
+  .testa-album img { width: 62vw; align-self: center; }
+}

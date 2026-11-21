@@ -80,3 +80,43 @@ def test_velocita_tempo_e_fonte():
     telegram = a._da_coda({"downloadId": "t1", "status": "downloading", "size": 1000, "sizeleft": 600,
                            "timeleft": "00:01:00", "downloadClient": "Telegram (tgarr)"}, "Y", "film", [2])
     assert telegram["velocita"] == 10 and telegram["rimanente"] == 60 and telegram["fonte"] == "Telegram"
+
+
+def test_lingua_dalle_tracce_audio_vere():
+    from app.automatici import tracce_audio
+    assert tracce_audio({"audioLanguages": "eng/ita"}) == ["Inglese", "Italiano"]
+    assert tracce_audio({"audioLanguages": ""}) == [] and tracce_audio(None) == []
+    # un "MULTi" con dentro l'italiano è italiano
+    assert lingua_da([{"name": "Lingua · MULTI (lingue non scritte)"}], media={"audioLanguages": "eng/ita"}) == "Italiano"
+    assert lingua_da([{"name": "Lingua · MULTI (lingue non scritte)"}]) == ""
+
+
+def test_controlla_tracce_ferma_solo_i_multi_con_la_prima_lingua():
+    import asyncio
+    from types import SimpleNamespace
+
+    file_multi_ita = {"customFormats": [{"name": "Lingua · MULTI (lingue non scritte)"}],
+                      "mediaInfo": {"audioLanguages": "eng/ita"}}
+    file_multi_eng = {"customFormats": [{"name": "Lingua · MULTI (lingue non scritte)"}],
+                      "mediaInfo": {"audioLanguages": "eng/fre"}}
+    file_ita_720p = {"customFormats": [{"name": "Lingua · Italiano"}], "mediaInfo": {"audioLanguages": "ita"}}
+    chiamate = []
+
+    class Finto:
+        attivo = True
+
+        async def _r(self, metodo, percorso, **kw):
+            chiamate.append((metodo, percorso, kw.get("json")))
+            if percorso == "wanted/cutoff":
+                return {"records": [{"id": 1, "movieFile": file_multi_ita}, {"id": 2, "movieFile": file_multi_eng},
+                                    {"id": 3, "movieFile": file_ita_720p}]}
+
+        async def _api(self, metodo, percorso, **kw):
+            chiamate.append((metodo, percorso, kw.get("json")))
+            if percorso == "wanted/cutoff":
+                return {"records": [{"id": 10, "episodeFile": file_multi_ita}, {"id": 11, "episodeFile": {}}]}
+
+    a = Automatici(SimpleNamespace(lingue_audio=("it", "es", "en")), Finto(), Finto())
+    assert asyncio.run(a.controlla_tracce()) == 2
+    assert ("PUT", "movie/editor", {"movieIds": [1], "monitored": False}) in chiamate
+    assert ("PUT", "episode/monitor", {"episodeIds": [10], "monitored": False}) in chiamate

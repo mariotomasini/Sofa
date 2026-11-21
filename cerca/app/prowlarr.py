@@ -11,6 +11,7 @@ import httpx
 from .archive import normalizza
 from .config import Config
 from .db import Archivio
+from .lingue_release import lingue_audio, lingue_sottotitoli, valuta
 from .rete import ErroreServizio, non_raggiungibile
 
 DIECI_MINUTI = 600
@@ -22,12 +23,12 @@ def _senza_articolo(titolo: str) -> str:
     return " ".join(parole[1:]) if len(parole) > 1 and parole[0] in ARTICOLI else titolo
 
 
-PAROLE_ITALIANO = {"ita", "italian", "italiano", "itaeng", "itaen", "iteng"}
+LINGUE_PREDEFINITE = ("it", "es", "en")
 
 
 def e_italiano(nome: str) -> bool:
-    """Vero se il nome del torrent dice che c'è l'audio italiano (ITA, iTALiAN, ITA-ENG...)."""
-    return bool(set(normalizza(nome).split()) & PAROLE_ITALIANO)
+    """Vero se il nome del torrent dice che c'è l'audio italiano (ITA, iTALiAN, ITA-ENG...), non solo i sottotitoli."""
+    return "it" in lingue_audio(nome)
 
 
 RE_EPISODIO = re.compile(r"\bS(\d{1,2})[ ._-]?E(\d{1,3})\b", re.IGNORECASE)
@@ -74,7 +75,8 @@ def id_risultato(r: dict) -> str:
     return hashlib.sha1(base.encode()).hexdigest()[:16]
 
 
-def riassunto(r: dict) -> dict:
+def riassunto(r: dict, lingue: tuple[str, ...] = LINGUE_PREDEFINITE) -> dict:
+    titolo = r.get("title", "")
     return {
         "id": id_risultato(r),
         "titolo": r.get("title", ""),
@@ -85,14 +87,17 @@ def riassunto(r: dict) -> dict:
         "protocollo": r.get("protocol", ""),
         "pagina": r.get("infoUrl") or "",
         "data": (r.get("publishDate") or "")[:10],
-        "italiano": e_italiano(r.get("title", "")),
+        "italiano": e_italiano(titolo),
+        "sottotitoli_italiano": "it" in lingue_sottotitoli(titolo),
+        "lingue": list(valuta(titolo, lingue)),
     }
 
 
 def ordina(risultati: list[dict]) -> list[dict]:
-    """Prima quelli in italiano, poi i torrent con più seed (scaricano prima e meglio)."""
-    return sorted(risultati, key=lambda r: (r.get("italiano", False), r["protocollo"] == "torrent", r["seed"] or 0),
-                  reverse=True)
+    """Prima la lingua dell'audio preferita, poi MULTI e sottotitoli (lingue_release.valuta),
+    poi i torrent con più seed (scaricano prima e meglio)."""
+    return sorted(risultati, key=lambda r: (tuple(r.get("lingue") or (r.get("italiano", False),)),
+                                            r["protocollo"] == "torrent", r["seed"] or 0), reverse=True)
 
 
 class Prowlarr:
@@ -143,7 +148,7 @@ class Prowlarr:
         await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
         torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
         coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, anno)]
-        risultati = ordina([riassunto(r) for r in coerenti])
+        risultati = ordina([riassunto(r, self.config.lingue_audio) for r in coerenti])
         risposta = {"risultati": risultati[:60], "indexer": len(attivi), "scartati": len(torrent) - len(coerenti)}
         if not risultati and torrent:
             risposta.update(
@@ -177,7 +182,8 @@ class Prowlarr:
         await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:serie:{serie_id}", grezzi, 6 * 3600)
         torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
         coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, "")]
-        risultati = ordina([{**riassunto(r), "contenuto": contenuto(r.get("title", ""))} for r in coerenti])
+        risultati = ordina([{**riassunto(r, self.config.lingue_audio), "contenuto": contenuto(r.get("title", ""))}
+                            for r in coerenti])
         risposta = {"risultati": risultati[:60], "indexer": len(attivi)}
         if not risultati:
             risposta.update(avviso="Nessuna puntata trovata sui tuoi indexer.",

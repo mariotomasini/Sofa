@@ -17,7 +17,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import diagnosi
 from . import home as home_netflix
@@ -27,10 +27,13 @@ from .avvisami import Avvisami
 from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
+from .deezer import Deezer
 from .download import GestoreDownload, e_magnet, nome_da_magnet
+from .gruppi_download import raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
 from .musica import Musica
+from .ordine_download import OrdineDownload
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
@@ -83,7 +86,9 @@ class Servizi:
         self.serie = Serie(config, client)
         self.download.serie = self.serie
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
+        self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
+        self.deezer = Deezer(self.archivio, client)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
 
@@ -123,6 +128,8 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(300, manutenzione_cache(servizi.archivio))),
             asyncio.create_task(dopo(90, servizi.serie.sorveglia_importazioni(servizi.jellyfin))),
             asyncio.create_task(servizi.automatici.ricerca_notturna()),
+            asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
+            asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
         ]
         log.info("Cerca è pronto")
         yield
@@ -201,11 +208,16 @@ def in_kids(request: Request) -> bool:
     return request.cookies.get(COOKIE_KIDS) == "si"
 
 
+PAGINE_INIZIALI = {"home.html", "mondo.html", "musica.html"}
+
+
 def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     s = servizi(request)
     contesto.setdefault("errore", None)
     contesto.setdefault("mondo", "kids" if in_kids(request) else "film")
     contesto.setdefault("sezione", "cerca")
+    # il tasto "‹ Indietro" in alto a sinistra: ovunque tranne nelle pagine iniziali dei mondi
+    contesto.setdefault("indietro", nome not in PAGINE_INIZIALI)
     attivi = [d for d in s.archivio.elenco_download(60) if d["stato"] in ("in_corso", "completato", "importazione")]
     return modelli.TemplateResponse(
         request,
@@ -353,6 +365,21 @@ async def pagina_download(request: Request):
 @app.get("/musica", response_class=HTMLResponse)
 async def pagina_musica(request: Request):
     return solo_adulti(request) or pagina(request, "musica.html", mondo="musica")
+
+
+@app.get("/musica/artista/{id_artista}", response_class=HTMLResponse)
+async def pagina_artista(request: Request, id_artista: int):
+    return solo_adulti(request) or pagina(request, "musica_artista.html", mondo="musica", id_artista=id_artista)
+
+
+@app.get("/musica/album/{id_album}", response_class=HTMLResponse)
+async def pagina_album_musica(request: Request, id_album: int):
+    return solo_adulti(request) or pagina(request, "musica_album.html", mondo="musica", id_album=id_album)
+
+
+@app.get("/musica/cerca", response_class=HTMLResponse)
+async def pagina_cerca_musica(request: Request, q: str = ""):
+    return solo_adulti(request) or pagina(request, "musica_cerca.html", mondo="musica", q=q.strip())
 
 
 @app.get("/spazio", response_class=HTMLResponse)
@@ -505,6 +532,42 @@ async def api_genere(request: Request, genere: int, mondo: str = "film", pagina:
 @app.get("/api/musica/per-te")
 async def api_musica_per_te(request: Request):
     return await servizi(request).musica.per_te()
+
+
+@app.get("/api/musica/home")
+async def api_musica_home(request: Request):
+    s = servizi(request)
+    return await s.musica.home(s.deezer)
+
+
+@app.get("/api/musica/artista/{id_artista}")
+async def api_musica_artista(request: Request, id_artista: int):
+    return await servizi(request).deezer.pagina_artista(id_artista)
+
+
+@app.get("/api/musica/album/{id_album}")
+async def api_musica_album(request: Request, id_album: int):
+    return await servizi(request).deezer.pagina_album(id_album)
+
+
+@app.get("/api/musica/cerca")
+async def api_musica_cerca(request: Request, q: str):
+    return await servizi(request).deezer.cerca(q.strip())
+
+
+@app.get("/api/musica/anteprima/{id_brano}")
+async def api_musica_anteprima(request: Request, id_brano: int):
+    return await servizi(request).deezer.anteprima(id_brano)
+
+
+class RichiestaSeguiArtista(BaseModel):
+    nome: str
+
+
+@app.post("/api/musica/segui")
+async def api_musica_segui(request: Request, dati: RichiestaSeguiArtista):
+    """"Segui" un artista: Lidarr scarica i suoi album."""
+    return {"messaggio": await servizi(request).musica.segui_per_nome(dati.nome.strip())}
 
 
 @app.get("/api/musica/tendenze")
@@ -702,6 +765,26 @@ async def api_torrent(
         fonte="manuale", categoria="manuale", film=film, titolo=titolo, magnet=magnet, file_torrent=contenuto
     )
     return {"id": id_download, "messaggio": "Torrent aggiunto: lo trovi nella pagina Download."}
+
+
+@app.get("/api/download/gruppi")
+async def api_download_gruppi(request: Request):
+    """La pagina Download: una scheda per film o serie, con la copertina e lo stato di ogni voce."""
+    s = servizi(request)
+    coda, attesa = await asyncio.gather(s.automatici.coda(), s.automatici.in_attesa())
+    cerca = (await api_download(request))["download"]
+    return {"gruppi": raggruppa(coda, attesa, cerca, s.automatici.preferita), "lingua_preferita": s.automatici.preferita}
+
+
+class Prima(BaseModel):
+    hash: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+
+
+@app.post("/api/download/prima")
+async def api_download_prima(request: Request, corpo: Prima):
+    """Mette il torrent in cima alla coda: parte appena si libera un posto."""
+    await servizi(request).ordine.scarica_prima(corpo.hash)
+    return {"messaggio": "Fatto: questa parte per prima, appena finisce uno dei download in corso."}
 
 
 @app.get("/api/download")

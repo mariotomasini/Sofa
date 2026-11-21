@@ -2,20 +2,23 @@
 {% block titolo %}Download{% endblock %}
 {% block contenuto %}
 <h1 class="titolo-pagina">Download</h1>
-<p class="sottotitolo">La pagina si aggiorna da sola. Quando un film è "Pronto in Jellyfin" lo trovi nella libreria Film.</p>
-<section id="sezione-automatici">
-  <h2>In corso, in coda e da trovare</h2>
-  <div id="elenco-automatici" class="elenco-download"><p class="caricamento">Carico…</p></div>
-</section>
-<section id="sezione-attesa" hidden>
-  <h2 id="titolo-attesa">In attesa della versione nella tua lingua</h2>
-  <p class="sottotitolo">Li hai già, ma in un'altra lingua: appena esce la versione nella lingua preferita
-    li sostituisco da solo. Ogni notte li ricerco tutti.</p>
-  <div id="elenco-attesa" class="elenco-download"></div>
-  <button type="button" class="secondario" id="cerca-ora">Cerca adesso</button>
-</section>
-<h2>Torrent aggiunti a mano</h2>
-<div id="elenco-download" class="elenco-download"><p class="caricamento">Carico…</p></div>
+<p class="sottotitolo">Tocca una copertina per vedere lo stato di ogni film o puntata. La pagina si aggiorna da sola.</p>
+<div id="griglia-download" class="griglia griglia-download" aria-live="polite"><p class="caricamento">Carico…</p></div>
+<p class="centrato"><button type="button" class="secondario" id="cerca-ora">Cerca adesso quello che manca</button></p>
+
+<dialog id="dettaglio-download" aria-labelledby="dettaglio-titolo">
+  <div class="modulo">
+    <div class="dettaglio-testa">
+      <span id="dettaglio-copertina" class="dettaglio-copertina"></span>
+      <div>
+        <h2 id="dettaglio-titolo"></h2>
+        <p id="dettaglio-stato" class="sottotitolo"></p>
+      </div>
+    </div>
+    <div id="dettaglio-voci" class="elenco-download dettaglio-voci"></div>
+    <div class="azioni-riga"><button type="button" class="secondario" id="dettaglio-chiudi">Chiudi</button></div>
+  </div>
+</dialog>
 
 <dialog id="dialogo-associa" aria-labelledby="titolo-associa">
   <form method="dialog" class="modulo">
@@ -31,4 +34,4 @@
   </form>
 </dialog>
 {% endblock %}
-{% block script %}<script>avviaDownload({ soloAttivi: false });</script>{% endblock %}
+{% block script %}<script>avviaPaginaDownload();</script>{% endblock %}

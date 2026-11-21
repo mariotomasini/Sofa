@@ -12,9 +12,11 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import re
 import time
 
 from .config import Config
+from .ordine_download import posizioni
 from .radarr import Radarr
 from .serie import Serie
 
@@ -24,16 +26,28 @@ NOMI = {"it": "Italiano", "es": "Spagnolo", "fr": "Francese", "de": "Tedesco", "
 DA_INGLESE = {"Italian": "Italiano", "Spanish": "Spagnolo", "French": "Francese", "German": "Tedesco",
               "Portuguese": "Portoghese", "English": "Inglese"}
 PREFISSO = "Lingua · "
+# Le tracce audio vere del file, come le legge Radarr/Sonarr (mediaInfo.audioLanguages = "eng/ita")
+DA_ISO = {"ita": "Italiano", "spa": "Spagnolo", "fre": "Francese", "fra": "Francese", "ger": "Tedesco",
+          "deu": "Tedesco", "por": "Portoghese", "eng": "Inglese"}
+OGNI_CONTROLLO_TRACCE = 1800
 ORA_RICERCA = 4  # di notte, quando nessuno guarda
 CACHE_ATTESA = 600
 
 
+def tracce_audio(media: dict | None) -> list[str]:
+    """Le lingue delle tracce audio del file ("eng/ita" → ["Inglese", "Italiano"])."""
+    codici = re.split(r"[/,| ]+", ((media or {}).get("audioLanguages") or "").lower())
+    return list(dict.fromkeys(DA_ISO[c] for c in codici if c in DA_ISO))
+
+
 def lingua_da(formati: list[dict] | None, lingue: list[dict] | None = None,
-              ordine: tuple[str, ...] = ("it", "es", "en")) -> str:
-    """La lingua dell'audio: dai formati di mediabox ("Lingua · Spagnolo"), se no da quella letta da Radarr.
+              ordine: tuple[str, ...] = ("it", "es", "en"), media: dict | None = None) -> str:
+    """La lingua dell'audio: dalle tracce vere del file se ci sono, se no dai formati di mediabox
+    ("Lingua · Spagnolo"), se no da quella letta da Radarr.
     Con più lingue (es. ITA.SPA) conta quella più in alto nelle preferenze."""
-    trovate = [f.get("name", "").removeprefix(PREFISSO) for f in formati or []
-               if f.get("name", "").startswith(PREFISSO) and f.get("name") != PREFISSO + "MULTI"]
+    trovate = tracce_audio(media) or [
+        f.get("name", "").removeprefix(PREFISSO) for f in formati or []
+        if f.get("name", "").startswith(PREFISSO) and not f.get("name", "").startswith(PREFISSO + "MULTI")]
     if not trovate:
         trovate = [DA_INGLESE[x["name"]] for x in lingue or [] if x.get("name") in DA_INGLESE]
     if not trovate:
@@ -85,6 +99,26 @@ def fonte(r: dict) -> str:
     return "Telegram" if "tgarr" in client or "telegram" in client or r.get("protocol") == "usenet" else "Torrent"
 
 
+def copertina(oggetto: dict | None) -> str:
+    """La locandina di un film o di una serie di Radarr/Sonarr, nella misura piccola."""
+    for immagine in (oggetto or {}).get("images") or []:
+        if immagine.get("coverType") == "poster":
+            url = immagine.get("remoteUrl") or ""
+            return url.replace("/t/p/original/", "/t/p/w342/")
+    return ""
+
+
+def gruppo_film(film: dict, id_film: int | None) -> dict:
+    return {"gruppo": f"film:{id_film or film.get('id')}", "gruppo_titolo": titolo_film(film),
+            "poster": copertina(film), "voce": "Film"}
+
+
+def gruppo_serie(serie: dict | None, id_serie: int | None, voce: str) -> dict:
+    serie = serie or {}
+    return {"gruppo": f"serie:{id_serie or serie.get('id')}", "gruppo_titolo": serie.get("title") or "Serie",
+            "poster": copertina(serie), "voce": voce}
+
+
 def percentuale(totale: float, mancante: float) -> float:
     return round(100 * (1 - mancante / totale), 1) if totale else 0.0
 
@@ -100,6 +134,7 @@ class Automatici:
         self.qbit = qbit
         self._campioni: dict[str, tuple[float, int]] = {}
         self._velocita_qbit: dict[str, int] = {}
+        self._posti_qbit: dict[str, int] = {}
         self.radarr = radarr
         self.serie = serie
         self._attesa: tuple[float, list[dict]] | None = None
@@ -109,7 +144,8 @@ class Automatici:
         return NOMI.get(self.config.lingue_audio[0], "Italiano")
 
     def _lingua(self, dati: dict) -> str:
-        return lingua_da(dati.get("customFormats"), dati.get("languages"), self.config.lingue_audio)
+        return lingua_da(dati.get("customFormats"), dati.get("languages"), self.config.lingue_audio,
+                         dati.get("mediaInfo"))
 
     def _voce(self, titolo: str, dettaglio: str, lingua: str, **altro) -> dict:
         return {
@@ -140,7 +176,15 @@ class Automatici:
         return self._voce(titolo, r.get("title", ""), self._lingua(r), tipo=tipo, ids=ids, stato=stato,
                           stato_testo=testo, percentuale=percentuale(r.get("size", 0), r.get("sizeleft", 0)),
                           dimensione=r.get("size", 0), velocita=velocita, rimanente=rimanente, fonte=fonte(r),
-                          annullabile=True, ricercabile=False)
+                          annullabile=True, ricercabile=False, **self._posto(r, stato))
+
+    def _posto(self, r: dict, stato: str) -> dict:
+        """L'hash del torrent e il suo posto nella coda di qBittorrent (per "Scarica prima questa")."""
+        hash_torrent = (r.get("downloadId") or "").lower()
+        if (r.get("protocol") or "torrent") != "torrent" or not hash_torrent:
+            return {}
+        posto = self._posti_qbit.get(hash_torrent, 0)
+        return {"hash": hash_torrent, "posto": posto, "anticipabile": stato == "coda" and posto > 1}
 
     async def _leggi_qbit(self) -> None:
         if self.qbit is None:
@@ -148,8 +192,10 @@ class Automatici:
         try:
             torrent = await self.qbit.tutti()
             self._velocita_qbit = {t.get("hash", "").lower(): int(t.get("dlspeed") or 0) for t in torrent}
+            self._posti_qbit = {h.lower(): p for h, p in posizioni(torrent).items()}
         except Exception:  # noqa: BLE001 - senza qBittorrent la velocità si stima
             self._velocita_qbit = {}
+            self._posti_qbit = {}
 
     async def coda(self) -> list[dict]:
         """Tutto quello che Radarr e Sonarr stanno scaricando o cercando, con lo stato in parole semplici."""
@@ -162,7 +208,8 @@ class Automatici:
             for r in (dati or {}).get("records", []):
                 film = r.get("movie") or {}
                 in_coda_film.add(r.get("movieId"))
-                voci.append(self._da_coda(r, titolo_film(film, r.get("title", "")), "film", [r.get("movieId")]))
+                voci.append({**self._da_coda(r, titolo_film(film, r.get("title", "")), "film", [r.get("movieId")]),
+                             **gruppo_film(film, r.get("movieId"))})
             mancanti = await self.radarr._r("GET", "wanted/missing", params={"pageSize": 100, "monitored": "true"})
             for m in (mancanti or {}).get("records", []):
                 if m.get("id") in in_coda_film:
@@ -172,7 +219,8 @@ class Automatici:
                     titolo_film(m), "", "", tipo="film", ids=[m["id"]], stato="cerco" if uscito else "non_uscito",
                     stato_testo=("Cerco una fonte: riprovo da solo appena esce una versione e ogni notte" if uscito
                                  else "Non è ancora uscito: lo scarico appena è disponibile"),
-                    percentuale=0, dimensione=0, annullabile=True, ricercabile=uscito, senza_lingua=True))
+                    percentuale=0, dimensione=0, annullabile=True, ricercabile=uscito, senza_lingua=True,
+                    **gruppo_film(m, m.get("id"))))
         except Exception:  # noqa: BLE001 - se Radarr non risponde la pagina mostra il resto
             log.warning("Coda di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
@@ -182,19 +230,23 @@ class Automatici:
                 for r in (dati or {}).get("records", []):
                     in_coda_puntate.add(r.get("episodeId"))
                     titolo = f"{(r.get('series') or {}).get('title', '')} · {episodio(r.get('episode'))}"
-                    voci.append(self._da_coda(r, titolo, "serie", [r.get("episodeId")]))
+                    voci.append({**self._da_coda(r, titolo, "serie", [r.get("episodeId")]),
+                                 **gruppo_serie(r.get("series"), r.get("seriesId"), episodio(r.get("episode")))})
                 mancanti = await self.serie._api("GET", "wanted/missing", params={
                     "pageSize": 200, "monitored": "true", "includeSeries": "true"})
-                per_serie: dict[str, list[int]] = {}
+                per_serie: dict[int, tuple[dict, list[int]]] = {}
                 for e in (mancanti or {}).get("records", []):
                     if e.get("id") not in in_coda_puntate:
-                        per_serie.setdefault((e.get("series") or {}).get("title", "Serie"), []).append(e["id"])
-                for nome, ids in per_serie.items():
+                        serie = e.get("series") or {}
+                        per_serie.setdefault(e.get("seriesId") or serie.get("id") or 0, (serie, []))[1].append(e["id"])
+                for id_serie, (serie, ids) in per_serie.items():
                     quante = "1 puntata" if len(ids) == 1 else f"{len(ids)} puntate"
+                    nome = serie.get("title") or "Serie"
                     voci.append(self._voce(
                         f"{nome} · {quante} da trovare", "", "", tipo="serie", ids=ids, stato="cerco",
                         stato_testo="Cerco una fonte: riprovo da solo appena escono e ogni notte",
-                        percentuale=0, dimensione=0, annullabile=True, ricercabile=True, senza_lingua=True))
+                        percentuale=0, dimensione=0, annullabile=True, ricercabile=True, senza_lingua=True,
+                        **gruppo_serie(serie, id_serie, f"{quante} da trovare")))
             except Exception:  # noqa: BLE001
                 log.warning("Coda di Sonarr non disponibile", exc_info=True)
         return voci
@@ -251,7 +303,8 @@ class Automatici:
                 file = m.get("movieFile") or {}
                 lingua = self._lingua(file)
                 titolo = f"{m.get('title', '')} ({m.get('year', '')})".replace(" ()", "")
-                voci.append(self._voce(titolo, file.get("relativePath", ""), lingua, tipo="film"))
+                voci.append(self._voce(titolo, file.get("relativePath", ""), lingua, tipo="film",
+                                       **gruppo_film(m, m.get("id"))))
         except Exception:  # noqa: BLE001
             log.warning("Elenco da migliorare di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
@@ -261,8 +314,8 @@ class Automatici:
                 for e in (dati or {}).get("records", []):
                     file = e.get("episodeFile") or {}
                     titolo = f"{(e.get('series') or {}).get('title', '')} · {episodio(e)}"
-                    voci.append(self._voce(titolo, file.get("relativePath", ""),
-                                           self._lingua(file), tipo="serie"))
+                    voci.append(self._voce(titolo, file.get("relativePath", ""), self._lingua(file), tipo="serie",
+                                           **gruppo_serie(e.get("series"), e.get("seriesId"), episodio(e))))
             except Exception:  # noqa: BLE001
                 log.warning("Elenco da migliorare di Sonarr non disponibile", exc_info=True)
         voci = [v for v in voci if not v["preferita"]]
@@ -276,6 +329,49 @@ class Automatici:
             await self.serie._api("POST", "command", json={"name": "CutoffUnmetEpisodeSearch"})
             await self.serie._api("POST", "command", json={"name": "MissingEpisodeSearch"})
         self._attesa = None
+
+    def _gia_buono(self, file: dict) -> bool:
+        """Il nome non dichiara la prima lingua (es. "MULTi"), ma le tracce audio del file sì."""
+        prima = self.preferita
+        dichiarata = any(f.get("name") == PREFISSO + prima for f in file.get("customFormats") or [])
+        return not dichiarata and prima in tracce_audio(file.get("mediaInfo"))
+
+    async def controlla_tracce(self) -> int:
+        """Ferma la ricerca di una versione migliore per i file che hanno già l'audio nella prima lingua.
+
+        Radarr e Sonarr giudicano dal nome: un "MULTi" con dentro l'italiano resterebbe "da
+        migliorare" per sempre e verrebbe sostituito senza motivo. Restano scaricati e in
+        Jellyfin; non si cercano più (film o puntata non più "monitorati").
+        """
+        fermati = 0
+        try:
+            dati = await self.radarr._r("GET", "wanted/cutoff", params={"pageSize": 200})
+            film = [m["id"] for m in (dati or {}).get("records", []) if self._gia_buono(m.get("movieFile") or {})]
+            if film:
+                await self.radarr._r("PUT", "movie/editor", json={"movieIds": film, "monitored": False})
+                fermati += len(film)
+        except Exception:  # noqa: BLE001
+            log.warning("Controllo delle tracce audio in Radarr non riuscito", exc_info=True)
+        if self.serie.attivo:
+            try:
+                dati = await self.serie._api("GET", "wanted/cutoff", params={
+                    "pageSize": 500, "includeEpisodeFile": "true"})
+                puntate = [e["id"] for e in (dati or {}).get("records", [])
+                           if self._gia_buono(e.get("episodeFile") or {})]
+                if puntate:
+                    await self.serie._api("PUT", "episode/monitor", json={"episodeIds": puntate, "monitored": False})
+                    fermati += len(puntate)
+            except Exception:  # noqa: BLE001
+                log.warning("Controllo delle tracce audio in Sonarr non riuscito", exc_info=True)
+        if fermati:
+            log.info("%s file hanno già l'audio in %s: non cerco altre versioni", fermati, self.preferita.lower())
+            self._attesa = None
+        return fermati
+
+    async def ciclo_tracce(self) -> None:
+        while True:
+            await self.controlla_tracce()
+            await asyncio.sleep(OGNI_CONTROLLO_TRACCE)
 
     async def ricerca_notturna(self) -> None:
         while True:
