@@ -143,9 +143,9 @@ def test_profilo_qualita_radarr():
     assert not ammessi & {"Remux-1080p", "Bluray-2160p", "CAM", "BR-DISK", "WEBDL-2160p"}
     assert not any(e.get("allowed") for e in profilo["items"][:-1])
     punti = {f["name"]: f["score"] for f in profilo["formatItems"]}
-    assert punti == {"Lingua · Italiano": 10000, "Lingua · Spagnolo": 5000, "Lingua · Inglese": 2500,
+    assert punti == {"Lingua · Italiano": 64000, "Lingua · Spagnolo": 32000, "Lingua · Inglese": 16000,
                      "Lingua · Tedesco": 0, "Qualità · 1080p": 200, "Formato dell'utente": 0}
-    assert profilo["minFormatScore"] == 0 and profilo["cutoffFormatScore"] == 10200
+    assert profilo["minFormatScore"] == 0 and profilo["cutoffFormatScore"] == 64200
     assert profilo["name"] == "Migliore disponibile" and profilo["upgradeAllowed"]
     assert profilo["language"]["id"] == -1
 
@@ -482,21 +482,55 @@ def test_regex_multi_non_conta_i_sottotitoli(nome, multi):
     assert bool(re.search(RE_MULTI.removeprefix("(?i)"), nome, re.I)) is multi
 
 
+def _punti(nome, lingue=("it", "es", "en"), risoluzione=1080):
+    """Il punteggio che darebbero Radarr e Sonarr a una release con questo nome."""
+    from configuratore.servizi.formati import formati
+    totale = 0
+    for _, (p, condizioni) in formati(list(lingue)).items():
+        esiti = []
+        for tipo, valore, negata, _ in condizioni:
+            vero = (bool(re.search(valore.removeprefix("(?i)"), nome, re.I)) if tipo == "titolo"
+                    else valore == risoluzione)
+            esiti.append(vero != negata)
+        if all(esiti):
+            totale += p
+    return totale
+
+
 def test_solo_sottotitoli_non_raggiunge_il_limite():
     """Una puntata con l'italiano solo nei sottotitoli resta sotto il limite: si cerca ancora l'audio italiano."""
-    from configuratore.servizi.formati import PUNTI_1080P, PUNTI_LINGUA, formati
-    definiti = formati(["it", "es", "en"])
-
-    def punti(nome):
-        totale = PUNTI_1080P
-        for _, (p, condizioni) in definiti.items():
-            for tipo, valore, negata, _ in condizioni:
-                if tipo == "titolo" and bool(re.search(valore.removeprefix("(?i)"), nome, re.I)) != negata:
-                    totale += p
-                    break
-        return totale
-
+    from configuratore.servizi.formati import PUNTI_1080P, PUNTI_LINGUA
     limite = PUNTI_LINGUA[0] + PUNTI_1080P
-    assert punti("Serie.S01E02.1080p.WEB.ENG.ITA.SUB") < limite
-    assert punti("Serie.S01E02.1080p.WEB.ITA.ENG") >= limite
-    assert punti("Serie.S01E02.1080p.WEB.ITA.ENG") > punti("Serie.S01E02.1080p.WEB.ENG.ITA.SUB")
+    assert _punti("Serie.S01E02.1080p.WEB.ENG.ITA.SUB") < limite
+    assert _punti("Serie.S01E02.1080p.WEB.ITA.ENG") >= limite
+
+
+@pytest.mark.parametrize("migliore, peggiore", [
+    # la prima lingua dell'audio vince sempre, anche contro MULTI, multi-sub e sottotitoli
+    ("Serie.S01E01.720p.ITA", "Serie.S01E01.1080p.MULTi.Audio.SPA.Multi.Sub.Sub.ITA"),
+    ("Serie.S01E01.720p.SPA", "Serie.S01E01.1080p.MULTi.Multi.Subs.ENG.Sub.ITA"),
+    # stesso audio: prima i sottotitoli nella prima lingua, poi i multi-sub
+    ("Serie.S01E01.1080p.ITA.ENG.Sub.ITA", "Serie.S01E01.1080p.ITA.ENG"),
+    ("Serie.S01E01.1080p.ENG.Sub.ITA", "Serie.S01E01.1080p.ENG.Sub.SPA"),
+    ("Serie.S01E01.1080p.ENG.Sub.SPA", "Serie.S01E01.1080p.ENG.Multi.Sub"),
+    ("Serie.S01E01.1080p.ENG.Multi.Sub", "Serie.S01E01.1080p.ENG"),
+    # stessa lingua: multi audio prima del solo audio
+    ("Serie.S01E01.1080p.ITA.MULTi.Audio", "Serie.S01E01.1080p.ITA"),
+    # "MULTi" senza lingue: almeno inglese, ma sotto lo spagnolo
+    ("Serie.S01E01.1080p.MULTi", "Serie.S01E01.1080p.ENG"),
+    ("Serie.S01E01.1080p.SPA", "Serie.S01E01.1080p.MULTi"),
+])
+def test_prima_l_audio_poi_i_sottotitoli(migliore, peggiore):
+    assert _punti(migliore) > _punti(peggiore)
+
+
+def test_prima_lingua_dalle_impostazioni():
+    """Con LINGUE_AUDIO=es,it a vincere è lo spagnolo, anche nei sottotitoli."""
+    assert _punti("Serie.S01E01.720p.SPA", ("es", "it")) > _punti("Serie.S01E01.1080p.ITA.Sub.ITA", ("es", "it"))
+    assert _punti("Serie.S01E01.ENG.Sub.SPA", ("es", "it")) > _punti("Serie.S01E01.ENG.Sub.ITA", ("es", "it"))
+
+
+def test_i_bonus_non_superano_mai_una_lingua():
+    from configuratore.servizi.formati import PUNTI_1080P, PUNTI_LINGUA, PUNTI_MULTI, PUNTI_MULTI_SUB, PUNTI_SUB
+    bonus = PUNTI_MULTI + PUNTI_MULTI_SUB + sum(PUNTI_SUB) + PUNTI_1080P
+    assert all(a - b > bonus for a, b in zip(PUNTI_LINGUA, [*PUNTI_LINGUA[1:], 0], strict=True))

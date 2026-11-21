@@ -6,6 +6,8 @@ Valgono per Radarr e per Sonarr (stessa API v3). L'idea:
   e Sonarr non scelgono per qualità ma per punteggio dei formati;
 - la lingua dell'audio vale molto più di qualsiasi differenza di qualità, nell'ordine
   di LINGUE_AUDIO (predefinito: italiano, poi spagnolo, poi inglese);
+- a parità di audio contano i sottotitoli (prima lingua, poi le altre), il MULTI e i
+  multi-sub, poi la qualità;
 - se non c'è la prima lingua scarica comunque la versione migliore, e appena
   esce nella lingua preferita la sostituisce da solo (aggiornamento per punteggio).
 """
@@ -49,22 +51,42 @@ LINGUE: dict[str, tuple[str, str | None]] = {
     "pt": ("Portoghese", "portuguese|por|pt-?br|dublado"),
     "en": ("Inglese", None),
 }
-# altre lingue frequenti: se ci sono, la release non è "solo inglese"
-ALTRE_LINGUE = "rus|russian|hindi|hin|tamil|telugu|kor|korean|jap|japanese|chi|chinese|tur|turkish|pol|polish|multi|dual"
+# altre lingue frequenti: se ci sono, la release non è "solo inglese". "MULTi" senza
+# lingue elencate conta come inglese (c'è quasi sempre) più il bonus MULTI.
+ALTRE_LINGUE = "rus|russian|hindi|hin|tamil|telugu|kor|korean|jap|japanese|chi|chinese|tur|turkish|pol|polish"
 LINGUE_PREDEFINITE = ["it", "es", "en"]
 
+# Le parole dei sottotitoli per lingua (l'inglese qui si scrive: "Sub ENG")
+PAROLE_SUB = {c: p or "eng|english" for c, (_, p) in LINGUE.items()}
+
+
+def sottotitoli(parole: str) -> str:
+    """Sottotitoli in quella lingua: "Sub.ITA", "Sub ENG-ITA", "ITA.SUB", "SUBITA"."""
+    return (rf"(?i)\b({SUB})[ ._-]*([a-z]{{3}}[ ._-]+){{0,2}}({parole})\b"
+            rf"|\b({parole})[ ._-]*({SUB})\b|\bsub({parole})\b")
+
+
 RE_AUDIO_ITA = audio(LINGUE["it"][1])
-ITA = "ita|italian|italiano"
-RE_SUB_ITA = (rf"(?i)\b({SUB})[ ._-]*([a-z]{{3}}[ ._-]+){{0,2}}({ITA})\b"
-              rf"|\b({ITA})[ ._-]*({SUB})\b|\bsubita\b")
-RE_MULTI = rf"(?i)\b(multi|dual)\b(?![ ._-]*({SUB})\b)"
+RE_SUB_ITA = sottotitoli(PAROLE_SUB["it"])
+# Più lingue nell'audio ("MULTi", "Multi Audio", "DUAL"), ma non "Multi-Sub"
+RE_MULTI = rf"(?i)\b(multi|dual)\b(?![ ._-]*({SUB})\b)|\b(multi|dual)audio\b"
+# Sottotitoli in tante lingue: "Multi Sub", "MultiSubs"
+RE_MULTI_SUB = r"(?i)\b(multi[ ._-]*subs?|multisubs?)\b"
 RE_STRANIERO = audio("|".join([p for _, p in LINGUE.values() if p] + [ALTRE_LINGUE]))
 # Audio preso dal cinema (MD = mic dubbed, LD = line dubbed): la lingua c'è, ma scarsa
 RE_AUDIO_CINEMA = r"(?i)\b(md|ld|mic[ ._-]?dubbed|line[ ._-]?dubbed)\b"
 RE_3D = r"(?i)\b(3d|sbs|half[ ._-]?ou)\b"
 
-PUNTI_LINGUA = [10000, 5000, 2500, 1250, 600, 300]
+# Punti, dal più importante: la lingua dell'audio decide sempre. Tra una lingua e la
+# successiva ci sono 2000 punti, più di tutti gli altri bonus insieme (MULTI 1000,
+# sottotitoli 400+150+50, multi-sub 100, 1080p 200 = 1900): i sottotitoli e il MULTI
+# scelgono solo tra versioni con lo stesso audio.
+PUNTI_LINGUA = [64000, 32000, 16000, 8000, 4000, 2000]
+PUNTI_SUB = [400, 150, 50]  # sottotitoli nella prima, seconda, terza lingua
+PUNTI_MULTI = 1000
+PUNTI_MULTI_SUB = 100
 PUNTI_1080P = 200
+PUNTI_720P = 100
 # nomi usati dalle versioni precedenti di mediabox: si tolgono
 OBSOLETI = ("ITA · Audio italiano", "ITA · MULTI", "ITA · Sottotitoli italiani")
 
@@ -86,6 +108,13 @@ def condizioni_lingua(codice: str) -> list[Condizione]:
     return [("titolo", audio(parole), False, False)]
 
 
+def _per_posto(punti: list[int], lingue: list[str], codice: str) -> int:
+    if codice not in lingue:
+        return 0
+    posto = lingue.index(codice)
+    return punti[posto] if posto < len(punti) else 0
+
+
 def formati(lingue: list[str]) -> dict[str, tuple[int, list[Condizione]]]:
     """nome → (punti, condizioni). Tutte le lingue esistono; quelle non scelte valgono 0."""
     elenco: dict[str, tuple[int, list[Condizione]]] = {}
@@ -93,14 +122,17 @@ def formati(lingue: list[str]) -> dict[str, tuple[int, list[Condizione]]]:
         posto = lingue.index(codice) if codice in lingue else None
         punti = PUNTI_LINGUA[min(posto, len(PUNTI_LINGUA) - 1)] if posto is not None else 0
         elenco[nome_lingua(codice)] = (punti, condizioni_lingua(codice))
+    for codice, (nome, _) in LINGUE.items():
+        elenco[f"Sottotitoli · {nome}"] = (_per_posto(PUNTI_SUB, lingue, codice),
+                                           [("titolo", sottotitoli(PAROLE_SUB[codice]), False, False)])
     elenco.update({
-        "Lingua · MULTI": (1000, [("titolo", RE_MULTI, False, False)]),
-        "Sottotitoli · Italiano": (300 if "it" in lingue else 0, [("titolo", RE_SUB_ITA, False, False)]),
+        "Lingua · MULTI": (PUNTI_MULTI, [("titolo", RE_MULTI, False, False)]),
+        "Sottotitoli · Multi": (PUNTI_MULTI_SUB, [("titolo", RE_MULTI_SUB, False, False)]),
         "Qualità · 1080p": (PUNTI_1080P, [("risoluzione", 1080, False, True)]),
-        "Qualità · 720p": (100, [("risoluzione", 720, False, True)]),
+        "Qualità · 720p": (PUNTI_720P, [("risoluzione", 720, False, True)]),
         # -3000: una prima lingua dal cinema batte ancora una seconda lingua pulita
         "Scarto · Audio dal cinema (MD/LD)": (-3000, [("titolo", RE_AUDIO_CINEMA, False, False)]),
-        "Scarto · 3D": (-20000, [("titolo", RE_3D, False, False)]),
+        "Scarto · 3D": (-200000, [("titolo", RE_3D, False, False)]),
     })
     return elenco
 
