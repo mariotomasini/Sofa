@@ -192,7 +192,8 @@ class Musica:
                 log.info("Musica: una parte della home non è disponibile (%s)", exc)
                 return predefinito
 
-        ascoltati, consigli, top, dischi, famosi = await asyncio.gather(
+        preferiti, ascoltati, consigli, top, dischi, famosi = await asyncio.gather(
+            mai_errore(self.jellyfin.brani(limite=500), []),
             mai_errore(self.jellyfin.artisti_piu_ascoltati(limite=12), []),
             mai_errore(self.per_te(), {}),
             mai_errore(deezer.top_italia(), []),
@@ -206,6 +207,9 @@ class Musica:
         dal = (oggi - dt.timedelta(days=120)).isoformat()
         uscite = await mai_errore(deezer.uscite_recenti([a["id"] for a in tuoi[:8]], dal), []) if tuoi else []
         righe = [
+            {"tipo": "preferiti", "titolo": "Brani preferiti",
+             "sottotitolo": "Quelli che hai scaricato: si ascoltano interi",
+             "elementi": preferiti[:5], "quanti": len(preferiti)},
             {"tipo": "artisti", "titolo": "I tuoi artisti", "elementi": tuoi},
             {"tipo": "artisti", "titolo": "Consigliati per te", "sottotitolo": "Simili a quelli che ascolti",
              "elementi": per_te},
@@ -214,7 +218,8 @@ class Musica:
             {"tipo": "album", "titolo": "Album di tendenza", "elementi": dischi},
             {"tipo": "artisti", "titolo": "Artisti di tendenza", "elementi": famosi},
         ]
-        return {"scorciatoie": (tuoi or famosi)[:8], "righe": [r for r in righe if r["elementi"]],
+        return {"scorciatoie": (tuoi or famosi)[:8], "preferiti": len(preferiti),
+                "righe": [r for r in righe if r["elementi"]],
                 "avviso": consigli.get("avviso", "")}
 
     async def segui_per_nome(self, nome: str) -> str:

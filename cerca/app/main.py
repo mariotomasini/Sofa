@@ -14,10 +14,12 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import Path as FastPath
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from . import diagnosi
 from . import home as home_netflix
@@ -39,7 +41,7 @@ from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
-from .rete import ErroreServizio, nuovo_client
+from .rete import ErroreServizio, non_raggiungibile, nuovo_client
 from .sentinella import Sentinella, ultimo_blocco
 from .serie import Serie
 from .stato import ControlloDisco
@@ -379,6 +381,11 @@ async def pagina_album_musica(request: Request, id_album: int):
     return solo_adulti(request) or pagina(request, "musica_album.html", mondo="musica", id_album=id_album)
 
 
+@app.get("/musica/preferiti", response_class=HTMLResponse)
+async def pagina_preferiti_musica(request: Request):
+    return solo_adulti(request) or pagina(request, "musica_preferiti.html", mondo="musica")
+
+
 @app.get("/musica/cerca", response_class=HTMLResponse)
 async def pagina_cerca_musica(request: Request, q: str = ""):
     return solo_adulti(request) or pagina(request, "musica_cerca.html", mondo="musica", q=q.strip())
@@ -560,6 +567,44 @@ async def api_musica_cerca(request: Request, q: str):
 @app.get("/api/musica/anteprima/{id_brano}")
 async def api_musica_anteprima(request: Request, id_brano: int):
     return await servizi(request).deezer.anteprima(id_brano)
+
+
+ID_JELLYFIN = r"^[0-9a-f]{32}$"
+
+
+@app.get("/api/musica/preferiti")
+async def api_musica_preferiti(request: Request):
+    """I brani preferiti: quelli scaricati, nella Musica di Jellyfin, dal più recente."""
+    return {"brani": await servizi(request).jellyfin.brani()}
+
+
+async def _da_jellyfin(request: Request, percorso: str, passa: tuple[str, ...], cache: str = "") -> StreamingResponse:
+    intestazioni = {k: v for k in ("range", "if-range") if (v := request.headers.get(k))}
+    try:
+        r = await servizi(request).jellyfin.apri(percorso, intestazioni)
+    except httpx.HTTPError as exc:
+        raise non_raggiungibile("Jellyfin", "/jellyfin") from exc
+    if r.status_code >= 400:
+        await r.aclose()
+        return Response(status_code=404 if r.status_code == 404 else 502)
+    risposta = {k: r.headers[k] for k in passa if k in r.headers}
+    if cache:
+        risposta["Cache-Control"] = cache
+    return StreamingResponse(r.aiter_raw(), status_code=r.status_code, headers=risposta,
+                             background=BackgroundTask(r.aclose))
+
+
+@app.get("/api/musica/ascolta/{id_brano}")
+async def api_musica_ascolta(request: Request, id_brano: str = FastPath(pattern=ID_JELLYFIN)):
+    """Il brano intero, da Jellyfin (con i salti avanti e indietro: le richieste "Range" passano)."""
+    return await _da_jellyfin(request, f"/Audio/{id_brano}/stream?static=true",
+                              ("content-type", "content-length", "content-range", "accept-ranges"))
+
+
+@app.get("/api/musica/copertina/{id_voce}")
+async def api_musica_copertina(request: Request, id_voce: str = FastPath(pattern=ID_JELLYFIN)):
+    return await _da_jellyfin(request, f"/Items/{id_voce}/Images/Primary?maxWidth=400&quality=85",
+                              ("content-type", "content-length"), cache="public, max-age=604800")
 
 
 class RichiestaSeguiArtista(BaseModel):

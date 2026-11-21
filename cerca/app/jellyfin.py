@@ -127,6 +127,45 @@ class Jellyfin:
             return [tutti.get(n, {"nome": n, "mbid": ""}) for n in preferiti]
         return list(tutti.values())[:limite]
 
+    # --- brani preferiti: la musica scaricata, da ascoltare intera ---------------------------
+    @staticmethod
+    def _brano(v: dict) -> dict:
+        tag = v.get("ImageTags") or {}
+        copertina = v["Id"] if tag.get("Primary") else (v.get("AlbumId") if v.get("AlbumPrimaryImageTag") else "")
+        return {
+            "id": v["Id"], "titolo": v.get("Name", ""),
+            "artista": ", ".join(v.get("Artists") or []) or v.get("AlbumArtist", ""),
+            "album": v.get("Album", ""), "durata": int((v.get("RunTimeTicks") or 0) / 10_000_000),
+            "copertina_jf": copertina or "", "aggiunto": (v.get("DateCreated") or "")[:10],
+        }
+
+    async def brani(self, limite: int = 500) -> list[dict]:
+        """I brani nella libreria Musica, dal più recente: sono quelli scaricati."""
+        try:
+            utente = await self._id_utente()
+            dati = await self._get(f"/Users/{utente}/Items", {
+                "IncludeItemTypes": "Audio", "Recursive": "true", "SortBy": "DateCreated,SortName",
+                "SortOrder": "Descending", "Limit": limite, "Fields": "DateCreated"})
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise non_raggiungibile("Jellyfin", "/jellyfin") from exc
+        return [self._brano(v) for v in dati.get("Items", []) if v.get("Id")]
+
+    async def apri(self, percorso: str, intestazioni: dict | None = None) -> httpx.Response:
+        """Una risposta di Jellyfin da passare al browser un pezzo alla volta (audio, copertine)."""
+        if not self._token:
+            await self._accedi()
+        for _ in range(2):
+            richiesta = self.client.build_request(
+                "GET", f"{self.config.jellyfin_url}{percorso}",
+                headers={**(intestazioni or {}), "Authorization": f'{INTESTAZIONE}, Token="{self._token}"'},
+                timeout=httpx.Timeout(30, read=None))
+            r = await self.client.send(richiesta, stream=True)
+            if r.status_code != 401:
+                return r
+            await r.aclose()
+            await self._accedi()
+        return r
+
     # --- home in stile Netflix ----------------------------------------------------------
     async def _id_utente(self) -> str:
         if not self._utente:

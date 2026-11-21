@@ -91,6 +91,10 @@ def test_artista_classifiche_e_anteprime():
 
 def test_home_della_musica():
     class JellyfinFinto:
+        async def brani(self, limite):
+            return [{"id": str(i) * 32, "titolo": f"Brano {i}", "artista": "Marracash", "album": "", "durata": 180,
+                     "copertina_jf": "", "aggiunto": ""} for i in range(7)]
+
         async def artisti_piu_ascoltati(self, limite):
             return [{"nome": "Marracash", "mbid": "x"}]
 
@@ -105,7 +109,8 @@ def test_home_della_musica():
     m.per_te = per_te
     home = asyncio.run(m.home(deezer(), oggi=dt.date(2026, 11, 21)))
     titoli = [r["titolo"] for r in home["righe"]]
-    assert titoli == ["I tuoi artisti", "Consigliati per te", "Top 50 Italia", "Uscite recenti per te",
+    assert home["preferiti"] == 7 and home["righe"][0]["quanti"] == 7 and len(home["righe"][0]["elementi"]) == 5
+    assert titoli == ["Brani preferiti", "I tuoi artisti", "Consigliati per te", "Top 50 Italia", "Uscite recenti per te",
                       "Album di tendenza", "Artisti di tendenza"]
     assert home["scorciatoie"][0]["nome"] == "Marracash"
     uscite = next(r for r in home["righe"] if r["titolo"] == "Uscite recenti per te")["elementi"]
@@ -114,6 +119,9 @@ def test_home_della_musica():
 
 def test_home_senza_jellyfin_e_senza_internet():
     class JellyfinSpento:
+        async def brani(self, limite):
+            raise RuntimeError("spento")
+
         async def artisti_piu_ascoltati(self, limite):
             raise RuntimeError("spento")
 
