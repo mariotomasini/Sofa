@@ -64,6 +64,16 @@ def preferenze(imp: Impostazioni) -> dict:
         # Il seeding si ferma subito: nessun limite di tempo che lo riattivi
         "max_seeding_time_enabled": False,
         "max_inactive_seeding_time_enabled": False,
+        # Coda: pochi download alla volta, così le prime puntate finiscono prima e il PC
+        # non rallenta. Cerca mette la coda in ordine (stagione, puntata).
+        "queueing_enabled": True,
+        "max_active_downloads": 2,
+        "max_active_torrents": 3,
+        "max_active_uploads": 1,
+        # un torrent fermo (senza fonti) non occupa il posto degli altri
+        "dont_count_slow_torrents": True,
+        "slow_torrent_dl_rate_threshold": 20,
+        "slow_torrent_inactive_timer": 120,
     }
 
 

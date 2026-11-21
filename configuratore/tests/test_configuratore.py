@@ -157,6 +157,16 @@ def test_profilo_qualita_radarr():
     ("Film.2023.1080p.WEB-DL.ENG.Sub.ITA", False, True),
     ("Film.2023.1080p.SUBITA", False, True),
     ("Capitalism.2023.1080p.WEB-DL.ENG", False, False),
+    # solo sottotitoli italiani, scritti in tanti modi: non è audio italiano
+    ("Serie.S01E02.1080p.WEB.ENG.ITA.SUB", False, True),
+    ("Serie S01E02 [Sub ENG-ITA] 1080p", False, True),
+    ("Serie.S01E02.Subs.ENG.SPA.ITA.1080p", False, True),
+    ("Serie.S01E02.iTALiAN.SUBBED.720p", False, True),
+    ("Serie.S01E01.ENG.HardSub.ITA", False, True),
+    ("Serie.S01E01.1080p.ITA.Softsub", False, True),
+    # audio italiano vero, anche con i sottotitoli
+    ("Serie S01E03 ITA ENG 1080p WEB-DL", True, False),
+    ("Serie.S02E01.ITA.ENG.AC3.Subs.ENG.1080p", True, False),
 ])
 def test_regex_italiano(nome, ita, sub):
     from configuratore.servizi.formati import RE_AUDIO_ITA, RE_SUB_ITA
@@ -459,3 +469,34 @@ def test_tgarr_entra_in_prowlarr_anche_senza_risultati(monkeypatch):
     finto.chiamate.clear()
     tgarr.configura(imp, Esito())
     assert finto.chiamate == []
+
+
+@pytest.mark.parametrize("nome, multi", [
+    ("Serie.S01E02.MULTi.1080p.WEB", True),
+    ("Film.2023.DUAL.1080p", True),
+    ("Serie.S01E02.MULTi-SUB.1080p", False),
+    ("Serie.S01E02.1080p.Multi.Subs", False),
+])
+def test_regex_multi_non_conta_i_sottotitoli(nome, multi):
+    from configuratore.servizi.formati import RE_MULTI
+    assert bool(re.search(RE_MULTI.removeprefix("(?i)"), nome, re.I)) is multi
+
+
+def test_solo_sottotitoli_non_raggiunge_il_limite():
+    """Una puntata con l'italiano solo nei sottotitoli resta sotto il limite: si cerca ancora l'audio italiano."""
+    from configuratore.servizi.formati import PUNTI_1080P, PUNTI_LINGUA, formati
+    definiti = formati(["it", "es", "en"])
+
+    def punti(nome):
+        totale = PUNTI_1080P
+        for _, (p, condizioni) in definiti.items():
+            for tipo, valore, negata, _ in condizioni:
+                if tipo == "titolo" and bool(re.search(valore.removeprefix("(?i)"), nome, re.I)) != negata:
+                    totale += p
+                    break
+        return totale
+
+    limite = PUNTI_LINGUA[0] + PUNTI_1080P
+    assert punti("Serie.S01E02.1080p.WEB.ENG.ITA.SUB") < limite
+    assert punti("Serie.S01E02.1080p.WEB.ITA.ENG") >= limite
+    assert punti("Serie.S01E02.1080p.WEB.ITA.ENG") > punti("Serie.S01E02.1080p.WEB.ENG.ITA.SUB")

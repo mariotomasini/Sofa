@@ -15,6 +15,7 @@ import logging
 import time
 
 from .config import Config
+from .ordine_download import posizioni
 from .radarr import Radarr
 from .serie import Serie
 
@@ -120,6 +121,7 @@ class Automatici:
         self.qbit = qbit
         self._campioni: dict[str, tuple[float, int]] = {}
         self._velocita_qbit: dict[str, int] = {}
+        self._posti_qbit: dict[str, int] = {}
         self.radarr = radarr
         self.serie = serie
         self._attesa: tuple[float, list[dict]] | None = None
@@ -160,7 +162,15 @@ class Automatici:
         return self._voce(titolo, r.get("title", ""), self._lingua(r), tipo=tipo, ids=ids, stato=stato,
                           stato_testo=testo, percentuale=percentuale(r.get("size", 0), r.get("sizeleft", 0)),
                           dimensione=r.get("size", 0), velocita=velocita, rimanente=rimanente, fonte=fonte(r),
-                          annullabile=True, ricercabile=False)
+                          annullabile=True, ricercabile=False, **self._posto(r, stato))
+
+    def _posto(self, r: dict, stato: str) -> dict:
+        """L'hash del torrent e il suo posto nella coda di qBittorrent (per "Scarica prima questa")."""
+        hash_torrent = (r.get("downloadId") or "").lower()
+        if (r.get("protocol") or "torrent") != "torrent" or not hash_torrent:
+            return {}
+        posto = self._posti_qbit.get(hash_torrent, 0)
+        return {"hash": hash_torrent, "posto": posto, "anticipabile": stato == "coda" and posto > 1}
 
     async def _leggi_qbit(self) -> None:
         if self.qbit is None:
@@ -168,8 +178,10 @@ class Automatici:
         try:
             torrent = await self.qbit.tutti()
             self._velocita_qbit = {t.get("hash", "").lower(): int(t.get("dlspeed") or 0) for t in torrent}
+            self._posti_qbit = {h.lower(): p for h, p in posizioni(torrent).items()}
         except Exception:  # noqa: BLE001 - senza qBittorrent la velocità si stima
             self._velocita_qbit = {}
+            self._posti_qbit = {}
 
     async def coda(self) -> list[dict]:
         """Tutto quello che Radarr e Sonarr stanno scaricando o cercando, con lo stato in parole semplici."""

@@ -23,9 +23,20 @@ ID_GRUPPO = 1001
 PREFISSO_LINGUA = "Lingua · "
 
 
+# Parole che indicano sottotitoli: "ITA.SUB", "Sub.ENG.ITA", "Multi-Subs" non sono audio
+SUB = r"subs?|subbed|subtitle[sd]?|softsubs?|hardsubs?|sottotitol[a-z]*"
+# Prima della lingua: "sub" e fino a due altre lingue di tre lettere ("Sub ENG-ITA", "Subs.ENG.SPA.ITA").
+# Lookbehind a larghezza fissa: valgono uguali in .NET (Radarr, Sonarr) e in Python (test).
+_SEP, _LINGUA = "[ ._-]", "[a-z]{3}[ ._-]"
+_PRIMA = "".join(
+    rf"(?<!\b{s}{fra}{_LINGUA * n})"
+    for s in ("sub", "subs", "hardsub", "softsub") for fra, n in (("", 0), (_SEP, 0), (_SEP, 1), (_SEP, 2))
+)
+
+
 def audio(parole: str) -> str:
-    """La parola nel nome della release, ma non dopo "sub" (quelli sono solo sottotitoli)."""
-    return rf"(?i)(?<!\bsub)(?<!\bsub[ ._-])(?<!\bsubs[ ._-])\b({parole})\b"
+    """La parola nel nome della release, ma non vicino a "sub" (quelli sono solo sottotitoli)."""
+    return rf"(?i){_PRIMA}\b({parole})\b(?![ ._-]*({SUB})\b)"
 
 
 # codice → (nome, parole nel titolo della release). L'inglese spesso non è scritto:
@@ -43,8 +54,10 @@ ALTRE_LINGUE = "rus|russian|hindi|hin|tamil|telugu|kor|korean|jap|japanese|chi|c
 LINGUE_PREDEFINITE = ["it", "es", "en"]
 
 RE_AUDIO_ITA = audio(LINGUE["it"][1])
-RE_SUB_ITA = r"(?i)\b(subs?|subbed|sottotitol[a-z]*)[ ._-]*(ita|italian|italiano)\b"
-RE_MULTI = r"(?i)\b(multi|dual)\b"
+ITA = "ita|italian|italiano"
+RE_SUB_ITA = (rf"(?i)\b({SUB})[ ._-]*([a-z]{{3}}[ ._-]+){{0,2}}({ITA})\b"
+              rf"|\b({ITA})[ ._-]*({SUB})\b|\bsubita\b")
+RE_MULTI = rf"(?i)\b(multi|dual)\b(?![ ._-]*({SUB})\b)"
 RE_STRANIERO = audio("|".join([p for _, p in LINGUE.values() if p] + [ALTRE_LINGUE]))
 # Audio preso dal cinema (MD = mic dubbed, LD = line dubbed): la lingua c'è, ma scarsa
 RE_AUDIO_CINEMA = r"(?i)\b(md|ld|mic[ ._-]?dubbed|line[ ._-]?dubbed)\b"

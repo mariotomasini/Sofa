@@ -291,13 +291,15 @@ function htmlAutomatico(x, inCorso) {
     ? `<span class="sottotitolo">Lo sostituisco da solo appena esce in ${esc(x.lingua_preferita.toLowerCase())}.</span>` : "";
   const dati = `data-tipo="${esc(x.tipo)}" data-ids="${esc((x.ids || []).join(","))}"`;
   const azioni = inCorso
-    ? (x.ricercabile ? `<button class="secondario" data-riprova ${dati}>Cerca di nuovo</button>` : "") +
+    ? (x.anticipabile ? `<button class="secondario" data-prima="${esc(x.hash)}">Scarica prima questa</button>` : "") +
+      (x.ricercabile ? `<button class="secondario" data-riprova ${dati}>Cerca di nuovo</button>` : "") +
       (x.annullabile ? `<button class="secondario" data-annulla-auto ${dati}>Annulla</button>` : "")
     : "";
   const altra = !x.senza_lingua && x.lingua && !x.preferita;
   return `<article class="download${altra ? " non-preferita" : ""}"><div class="descrizione">` +
     `<strong>${etichettaLingua(x)}${etichettaFonte(x)} ${esc(x.titolo)}</strong>` +
     (inCorso ? htmlStatoAutomatico(x) : "") +
+    (inCorso && x.anticipabile ? `<span class="sottotitolo">${x.posto}° in coda</span>` : "") +
     (x.dettaglio ? `<span class="sottotitolo">${esc(x.dettaglio)}</span>` : "") + nota +
     `</div>${azioni ? `<div class="azioni">${azioni}</div>` : ""}</article>`;
 }
@@ -386,6 +388,12 @@ function avviaPaginaDownload() {
   document.getElementById("dettaglio-voci").addEventListener("click", async (ev) => {
     const b = ev.target.closest("button");
     if (!b) return;
+    if (b.dataset.prima) {
+      b.disabled = true;
+      try { avviso((await inviaJSON("/api/download/prima", { hash: b.dataset.prima })).messaggio); aggiorna(); }
+      catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
+      return;
+    }
     if (b.dataset.tipo) { await azioneAutomatico(b, aggiorna); return; }
     try {
       if (b.dataset.riprova) {

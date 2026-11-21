@@ -99,6 +99,10 @@ class QBittorrent:
             data={"hash": hash_torrent, "id": "|".join(map(str, indici)), "priority": str(priorita)},
         )
 
+    async def in_fondo(self, hash_torrent: str) -> None:
+        """Sposta il torrent in fondo alla coda dei download."""
+        await self._richiesta("POST", "torrents/bottomPrio", data={"hashes": hash_torrent})
+
     async def aggiungi_etichetta(self, hash_torrent: str, etichetta: str) -> None:
         await self._richiesta("POST", "torrents/addTags", data={"hashes": hash_torrent, "tags": etichetta})
 

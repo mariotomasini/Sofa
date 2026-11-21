@@ -98,7 +98,9 @@ def raggruppa(coda: list[dict], attesa: list[dict], cerca: list[dict], lingua: s
 
     risultato = []
     for g in gruppi.values():
-        voci = sorted(g["voci"], key=lambda v: ORDINE.index(v["stato_pagina"]) if v["stato_pagina"] in ORDINE else 99)
+        # per stato; a parità, nell'ordine della coda (le puntate dalla prima) e poi per nome
+        voci = sorted(g["voci"], key=lambda v: (ORDINE.index(v["stato_pagina"]) if v["stato_pagina"] in ORDINE else 99,
+                                                v.get("posto") or 9999, v.get("voce") or v.get("titolo") or ""))
         attivi = [v for v in voci if v["stato_pagina"] == "download"]
         stato = voci[0]["stato_pagina"]
         if attivi:

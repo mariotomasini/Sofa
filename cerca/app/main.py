@@ -17,7 +17,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import diagnosi
 from . import home as home_netflix
@@ -33,6 +33,7 @@ from .gruppi_download import raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
 from .musica import Musica
+from .ordine_download import OrdineDownload
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
@@ -85,6 +86,7 @@ class Servizi:
         self.serie = Serie(config, client)
         self.download.serie = self.serie
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
+        self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.deezer = Deezer(self.archivio, client)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
@@ -126,6 +128,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(300, manutenzione_cache(servizi.archivio))),
             asyncio.create_task(dopo(90, servizi.serie.sorveglia_importazioni(servizi.jellyfin))),
             asyncio.create_task(servizi.automatici.ricerca_notturna()),
+            asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
         ]
         log.info("Cerca è pronto")
         yield
@@ -770,6 +773,17 @@ async def api_download_gruppi(request: Request):
     coda, attesa = await asyncio.gather(s.automatici.coda(), s.automatici.in_attesa())
     cerca = (await api_download(request))["download"]
     return {"gruppi": raggruppa(coda, attesa, cerca, s.automatici.preferita), "lingua_preferita": s.automatici.preferita}
+
+
+class Prima(BaseModel):
+    hash: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+
+
+@app.post("/api/download/prima")
+async def api_download_prima(request: Request, corpo: Prima):
+    """Mette il torrent in cima alla coda: parte appena si libera un posto."""
+    await servizi(request).ordine.scarica_prima(corpo.hash)
+    return {"messaggio": "Fatto: questa parte per prima, appena finisce uno dei download in corso."}
 
 
 @app.get("/api/download")
