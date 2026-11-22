@@ -170,6 +170,10 @@ def aggiungi_pubblici(arr: Arr, schemi: list[dict], presenti: set[str], profilo_
     ok(f"Indexer pubblici aggiunti: {len(aggiunti)} su {len(candidati)} provati ({italiani} italiani, usati per primi)")
 
 
+# Sotto questo numero di fonti (seeder) un torrent di solito non finisce mai di scaricarsi
+MIN_FONTI = 3
+
+
 def aggiungi_indexer(arr: Arr, imp: Impostazioni, esito) -> None:
     """Aggiunge da soli gli indexer scritti nel file .env (quelli già presenti non si toccano)."""
     voci = leggi_indexer(imp.get("PROWLARR_INDEXER"))
@@ -214,10 +218,28 @@ def aggiungi_indexer(arr: Arr, imp: Impostazioni, esito) -> None:
         aggiungi_pubblici(arr, schemi, presenti, profilo_app, etichette)
 
 
+def min_fonti(imp: Impostazioni) -> int:
+    try:
+        return max(1, int(imp.get("MIN_FONTI", str(MIN_FONTI))))
+    except ValueError:
+        return MIN_FONTI
+
+
+def imposta_min_fonti(arr: Arr, quante: int) -> None:
+    """Radarr e Sonarr scartano i torrent con meno di `quante` fonti (seeder): anche la versione
+    migliore non serve se non si scarica mai. Prowlarr lo passa a tutti gli indexer sincronizzati."""
+    for profilo in arr.get("appprofile"):
+        if profilo.get("minimumSeeders") != quante:
+            profilo["minimumSeeders"] = quante
+            arr.put(f"appprofile/{profilo['id']}", profilo, "impostare il minimo di fonti")
+
+
 def configura(imp: Impostazioni, esito) -> None:
     arr = prowlarr(imp)
     arr.attendi()
     arr.aggiorna_config("ui", {"uiLanguage": imp.get("LINGUA", "it"), "firstDayOfWeek": 1})
+    imposta_min_fonti(arr, min_fonti(imp))
+    ok(f"Si scaricano solo torrent con almeno {min_fonti(imp)} fonti (seeder)")
 
     app = [("Radarr", "http://radarr:7878/radarr", imp.obbligatorio("RADARR_API_KEY"))]
     if imp.sonarr:

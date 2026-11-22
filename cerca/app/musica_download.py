@@ -36,8 +36,9 @@ def adatto(r: dict, artista: str, titoli: list[str]) -> bool:
     return _contiene(nome, normalizza(artista)) and any(_contiene(nome, normalizza(t)) for t in titoli if t)
 
 
-def scegli(risultati: list[dict], artista: str, titoli: list[str], massimo: int) -> dict | None:
-    """Il torrent da scaricare: giusto, con fonti, non una discografia intera, meglio MP3 (più leggero)."""
+def scegli(risultati: list[dict], artista: str, titoli: list[str], massimo: int, min_fonti: int = 3) -> dict | None:
+    """Il torrent da scaricare: giusto, con abbastanza fonti per finire, non una discografia intera,
+    meglio MP3 (più leggero)."""
     candidati = [r for r in risultati
                  if r.get("protocol") == "torrent" and (r.get("seeders") or 0) > 0
                  and (r.get("size") or 0) <= massimo and adatto(r, artista, titoli)]
@@ -47,7 +48,7 @@ def scegli(risultati: list[dict], artista: str, titoli: list[str], massimo: int)
     def chiave(r: dict) -> tuple:
         nome = r.get("title", "")
         seed = r.get("seeders") or 0
-        return (not RE_DISCOGRAFIA.search(nome), seed >= 3, bool(RE_MP3.search(nome)), seed)
+        return (seed >= min_fonti, not RE_DISCOGRAFIA.search(nome), bool(RE_MP3.search(nome)), seed)
 
     return max(candidati, key=chiave)
 
@@ -107,9 +108,9 @@ class ScaricaMusica:
             raise ErroreServizio("Deezer non mi dà i dati di questo brano.", "Riprova tra poco.")
         risultati = await self._cerca([f"{artista} {titolo}", f"{artista} {nome_album}"])
         # prima un torrent del brano stesso (o del singolo); se no l'album che lo contiene, solo quel file
-        scelto = scegli(risultati, artista, [titolo], MAX_BRANO)
+        scelto = scegli(risultati, artista, [titolo], MAX_BRANO, self.config.min_fonti)
         if scelto is None and nome_album and normalizza(nome_album) != normalizza(titolo):
-            scelto = scegli(risultati, artista, [nome_album], MAX_ALBUM)
+            scelto = scegli(risultati, artista, [nome_album], MAX_ALBUM, self.config.min_fonti)
         if scelto is None:
             raise self._non_trovato(f"\"{titolo}\" di {artista}")
         # in un album o in una raccolta si scarica solo il file di questo brano
@@ -125,7 +126,7 @@ class ScaricaMusica:
             raise ErroreServizio("Deezer non mi dà i dati di questo album.", "Riprova tra poco.")
         anno = (a.get("release_date") or "")[:4]
         scelto = scegli(await self._cerca([f"{artista} {titolo}", f"{artista} {titolo} {anno}"]),
-                        artista, [titolo], MAX_ALBUM)
+                        artista, [titolo], MAX_ALBUM, self.config.min_fonti)
         if scelto is None:
             raise self._non_trovato(f"l'album \"{titolo}\" di {artista}")
         await self._avvia(scelto, artista, titolo, a.get("cover_medium") or "")

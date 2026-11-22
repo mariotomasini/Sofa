@@ -13,6 +13,13 @@ def _env(nome: str, predefinito: str = "") -> str:
     return os.environ.get(nome, predefinito).strip()
 
 
+def _numero(testo: str, predefinito: int) -> int:
+    try:
+        return max(1, int(testo))
+    except (TypeError, ValueError):
+        return predefinito
+
+
 @dataclass(frozen=True)
 class Config:
     tmdb_chiave: str = field(default_factory=lambda: _env("TMDB_API_KEY"))
@@ -47,6 +54,7 @@ class Config:
     indirizzo_pubblico: str = field(default_factory=lambda: _env("INDIRIZZO_PUBBLICO", "http://mediabox.local"))
     cartella_dati: Path = field(default_factory=lambda: Path(_env("CARTELLA_DATI", "/dati")))
     cartella_download: Path = field(default_factory=lambda: Path(_env("CARTELLA_DOWNLOAD", "/data/downloads")))
+    min_fonti: int = field(default_factory=lambda: _numero(_env("MIN_FONTI", "3"), 3))
     cartella_musica: str = field(default_factory=lambda: _env("CARTELLA_MUSICA", "/data/media/musica"))
     cartella_film_radarr: str = field(default_factory=lambda: _env("CARTELLA_FILM_RADARR", "/data/media/film"))
     root_path: str = field(default_factory=lambda: _env("ROOT_PATH", "/cerca"))

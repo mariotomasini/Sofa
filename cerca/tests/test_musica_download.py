@@ -58,9 +58,16 @@ def test_scarica_un_brano_nella_cartella_dell_artista():
             return 7
 
     download = DownloadFinto()
-    config = type("C", (), {"cartella_musica": "/data/media/musica"})()
+    config = type("C", (), {"cartella_musica": "/data/media/musica", "min_fonti": 3})()
     esito = asyncio.run(ScaricaMusica(config, DeezerFinto(), ProwlarrFinto(), download).brano(1))
     assert "Sabbie mobili" in esito["messaggio"]
     assert download.kw["cartella"] == "/data/media/musica/Marracash"
     assert download.kw["categoria"] == "musica" and download.kw["solo_brano"] == "Sabbie mobili"
     assert download.kw["poster"] == "http://c/1.jpg"
+
+
+def test_musica_con_abbastanza_fonti():
+    risultati = [r("Marracash - Status (2015) MP3 320", seed=1), r("Marracash - Status (2015) FLAC", seed=25)]
+    assert scegli(risultati, "Marracash", ["Status"], 10**10, min_fonti=3)["title"] == "Marracash - Status (2015) FLAC"
+    # se nessuno ne ha abbastanza si prova comunque il migliore
+    assert scegli(risultati[:1], "Marracash", ["Status"], 10**10, min_fonti=3) is not None
