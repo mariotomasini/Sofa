@@ -20,10 +20,39 @@ DA_CERCA = {  # stati dei download di Cerca → stati della pagina
     "importato": "pronto", "da_associare": "da_associare", "errore": "problema",
 }
 PRONTI_PER = 3 * 24 * 3600  # i download di Cerca già in Jellyfin restano in vista 3 giorni
+IN_CODA_QBIT = {"queuedDL", "pausedDL", "stoppedDL"}  # qBittorrent non l'ha ancora fatto partire
+
+
+def con_coda_qbit(cerca: list[dict], torrent: list[dict], posti: dict[str, int]) -> list[dict]:
+    """Ai download di Cerca (musica, torrent) aggiunge cosa fa qBittorrent: in coda e a che posto,
+    o fermo senza fonti. Senza questo "in corso" sembrerebbe partito anche quando aspetta il suo turno."""
+    per_hash = {(t.get("hash") or "").lower(): t for t in torrent}
+    risultato = []
+    for d in cerca:
+        h = (d.get("hash") or "").lower()
+        t = per_hash.get(h)
+        if d.get("stato") != "in_corso" or not t:
+            risultato.append(d)
+            continue
+        posto = posti.get(h, 0)
+        stato_qbit = t.get("state") or ""
+        extra: dict = {"hash": h, "posto": posto}
+        if stato_qbit in IN_CODA_QBIT:
+            extra.update(stato_qbit="coda", anticipabile=posto > 1,
+                         stato_testo=f"In coda: {posto}° posto, parte appena tocca a lui" if posto
+                         else "In pausa in qBittorrent")
+        elif stato_qbit in ("metaDL", "forcedMetaDL"):
+            extra.update(stato_testo="Partito: cerco le fonti")
+        elif stato_qbit == "stalledDL" and not t.get("dlspeed"):
+            extra.update(stato_testo="Partito, ma per ora nessuno lo condivide")
+        risultato.append({**d, **extra})
+    return risultato
 
 
 def _voce_cerca(d: dict) -> dict:
     stato = DA_CERCA.get(d.get("stato", ""), "download")
+    if stato == "download" and d.get("stato_qbit") == "coda":
+        stato = "coda"
     return {**d, "origine": "cerca", "stato_pagina": stato, "voce": d.get("titolo", "")}
 
 
