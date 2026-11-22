@@ -45,13 +45,13 @@ def riassunto(voci: list[dict], lingua: str) -> str:
     """Lo stato della scheda in poche parole."""
     conta: dict[str, int] = {}
     for v in voci:
-        conta[v["stato_pagina"]] = conta.get(v["stato_pagina"], 0) + (_puntate(v) if v["stato_pagina"] == "cerco" else 1)
+        conta[v["stato_pagina"]] = conta.get(v["stato_pagina"], 0) + _puntate(v)
     if conta.get("problema"):
         return "C'è un problema: tocca per vedere"
     parti = []
     if conta.get("download"):
         attivi = [v for v in voci if v["stato_pagina"] == "download"]
-        if len(attivi) == 1 and len(voci) == 1:
+        if len(attivi) == 1 and len(voci) == 1 and _puntate(attivi[0]) == 1:
             return f"In download · {round(attivi[0].get('percentuale') or 0)}%"
         parti.append(f"{conta['download']} in download")
     if conta.get("importazione"):

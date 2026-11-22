@@ -163,3 +163,51 @@ def test_cambia_fermi_mette_in_lista_nera_e_cerca_un_altra_versione():
     tolte = [c for c in chiamate if c[0] == "DELETE"]
     assert tolte[0] == ("DELETE", "queue/9", {"removeFromClient": "true", "blocklist": "true", "skipRedownload": "false"})
     assert all(c[1] != "queue/10" for c in tolte)
+
+
+def test_coda_sonarr_tutte_le_pagine_e_un_torrent_per_voce():
+    """Un pacchetto con 170 puntate riempie la prima pagina della coda di Sonarr:
+    le altre serie in coda non devono sembrare "da trovare"."""
+    from types import SimpleNamespace
+
+    black = {"id": 1, "title": "Black Clover"}
+    lotus = {"id": 2, "title": "The White Lotus"}
+    coda = [{"id": i, "downloadId": "PACK", "status": "downloading", "size": 100, "sizeleft": 50,
+             "episodeId": i, "seriesId": 1, "series": black, "episode": {"seasonNumber": 1, "episodeNumber": i}}
+            for i in range(1, 171)]
+    coda += [{"id": 1000 + i, "downloadId": f"WL{i}", "status": "queued", "size": 10, "sizeleft": 10,
+              "episodeId": 1000 + i, "seriesId": 2, "series": lotus,
+              "episode": {"seasonNumber": 3, "episodeNumber": i}} for i in range(1, 4)]
+    mancanti = [{"id": 1000 + i, "seriesId": 2, "series": lotus} for i in range(1, 4)]
+
+    class Arr:
+        attivo = True
+
+        async def _r(self, metodo, percorso, **kw):
+            p = kw.get("params") or {}
+            elenco = {"queue": coda}.get(percorso, mancanti if percorso == "wanted/missing" and "includeSeries" in p
+                                          else [])
+            inizio = (p["page"] - 1) * p["pageSize"]
+            return {"records": elenco[inizio:inizio + p["pageSize"]], "totalRecords": len(elenco)}
+
+        _api = _r
+
+    async def senza_radarr(metodo, percorso, **kw):
+        return {"records": [], "totalRecords": 0}
+
+    radarr = SimpleNamespace(_r=senza_radarr)
+    voci = asyncio.run(Automatici(SimpleNamespace(lingue_audio=("it",)), radarr, Arr()).coda())
+    assert [(v["voce"], v["stato"], len(v["ids"])) for v in voci] == [
+        ("St. 1 · Ep. 1–170", "download", 170),
+        ("St. 3 · Ep. 1", "coda", 1), ("St. 3 · Ep. 2", "coda", 1), ("St. 3 · Ep. 3", "coda", 1)]
+    assert not any(v["stato"] == "cerco" for v in voci)
+
+
+def test_episodi():
+    from app.automatici import episodi
+
+    assert episodi([{"seasonNumber": 1, "episodeNumber": 3}]) == "St. 1 · Ep. 3"
+    assert episodi([{"seasonNumber": 1, "episodeNumber": n} for n in (1, 2, 3)]) == "St. 1 · Ep. 1–3"
+    assert episodi([{"seasonNumber": 1, "episodeNumber": n} for n in (1, 5)]) == "St. 1 · 2 puntate"
+    assert episodi([{"seasonNumber": 1, "episodeNumber": 1}, {"seasonNumber": 2, "episodeNumber": 1}]) == \
+        "St. 1–2 · 2 puntate"
