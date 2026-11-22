@@ -17,6 +17,7 @@ import httpx
 from .config import Config
 from .db import Archivio
 from .jellyfin import Jellyfin
+from .musica_download import file_da_saltare
 from .qbittorrent import STATI_ERRORE, STATI_FINITI, QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio
@@ -27,6 +28,7 @@ log = logging.getLogger("cerca.download")
 INTERVALLO_CONTROLLO = 15
 PREFISSO_ETICHETTA = "mediabox-"
 CATEGORIE_SORVEGLIATE = ("cerca", "manuale")
+CATEGORIA_MUSICA = "musica"
 
 
 # --- funzioni pure (testate) ---------------------------------------------------
@@ -144,6 +146,8 @@ class GestoreDownload:
         file_torrent: bytes | None = None,
         serie: int | None = None,
         poster: str = "",
+        cartella: str | None = None,
+        solo_brano: str = "",
     ) -> int:
         id_download = self.archivio.nuovo_download(
             tmdb_id=film["id"] if film else None,
@@ -158,12 +162,26 @@ class GestoreDownload:
         )
         try:
             await self.qbit.aggiungi(
-                categoria=categoria, etichetta=etichetta(id_download), magnet_o_url=magnet, file_torrent=file_torrent
+                categoria=categoria, etichetta=etichetta(id_download), magnet_o_url=magnet, file_torrent=file_torrent,
+                cartella=cartella,
             )
         except ErroreServizio:
             self.archivio.elimina_download(id_download)
             raise
+        if solo_brano:
+            asyncio.create_task(self._solo_brano(id_download, solo_brano))
         return id_download
+
+    async def _solo_brano(self, id_download: int, titolo: str) -> None:
+        """Da un album intero scarica solo il brano scelto (appena qBittorrent conosce i file)."""
+        for _ in range(90):
+            torrent = await self.qbit.per_etichetta(etichetta(id_download))
+            if torrent:
+                file = await self.qbit.file(torrent["hash"])
+                if file:
+                    await self.qbit.priorita_file(torrent["hash"], file_da_saltare(file, titolo), 0)
+                    return
+            await asyncio.sleep(2)
 
     async def associa(self, id_download: int, film: dict) -> None:
         """Associa un download a un film TMDB e, se è finito, lo passa a Radarr."""
@@ -321,6 +339,18 @@ class GestoreDownload:
             if campi.get("stato") == "completato":
                 asyncio.create_task(self._passa_a_radarr(voce["id"]))
 
+    async def _musica_pronta(self, voce: dict) -> None:
+        """La musica è già nella sua cartella: si toglie il torrent (non i file) e si avvisa Jellyfin."""
+        if voce.get("hash"):
+            with contextlib.suppress(ErroreServizio):
+                await self.qbit.elimina(voce["hash"], con_file=False)
+        if voce.get("percorso"):
+            await self.jellyfin.avvisa_nuovo(voce["percorso"])
+        self.archivio.aggiorna_download(voce["id"], stato="importato", messaggio="")
+        if self.notifica:
+            await self.notifica("Pronto da ascoltare", f"{voce['titolo']} è in Jellyfin.",
+                                f"{self.config.indirizzo_pubblico}/jellyfin/")
+
     # --- passaggio a Radarr ----------------------------------------------------------
     async def _indovina_film(self, voce: dict) -> dict | None:
         """Per i torrent senza film associato: prova a capire quale film è."""
@@ -369,6 +399,9 @@ class GestoreDownload:
                 return
             if voce.get("serie") and self.serie is not None:
                 await self._passa_a_sonarr(voce)
+                return
+            if voce.get("categoria") == CATEGORIA_MUSICA:
+                await self._musica_pronta(voce)
                 return
             if not voce["tmdb_id"]:
                 film = await self._indovina_film(voce)
