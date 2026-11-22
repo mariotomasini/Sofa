@@ -142,7 +142,8 @@ def test_piattaforme():
                 await c.su_piattaforma("tv", 119), await c.su_piattaforma("movie", 4242))
 
     film, netflix, prime, sconosciuta = asyncio.run(prova())
-    assert film[0] == {"id": 8, "nome": "Netflix", "logo": "", "titolo_riga": "Di tendenza su Netflix"}
+    assert film[0] == {"id": 8, "nome": "Netflix", "titolo_riga": "Di tendenza su Netflix",
+                       "logo": "https://images.justwatch.com/icon/207360008/s100/netflix.webp"}
     assert [f["id"] for f in netflix] == [900, 901]
     assert [s["titolo"] for s in prime] == ["Commedia su Prime"]
     assert sconosciuta == []
@@ -342,7 +343,7 @@ def test_vista_di_una_piattaforma_in_una_sola_richiesta():
     assert len(richieste) == 1  # tutte le righe insieme
     filtri = richieste[0]["variables"]
     assert all(filtri[k]["packages"] == ["nfx"] for k in filtri if k.startswith("f"))
-    assert v["piattaforma"] == {"id": 8, "nome": "Netflix"}
+    assert v["piattaforma"] == {"id": 8, "nome": "Netflix", "logo": "https://images.justwatch.com/icon/207360008/s100/netflix.webp"}
     assert v["in_evidenza"]["id"] == 1 and v["in_evidenza"]["top10"] == 1
     assert v["in_evidenza"]["sfondo"] == "https://images.justwatch.com/backdrop/1/s1440/x.webp"
     assert [r["titolo"] for r in v["righe"]] == ["Top 10 dei film su Netflix oggi", "Novità su Netflix", "Film drammatici"]
@@ -351,3 +352,11 @@ def test_vista_di_una_piattaforma_in_una_sola_richiesta():
     assert dramma[3]["nuovo"] and "top10" not in dramma[3]  # appena arrivato
     serie = asyncio.run(c.vista_piattaforma("tv", 8, oggi=dt.date(2026, 11, 20)))
     assert serie["righe"][0]["titolo"] == "Top 10 delle serie su Netflix oggi"
+
+
+def test_piattaforme_con_il_logo_vero():
+    from app import justwatch
+
+    assert justwatch.logo(8) == "https://images.justwatch.com/icon/207360008/s100/netflix.webp"
+    assert justwatch.logo(999999) == ""
+    assert all(justwatch.logo(i) for i, _, _ in justwatch.PIATTAFORME)

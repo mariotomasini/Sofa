@@ -28,6 +28,23 @@ PIATTAFORME = [
     (524, "discovery+", "dpe"),
 ]
 CODICI = {i: codice for i, _, codice in PIATTAFORME}
+# I loghi delle piattaforme, dalle immagini pubbliche di JustWatch (nessuna chiave):
+# codice → "id/nome" di images.justwatch.com/icon/<id>/s100/<nome>.webp
+ICONE = {
+    "nfx": "207360008/netflix", "prv": "322992749/amazonprimevideo", "dnp": "313118777/disneyplus",
+    "mxx": "332884837/max", "ntv": "243753092/nowtv", "skg": "346742420/skygo", "atp": "357333613/appletvplus",
+    "pmp": "242706661/paramountplus", "cru": "324213205/crunchyroll", "rai": "87462522/raiplay",
+    "msp": "312083440/mediasetplay", "tvi": "344848278/timvision", "dpe": "241126382/discoverypluseurope",
+}
+
+
+def logo(id_tmdb: int) -> str:
+    """Il logo vero della piattaforma (id TMDB), "" se non lo conosciamo."""
+    icona = ICONE.get(CODICI.get(id_tmdb, ""))
+    if not icona:
+        return ""
+    numero, nome = icona.split("/")
+    return f"{IMMAGINI}/icon/{numero}/s100/{nome}.webp"
 # Le piattaforme in abbonamento più diffuse: da qui vengono Top 10 e novità
 PRINCIPALI = ["nfx", "prv", "dnp", "mxx", "ntv", "skg", "atp", "pmp", "tvi", "rai", "msp"]
 

@@ -88,6 +88,12 @@ services:
     environment:
       <<: *utente
       HOMEPAGE_ALLOWED_HOSTS: "localhost:3000"
+      # per i numeri dal vivo dei download (le chiavi restano qui, non nella pagina)
+      HOMEPAGE_VAR_UTENTE: "{{ ADMIN_USER }}"
+      HOMEPAGE_VAR_PASSWORD: "{{ ADMIN_PASSWORD }}"
+      HOMEPAGE_VAR_RADARR: "{{ RADARR_API_KEY }}"
+      HOMEPAGE_VAR_SONARR: "{{ SONARR_API_KEY if sonarr else '' }}"
+      HOMEPAGE_VAR_LIDARR: "{{ LIDARR_API_KEY if lidarr else '' }}"
     volumes:
       - ./homepage:/app/config
       # solo per mostrare lo spazio libero nella pagina iniziale
