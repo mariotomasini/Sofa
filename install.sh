@@ -214,6 +214,7 @@ assicura_cartella "$MEDIA_DIR"
 ok "Film, serie e download in: $MEDIA_DIR"
 installa_aggiornamenti_automatici
 installa_controllo_impostazioni
+impedisci_sospensione
 
 # --- 8. Avvio e configurazione automatica ------------------------------------------
 if con_registro applica; then

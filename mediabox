@@ -67,6 +67,15 @@ tailscale_cmd() {
   if tailscale_sul_pc; then tailscale "$@"; else compose exec -T tailscale tailscale "$@"; fi
 }
 
+# Vero se Tailscale è collegato e in linea (senza python3 non si controlla: si dà per buono)
+tailscale_in_linea() {
+  command -v python3 >/dev/null 2>&1 || return 0
+  tailscale_cmd status --json 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+sys.exit(0 if d.get("BackendState") == "Running" and (d.get("Self") or {}).get("Online") else 1)' 2>/dev/null
+}
+
 aggiorna_ip() {
   local ip
   ip="$(ip_locale)"
@@ -123,7 +132,7 @@ remote() {
       || errore "Non riesco ad avviare Tailscale." "Controlla la connessione a Internet e riprova."
     for _ in $(seq 20); do
       tailscale_cmd ip -4 >/dev/null 2>&1 && break
-      link="$(tailscale_cmd status --json 2>/dev/null | grep -o '"AuthURL": *"[^"]*"' | sed 's/.*"\(http[^"]*\)"/\1/')"
+      link="$(tailscale_cmd status --json 2>/dev/null | grep -o '"AuthURL": *"https://[^"]*"' | grep -o 'https://[^"]*' | head -n1 || true)"
       [[ -n "$link" ]] && break
       sleep 2
     done
@@ -137,8 +146,20 @@ remote() {
     echo "  Ora apri il link che compare qui sotto e accedi (o crea un account gratuito)."
     sudo tailscale up
   fi
-  ip="$(tailscale_cmd ip -4 2>/dev/null | head -n1)"
+  ip="$(tailscale_cmd ip -4 2>/dev/null | head -n1 || true)"
   [[ -n "$ip" ]] || errore "Tailscale non è ancora collegato." "Apri il link qui sopra, accedi, poi riprova: mediabox remote"
+  # collegato all'account ma non in linea: di solito manca Internet o il PC si era sospeso
+  if ! tailscale_in_linea; then
+    avviso "Tailscale è avviato ma non risulta in linea: riprovo a collegarlo…"
+    if tailscale_sul_pc; then sudo systemctl restart tailscaled; else compose restart tailscale >/dev/null; fi
+    sleep 10
+    if ! tailscale_in_linea; then
+      echo "  Ultimi messaggi di Tailscale:"
+      if tailscale_sul_pc; then sudo journalctl -u tailscaled -n 15 --no-pager; else compose logs --tail 15 tailscale; fi
+      errore "Tailscale non riesce a collegarsi." "Controlla che il PC sia in Internet; manda questi messaggi a chi ti aiuta."
+    fi
+  fi
+  impedisci_sospensione
   scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
   ok "Tailscale attivo. Indirizzo di mediabox da fuori casa: http://$ip"
   echo
@@ -250,8 +271,8 @@ case "$comando" in
   restore)
     controlla_installazione; prepara_docker; restore "${1:-}" ;;
   remote)
-    controlla_installazione; remote
-    prepara_docker; configuratore_genera >/dev/null ;;
+    controlla_installazione; prepara_docker; remote
+    configuratore_genera >/dev/null ;;
   indirizzi)
     controlla_installazione; prepara_docker; aggiorna_ip
     configuratore_costruisci
