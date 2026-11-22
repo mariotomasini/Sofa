@@ -149,6 +149,38 @@ def episodio(e: dict | None) -> str:
     return f"St. {e.get('seasonNumber', 0)} · Ep. {e.get('episodeNumber', 0)}"
 
 
+def episodi(elenco: list[dict]) -> str:
+    """Più puntate dello stesso torrent: "St. 1 · Ep. 1–24", "St. 1–2 · 30 puntate"."""
+    elenco = [e or {} for e in elenco]
+    if len(elenco) == 1:
+        return episodio(elenco[0])
+    stagioni = sorted({e.get("seasonNumber", 0) for e in elenco})
+    numeri = sorted(e.get("episodeNumber", 0) for e in elenco)
+    if len(stagioni) == 1:
+        consecutive = numeri == list(range(numeri[0], numeri[0] + len(numeri)))
+        if consecutive:
+            return f"St. {stagioni[0]} · Ep. {numeri[0]}–{numeri[-1]}"
+        return f"St. {stagioni[0]} · {len(numeri)} puntate"
+    return f"St. {stagioni[0]}–{stagioni[-1]} · {len(numeri)} puntate"
+
+
+async def tutte_le_pagine(chiama, percorso: str, params: dict, per_pagina: int = 250) -> list[dict]:
+    """Tutti i record di un elenco a pagine di Radarr/Sonarr (coda, mancanti...).
+
+    Sonarr mette nella coda un record per ogni puntata: un pacchetto di una stagione intera
+    da solo riempie una pagina, e quello che resta fuori sembrerebbe "da trovare"."""
+    record: list[dict] = []
+    pagina = 1
+    while True:
+        dati = await chiama("GET", percorso, params={**params, "page": pagina, "pageSize": per_pagina}) or {}
+        nuovi = dati.get("records") or []
+        record.extend(nuovi)
+        totale = dati.get("totalRecords") or 0
+        if not nuovi or len(record) >= totale or pagina >= 100:
+            return record
+        pagina += 1
+
+
 class Automatici:
     def __init__(self, config: Config, radarr: Radarr, serie: Serie, qbit=None) -> None:
         self.config = config
@@ -226,14 +258,12 @@ class Automatici:
         in_coda_film: set[int] = set()
         in_coda_puntate: set[int] = set()
         try:
-            dati = await self.radarr._r("GET", "queue", params={"pageSize": 100, "includeMovie": "true"})
-            for r in (dati or {}).get("records", []):
+            for r in await tutte_le_pagine(self.radarr._r, "queue", {"includeMovie": "true"}):
                 film = r.get("movie") or {}
                 in_coda_film.add(r.get("movieId"))
                 voci.append({**self._da_coda(r, titolo_film(film, r.get("title", "")), "film", [r.get("movieId")]),
                              **gruppo_film(film, r.get("movieId"))})
-            mancanti = await self.radarr._r("GET", "wanted/missing", params={"pageSize": 100, "monitored": "true"})
-            for m in (mancanti or {}).get("records", []):
+            for m in await tutte_le_pagine(self.radarr._r, "wanted/missing", {"monitored": "true"}):
                 if m.get("id") in in_coda_film:
                     continue
                 uscito = m.get("isAvailable", True)
@@ -247,17 +277,28 @@ class Automatici:
             log.warning("Coda di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
             try:
-                dati = await self.serie._api("GET", "queue", params={
-                    "pageSize": 100, "includeSeries": "true", "includeEpisode": "true"})
-                for r in (dati or {}).get("records", []):
+                coda = await tutte_le_pagine(self.serie._api, "queue", {
+                    "includeSeries": "true", "includeEpisode": "true"})
+                # un torrent con più puntate (stagione intera) = una voce sola, con tutte le puntate
+                per_torrent: dict[str, list[dict]] = {}
+                for r in coda:
                     in_coda_puntate.add(r.get("episodeId"))
-                    titolo = f"{(r.get('series') or {}).get('title', '')} · {episodio(r.get('episode'))}"
-                    voci.append({**self._da_coda(r, titolo, "serie", [r.get("episodeId")]),
-                                 **gruppo_serie(r.get("series"), r.get("seriesId"), episodio(r.get("episode")))})
-                mancanti = await self.serie._api("GET", "wanted/missing", params={
-                    "pageSize": 200, "monitored": "true", "includeSeries": "true"})
+                    chiave = (r.get("downloadId") or "").lower() or f"voce:{r.get('id')}"
+                    per_torrent.setdefault(chiave, []).append(r)
+                for gruppo in per_torrent.values():
+                    gruppo.sort(key=lambda r: ((r.get("episode") or {}).get("seasonNumber", 0),
+                                               (r.get("episode") or {}).get("episodeNumber", 0)))
+                    # se una delle puntate ha un problema, si vede quello
+                    r = next((x for x in gruppo if stato_coda(x)[0] == "problema"), gruppo[0])
+                    quali = episodi([x.get("episode") for x in gruppo])
+                    titolo = f"{(r.get('series') or {}).get('title', '')} · {quali}"
+                    ids = [x.get("episodeId") for x in gruppo]
+                    voci.append({**self._da_coda(r, titolo, "serie", ids),
+                                 **gruppo_serie(r.get("series"), r.get("seriesId"), quali)})
+                mancanti = await tutte_le_pagine(self.serie._api, "wanted/missing", {
+                    "monitored": "true", "includeSeries": "true"})
                 per_serie: dict[int, tuple[dict, list[int]]] = {}
-                for e in (mancanti or {}).get("records", []):
+                for e in mancanti:
                     if e.get("id") not in in_coda_puntate:
                         serie = e.get("series") or {}
                         per_serie.setdefault(e.get("seriesId") or serie.get("id") or 0, (serie, []))[1].append(e["id"])
@@ -320,8 +361,7 @@ class Automatici:
             return self._attesa[1]
         voci: list[dict] = []
         try:
-            dati = await self.radarr._r("GET", "wanted/cutoff", params={"pageSize": 100})
-            for m in (dati or {}).get("records", []):
+            for m in await tutte_le_pagine(self.radarr._r, "wanted/cutoff", {}):
                 file = m.get("movieFile") or {}
                 lingua = self._lingua(file)
                 titolo = f"{m.get('title', '')} ({m.get('year', '')})".replace(" ()", "")
@@ -331,9 +371,8 @@ class Automatici:
             log.warning("Elenco da migliorare di Radarr non disponibile", exc_info=True)
         if self.serie.attivo:
             try:
-                dati = await self.serie._api("GET", "wanted/cutoff", params={
-                    "pageSize": 100, "includeSeries": "true", "includeEpisodeFile": "true"})
-                for e in (dati or {}).get("records", []):
+                for e in await tutte_le_pagine(self.serie._api, "wanted/cutoff", {
+                        "includeSeries": "true", "includeEpisodeFile": "true"}):
                     file = e.get("episodeFile") or {}
                     titolo = f"{(e.get('series') or {}).get('title', '')} · {episodio(e)}"
                     voci.append(self._voce(titolo, file.get("relativePath", ""), self._lingua(file), tipo="serie",
@@ -367,8 +406,8 @@ class Automatici:
         """
         fermati = 0
         try:
-            dati = await self.radarr._r("GET", "wanted/cutoff", params={"pageSize": 200})
-            film = [m["id"] for m in (dati or {}).get("records", []) if self._gia_buono(m.get("movieFile") or {})]
+            dati = await tutte_le_pagine(self.radarr._r, "wanted/cutoff", {})
+            film = [m["id"] for m in dati if self._gia_buono(m.get("movieFile") or {})]
             if film:
                 await self.radarr._r("PUT", "movie/editor", json={"movieIds": film, "monitored": False})
                 fermati += len(film)
@@ -376,9 +415,8 @@ class Automatici:
             log.warning("Controllo delle tracce audio in Radarr non riuscito", exc_info=True)
         if self.serie.attivo:
             try:
-                dati = await self.serie._api("GET", "wanted/cutoff", params={
-                    "pageSize": 500, "includeEpisodeFile": "true"})
-                puntate = [e["id"] for e in (dati or {}).get("records", [])
+                dati = await tutte_le_pagine(self.serie._api, "wanted/cutoff", {"includeEpisodeFile": "true"})
+                puntate = [e["id"] for e in dati
                            if self._gia_buono(e.get("episodeFile") or {})]
                 if puntate:
                     await self.serie._api("PUT", "episode/monitor", json={"episodeIds": puntate, "monitored": False})
@@ -410,8 +448,7 @@ class Automatici:
             servizi.append(("Sonarr", self.serie._api))
         for nome, chiama in servizi:
             try:
-                coda = await chiama("GET", "queue", params={"pageSize": 200})
-                for r in (coda or {}).get("records", []):
+                for r in await tutte_le_pagine(chiama, "queue", {}):
                     if (r.get("downloadId") or "").lower() in bloccati:
                         await chiama("DELETE", f"queue/{r['id']}", params={
                             "removeFromClient": "true", "blocklist": "true", "skipRedownload": "false"})
