@@ -327,7 +327,7 @@ Se il PC ha meno di 6 GB di memoria, l'installer spegne da solo i programmi più
 
 ## Cambiare le scelte dopo l'installazione
 
-Apri **`http://mediabox.local/impostazioni`**: la trovi anche nella pagina iniziale, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Premi **Salva e applica**: mediabox installa, configura o spegne quello che serve, e la pagina mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.
+Apri **`http://mediabox.local/impostazioni`**: la trovi anche nella pagina iniziale, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Il tasto **Salva e applica** si accende solo quando cambi qualcosa. mediabox rifà solo quello che usa le voci cambiate (per esempio le lingue dell'audio aggiornano solo Radarr e Sonarr, la chiave TMDB riavvia solo Cerca); gli altri programmi non si toccano. La pagina dice cosa rifà e mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.
 
 Le modifiche le applica un servizio di sistema (su Linux `mediabox-impostazioni.path`, su Windows l'attività pianificata *mediabox - impostazioni dal browser*). Su un sistema senza systemd scrivi `mediabox applica-impostazioni` dopo aver salvato.
 
@@ -492,16 +492,15 @@ Jellyfin non legge la guida TV dall'antenna. Per averla, metti in `EPG_XMLTV_URL
 
 ## Usare mediabox fuori casa
 
-Sul PC di mediabox scrivi:
+Su Linux **Tailscale** (una rete privata gratuita) si installa e si aggiorna da solo con mediabox. Serve solo accedere, una volta:
 
-```bash
-mediabox remote
-```
+1. apri le impostazioni (`http://mediabox.local/impostazioni`) → **Fuori casa** → **Accedi con il tuo account** (Google, Microsoft, Apple o email);
+2. installa l'app **Tailscale** sul telefono, accedi con lo stesso account e tocca **Connect**;
+3. apri l'indirizzo `http://100.x.x.x` che la pagina mostra. Nell'app Jellyfin usa `http://100.x.x.x/jellyfin`.
 
-Il comando installa **Tailscale**, una rete privata gratuita, e ti chiede di accedere con un account. Poi:
+Su login.tailscale.com, in *Machines*, scegli "Disable key expiry" per mediabox: così l'accesso non scade.
 
-1. installa l'app **Tailscale** sul telefono o sul portatile e accedi con lo stesso account;
-2. apri l'indirizzo `http://100.x.x.x` che il comando ti ha mostrato. Nell'app Jellyfin usa `http://100.x.x.x/jellyfin`.
+Dal terminale fa lo stesso `mediabox remote`, che mostra il link per accedere. Su Windows `mediabox remote` installa Tailscale; poi si accede dall'icona di Tailscale vicino all'orologio.
 
 Non serve aprire nessuna porta sul router. mediabox risponde solo alla rete di casa e a Tailscale: rifiuta qualsiasi altro accesso.
 
@@ -524,7 +523,7 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox versione` | mostra la versione installata e l'ultima disponibile |
 | `mediabox backup` | crea un backup |
 | `mediabox restore <file>` | ripristina un backup |
-| `mediabox remote` | attiva l'accesso da fuori casa (Tailscale) |
+| `mediabox remote` | mostra il link per accedere a Tailscale (accesso da fuori casa) |
 | `mediabox indirizzi` | mostra gli indirizzi da aprire nel browser |
 
 ---

@@ -41,6 +41,9 @@ volumes:
   beszel_data:
   beszel_chiave:
 {%- endif %}
+{%- if tailscale %}
+  tailscale_stato:
+{%- endif %}
 
 x-utente: &utente
   PUID: "{{ PUID }}"
@@ -431,12 +434,39 @@ services:
       TZ: "{{ TZ }}"
     volumes:
       - ..:/mediabox
+{%- if tailscale_socket %}
+      # per mostrare nella pagina lo stato di Tailscale e il link per accedere
+      - /var/run/tailscale:/var/run/tailscale
+{%- endif %}
     labels: *custodito
     healthcheck:
       <<: *controllo
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/impostazioni/salute', timeout=10)"]
       start_period: 120s
 
+{%- if tailscale %}
+  # Tailscale: mediabox anche fuori casa, senza aprire porte sul router. Si installa e si
+  # aggiorna con mediabox; l'accesso (una volta sola, con il tuo account) si fa dalla pagina
+  # delle impostazioni, che mostra il link. Rete dell'host: l'indirizzo 100.x è del PC.
+  tailscale:
+    image: "{{ IMG_TAILSCALE | default('ghcr.io/tailscale/tailscale:v1.104.4') }}"
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      TS_HOSTNAME: mediabox
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
+      TS_AUTH_ONCE: "true"
+    volumes:
+      - tailscale_stato:/var/lib/tailscale
+      - /var/run/tailscale:/var/run/tailscale
+    cpu_shares: 256
+
+{% endif %}
   # Custode: se un servizio smette di rispondere (controllo di salute "unhealthy") lo
   # riavvia in pochi secondi. È minuscolo (un piccolo programma, pochi MB di memoria).
   custode:

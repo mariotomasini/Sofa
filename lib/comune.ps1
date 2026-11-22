@@ -152,6 +152,8 @@ function Scarica-Immagini {
 
 # Tutto il ciclo: genera → prepara → avvia → configura via API. Restituisce $true se tutto è andato bene.
 function Applica-Configurazione {
+    # si rifà tutto: un piano rimasto da un cambio di impostazioni non serve più
+    Remove-Item (Join-Path $script:MediaboxDir "generato\impostazioni.piano") -Force -ErrorAction SilentlyContinue
     Genera-File
     Scrivi-Titolo "Scarico i programmi (la prima volta può richiedere diversi minuti)"
     Scarica-Immagini
@@ -169,6 +171,39 @@ function Applica-Configurazione {
     Riavvia-Segnati
     Scrivi-Ok "Servizi avviati"
     Invoca-Compose run --rm -T configuratore configura | Out-Host
+    return ($LASTEXITCODE -eq 0)
+}
+
+# Dopo un cambio di impostazioni dal browser: solo quello che serve (generato\impostazioni.piano,
+# scritto dalla pagina). "compose up" ricrea solo i servizi cambiati; i programmi si riconfigurano
+# solo se usano le voci cambiate. Senza piano si rifà tutto, come prima.
+function Voce-Piano([string]$Nome) {
+    $piano = Join-Path $script:MediaboxDir "generato\impostazioni.piano"
+    if (-not (Test-Path $piano)) { return $null }
+    foreach ($riga in Get-Content -LiteralPath $piano) {
+        if ($riga -like "$Nome=*") { return $riga.Substring($Nome.Length + 1).Trim() }
+    }
+    return ""
+}
+
+function Applica-Necessario {
+    $piano = Join-Path $script:MediaboxDir "generato\impostazioni.piano"
+    if (-not (Test-Path $piano)) { return (Applica-Configurazione) }
+    $servizi = Voce-Piano "configura"
+    $prepara = Voce-Piano "prepara"
+    Genera-File
+    Scrivi-Titolo "Applico le modifiche"
+    Scarica-Mancanti
+    if ($prepara -eq "si") { Invoca-Compose run --rm --remove-orphans -T configuratore prepara | Out-Host }
+    Invoca-Compose up -d --remove-orphans | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Esci-ConErrore "Alcuni servizi non sono partiti." "Guarda i messaggi qui sopra; spesso basta riprovare con: mediabox configura"
+    }
+    Riavvia-Segnati
+    Remove-Item $piano -Force -ErrorAction SilentlyContinue
+    if (-not $servizi) { Scrivi-Ok "Fatto: nessun programma da riconfigurare"; return $true }
+    if ($servizi -eq "tutto") { Invoca-Compose run --rm -T configuratore configura | Out-Host }
+    else { Invoca-Compose run --rm -T configuratore configura --solo $servizi | Out-Host }
     return ($LASTEXITCODE -eq 0)
 }
 

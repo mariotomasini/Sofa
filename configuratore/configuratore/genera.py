@@ -105,6 +105,8 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         flaresolverr=imp.flaresolverr,
         beszel=imp.beszel,
         tgarr=imp.tgarr,
+        tailscale=imp.tailscale_docker,
+        tailscale_socket=not imp.windows,
         gateway=gateway(imp.get("SUBNET", "172.28.64.0/24")),
         tv=imp.dvb or bool(imp.hdhomerun),
         hash_password=_hash_password(imp.password, cartella_generato / "Caddyfile"),

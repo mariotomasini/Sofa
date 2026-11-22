@@ -301,7 +301,23 @@ async function avviaAvanzamento() {
 }
 
 // --- impostazioni dopo l'installazione ---------------------------------------------------------
+// "Salva" si accende solo se qualcosa è cambiato davvero: senza modifiche non si salva e non si rifà niente
+let moduloIniziale = "";
+
+function controllaModifiche() {
+  const cambiato = JSON.stringify(datiModulo()) !== moduloIniziale;
+  $("salva").disabled = !cambiato;
+  $("salva").textContent = cambiato ? "Salva e applica" : "Nessuna modifica";
+}
+
+function seguiModifiche() {
+  moduloIniziale = JSON.stringify(datiModulo());
+  ["input", "change"].forEach((tipo) => $("modulo").addEventListener(tipo, controllaModifiche));
+  controllaModifiche();
+}
+
 async function salvaImpostazioni() {
+  if (JSON.stringify(datiModulo()) === moduloIniziale) { avviso("Non hai cambiato nulla."); return; }
   $("salva").disabled = true;
   const chiave = $("tmdb").value.trim();
   if (chiave && chiave !== tmdbVerificata) {
@@ -320,6 +336,7 @@ async function salvaImpostazioni() {
   try {
     const r = await api("/api/impostazioni", datiModulo());
     if (!r.cambiato) { avviso(r.messaggio); return; }
+    if (r.cosa) avviso(r.cosa);
     seguo(true);
     seguoPrimaInstallazione = false;
     avviaAvanzamento();
@@ -327,7 +344,7 @@ async function salvaImpostazioni() {
     if (e.stato === 401) { location.reload(); return; }
     avviso(e.message);
     if (e.campo) messaggio(`msg-${{ lingue: "scelte", cartella: "cartella" }[e.campo] || e.campo}`, e.message);
-  } finally { $("salva").disabled = false; }
+  } finally { controllaModifiche(); }
 }
 
 // --- aggiornamenti ------------------------------------------------------------------------------------
@@ -444,6 +461,43 @@ async function avviaAggiornamenti() {
   });
 }
 
+// --- fuori casa (Tailscale) ---------------------------------------------------------------------
+// Tailscale si installa e si aggiorna da solo con mediabox: qui serve solo accedere, una volta.
+async function avviaFuoriCasa() {
+  if (!$("blocco-fuori-casa")) return;
+  const testo = $("fc-testo");
+  let d;
+  try { d = await api("/api/tailscale"); } catch (e) { $("blocco-fuori-casa").hidden = true; return; }
+  $("fc-link").hidden = $("fc-apri").hidden = $("fc-passi").hidden = true;
+  $("fc-stato").textContent = "";
+  if (d.stato === "collegato") {
+    testo.textContent = `Attivo${d.account ? " con l'account " + d.account : ""}. Da fuori casa mediabox è qui: ${d.indirizzo}`;
+    $("fc-apri").href = d.indirizzo;
+    $("fc-apri").hidden = $("fc-passi").hidden = false;
+    if (d.scade) {
+      messaggio("fc-stato", `L'accesso scade il ${d.scade.split("-").reverse().join("/")}: su login.tailscale.com, ` +
+        `in Machines, scegli "Disable key expiry" per mediabox, così non scade più.`, "ok");
+    }
+    return;
+  }
+  if (d.stato === "da_collegare") {
+    testo.textContent = "Per usare mediabox fuori casa accedi a Tailscale (gratis) con il tuo account Google, " +
+      "Microsoft o Apple, o con la tua email. Basta una volta.";
+    $("fc-link").href = d.link;
+    $("fc-link").hidden = false;
+  } else if (d.stato === "windows") {
+    testo.textContent = "Su Windows: sul PC di mediabox scrivi \"mediabox remote\" in PowerShell, poi accedi dall'icona di Tailscale.";
+    return;
+  } else if (d.stato === "avvio") {
+    testo.textContent = "Tailscale si sta avviando…";
+  } else {
+    testo.textContent = "Tailscale non è ancora attivo: parte con il prossimo aggiornamento di mediabox " +
+      "(o subito con \"mediabox configura\" sul PC).";
+    return;
+  }
+  setTimeout(avviaFuoriCasa, 4000);  // finché non hai fatto l'accesso, la pagina si aggiorna da sola
+}
+
 $("modulo-accesso").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
@@ -469,7 +523,9 @@ $("esci").addEventListener("click", async () => { await api("/api/esci", {}); lo
       s.hidden = ["benvenuto", "password", "riepilogo"].includes(s.dataset.passo);
     });
     mostraVista("impostazioni");
+    seguiModifiche();
     avviaAggiornamenti();
+    avviaFuoriCasa();
   } else {
     mostraVista("accesso");
   }

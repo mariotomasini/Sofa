@@ -41,7 +41,8 @@ def errore_imprevisto(nome: str, exc: Exception) -> ErroreMediabox:
     )
 
 
-def _configura(imp: Impostazioni) -> int:
+def _configura(imp: Impostazioni, solo: set[str] | None = None) -> int:
+    """Configura i servizi via API. Con `solo` (es. {"radarr", "sonarr"}) solo quelli."""
     from .riepilogo import Esito, stampa_riepilogo
     from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tgarr, tvheadend
 
@@ -64,6 +65,11 @@ def _configura(imp: Impostazioni) -> int:
     if imp.beszel:
         passi.append(("Beszel", beszel.configura))
     passi.append(("Jellyfin", jellyfin.configura))
+    if solo is not None:
+        codici = {"Telegram (tgarr)": "tgarr"}
+        passi = [(nome, f) for nome, f in passi if codici.get(nome, nome.lower()) in solo]
+        if not passi:
+            return 0
 
     for numero, (nome, funzione) in enumerate(passi, 1):
         titolo(f"Configuro {nome} ({numero} di {len(passi)})")
@@ -87,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     sotto = parser.add_subparsers(dest="comando", required=True)
     sotto.add_parser("genera")
     sotto.add_parser("prepara")
-    sotto.add_parser("configura")
+    conf = sotto.add_parser("configura")
+    conf.add_argument("--solo", default="", help="solo questi servizi, separati da virgola (es. radarr,sonarr)")
     sotto.add_parser("riepilogo")
     sotto.add_parser("indirizzi")
     sotto.add_parser("backup")
@@ -142,7 +149,8 @@ def main(argv: list[str] | None = None) -> int:
 
             prepara(imp, CARTELLA_MEDIABOX)
         elif args.comando == "configura":
-            return _configura(imp)
+            solo = {x.strip() for x in args.solo.split(",") if x.strip()} if args.solo else None
+            return _configura(imp, solo)
         elif args.comando in ("riepilogo", "indirizzi"):
             from .riepilogo import Esito, stampa_indirizzi, stampa_riepilogo
 

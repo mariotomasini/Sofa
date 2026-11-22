@@ -285,8 +285,13 @@ def salva_installazione(cartella: Path, dati: dict) -> None:
     (cartella / FLAG_PRONTA).write_text(str(int(time.time())), encoding="utf-8")
 
 
-def salva_impostazioni(cartella: Path, dati: dict) -> bool:
-    """Dopo l'installazione. Restituisce False se non è cambiato nulla."""
+def salva_impostazioni(cartella: Path, dati: dict) -> str | None:
+    """Dopo l'installazione. Restituisce cosa verrà rifatto, o None se non è cambiato nulla.
+
+    Si salva solo se qualcosa cambia davvero, e il piano dice al PC di rifare solo quello
+    che usa le voci cambiate (piano_impostazioni)."""
+    from ..piano_impostazioni import piano, scrivi
+
     v = valori(cartella)
     modifiche = modifiche_da_scelte(v, dati)
     chiave = re.sub(r"\s", "", str(dati.get("tmdb") or ""))
@@ -294,13 +299,15 @@ def salva_impostazioni(cartella: Path, dati: dict) -> bool:
         modifiche["TMDB_API_KEY"] = ""
     elif chiave and chiave != v.get("TMDB_API_KEY"):
         modifiche["TMDB_API_KEY"] = chiave
+    modifiche = {k: val for k, val in modifiche.items() if v.get(k, "") != val}
     if not modifiche:
-        return False
+        return None
     aggiorna_env(cartella / ".env", modifiche)
+    da_fare = scrivi(cartella, piano(modifiche))
     # dentro c'è la cartella di prima: se cambia, lo script sposta i file
     (cartella / FLAG_APPLICA).write_text(v.get("MEDIA_DIR", ""), encoding="utf-8")
     (cartella / STATO).write_text("attesa", encoding="utf-8")
-    return True
+    return da_fare.descrizione()
 
 
 # --- accesso ---------------------------------------------------------------------------
@@ -466,3 +473,38 @@ def richiedi_aggiornamento(cartella: Path) -> None:
     flag = cartella / FLAG_APPLICA
     if not flag.exists():
         flag.write_text(valori(cartella).get("MEDIA_DIR", ""), encoding="utf-8")
+
+
+# --- Tailscale: mediabox fuori casa -------------------------------------------------------------
+SOCKET_TAILSCALE = Path("/var/run/tailscale/tailscaled.sock")
+
+
+def stato_tailscale(v: dict[str, str], socket: Path = SOCKET_TAILSCALE, client=None) -> dict:
+    """Lo stato per la pagina: spento, da collegare (con il link per accedere), collegato (con l'indirizzo).
+
+    Lo chiede a Tailscale sul PC (la sua "API locale", sul file socket), solo in lettura."""
+    import httpx
+
+    if windows(v):
+        return {"stato": "windows"}
+    if not socket.exists():
+        return {"stato": "spento"}
+    try:
+        client = client or httpx.Client(transport=httpx.HTTPTransport(uds=str(socket)), timeout=5)
+        r = client.get("http://local-tailscaled.sock/localapi/v0/status", headers={"Host": "local-tailscaled.sock"})
+        dati = r.json()
+    except (httpx.HTTPError, ValueError):
+        return {"stato": "spento"}
+    io = dati.get("Self") or {}
+    ip = next((x for x in io.get("TailscaleIPs") or [] if "." in x), "")
+    stato = dati.get("BackendState", "")
+    if stato == "Running" and ip:
+        porta = v.get("HTTP_PORT", "80")
+        indirizzo = f"http://{ip}" + ("" if porta in ("", "80") else f":{porta}")
+        scadenza = io.get("KeyExpiry") or ""
+        return {"stato": "collegato", "ip": ip, "indirizzo": indirizzo, "nome": (io.get("DNSName") or "").rstrip("."),
+                "account": next((u.get("LoginName", "") for u in (dati.get("User") or {}).values()), ""),
+                "scade": scadenza[:10] if scadenza and not scadenza.startswith("0001") else ""}
+    if dati.get("AuthURL"):
+        return {"stato": "da_collegare", "link": dati["AuthURL"]}
+    return {"stato": "avvio"}

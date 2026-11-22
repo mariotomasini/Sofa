@@ -129,6 +129,20 @@
           </div>
           <pre class="registro" id="agg-registro" hidden></pre>
         </div>
+        <div class="solo-impostazioni aggiornamenti" id="blocco-fuori-casa">
+          <h2>Fuori casa</h2>
+          <p class="aiuto" id="fc-testo">Controllo Tailscale…</p>
+          <p class="messaggio" id="fc-stato" role="status"></p>
+          <div class="comandi-aggiornamento">
+            <a class="bottone" id="fc-link" href="#" target="_blank" rel="noopener" hidden>Accedi con il tuo account</a>
+            <a class="bottone contorno" id="fc-apri" href="#" target="_blank" rel="noopener" hidden>Apri mediabox da fuori</a>
+          </div>
+          <ol class="aiuto passi-fuori-casa" id="fc-passi" hidden>
+            <li>Sul telefono installa l'app <strong>Tailscale</strong> e accedi con lo stesso account.</li>
+            <li>Tocca <strong>Connect</strong> e consenti la VPN.</li>
+            <li>Apri l'indirizzo qui sopra (nell'app Jellyfin: lo stesso indirizzo seguito da <code>/jellyfin</code>).</li>
+          </ol>
+        </div>
       </section>
 
       <section class="passo" data-passo="cartella" aria-labelledby="t-cartella">
