@@ -1,5 +1,8 @@
 """L'ordine della coda di qBittorrent: le puntate dalla prima all'ultima.
 
+Serve solo se in qBittorrent la coda è attiva. Il configuratore la spegne (tutto si
+scarica insieme): allora i torrent non hanno un posto in coda e qui non si fa niente.
+
 Sonarr manda i torrent a qBittorrent nell'ordine in cui li trova, che non è quello
 delle puntate. qBittorrent ne scarica pochi alla volta (la coda la imposta il
 configuratore), quindi l'ordine conta: qui le puntate di ogni serie vanno in fila
