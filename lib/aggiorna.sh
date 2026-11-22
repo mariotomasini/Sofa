@@ -96,6 +96,8 @@ aggiorna_mediabox() {
 aggiorna_servizi() {
   stato_aggiornamento installo "Aggiorno i programmi cambiati…"
   titolo "Aggiorno solo quello che è cambiato"
+  # indirizzi e Tailscale (se c'è già sul PC mediabox non avvia il suo)
+  aggiorna_ip
   configuratore_genera
   scarica_mancanti
   if nel_piano cerca; then

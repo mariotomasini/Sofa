@@ -58,14 +58,23 @@ stato() {
   done
 }
 
+# Tailscale installato a mano sul PC (versioni vecchie di "mediabox remote") o come servizio di mediabox
+tailscale_sul_pc() {
+  command -v tailscale >/dev/null 2>&1 && systemctl is-enabled tailscaled >/dev/null 2>&1
+}
+
+tailscale_cmd() {
+  if tailscale_sul_pc; then tailscale "$@"; else compose exec -T tailscale tailscale "$@"; fi
+}
+
 aggiorna_ip() {
   local ip
   ip="$(ip_locale)"
   [[ -n "$ip" ]] && scrivi_env HOST_IP "$ip" "$ENV_FILE"
-  if command -v tailscale >/dev/null 2>&1; then
-    ip="$(tailscale ip -4 2>/dev/null | head -n1 || true)"
-    [[ -n "$ip" ]] && scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
-  fi
+  # se Tailscale c'è già sul PC, mediabox non avvia il suo (due insieme si darebbero fastidio)
+  if tailscale_sul_pc; then scrivi_env TAILSCALE_HOST si "$ENV_FILE"; else scrivi_env TAILSCALE_HOST no "$ENV_FILE"; fi
+  ip="$(tailscale_cmd ip -4 2>/dev/null | head -n1 || true)"
+  [[ "$ip" == 100.* ]] && scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
   return 0
 }
 
@@ -105,17 +114,31 @@ restore() {
 
 remote() {
   titolo "Accesso da fuori casa con Tailscale"
-  if ! command -v tailscale >/dev/null 2>&1; then
-    info "Installo Tailscale…"
-    curl -fsSL https://tailscale.com/install.sh | sh >/dev/null \
-      || errore "Non sono riuscito a installare Tailscale." "Controlla la connessione a Internet e riprova."
-  fi
-  if ! tailscale ip -4 >/dev/null 2>&1; then
+  local ip link
+  if ! tailscale_sul_pc; then
+    # Tailscale è un servizio di mediabox: si installa e si aggiorna da solo
+    aggiorna_ip
+    configuratore_genera
+    compose up -d tailscale >/dev/null 2>&1 \
+      || errore "Non riesco ad avviare Tailscale." "Controlla la connessione a Internet e riprova."
+    for _ in $(seq 20); do
+      tailscale_cmd ip -4 >/dev/null 2>&1 && break
+      link="$(tailscale_cmd status --json 2>/dev/null | grep -o '"AuthURL": *"[^"]*"' | sed 's/.*"\(http[^"]*\)"/\1/')"
+      [[ -n "$link" ]] && break
+      sleep 2
+    done
+    if [[ -n "$link" ]]; then
+      echo "  Apri questo link e accedi con il tuo account (o crea un account gratuito):"
+      echo "    $link"
+      echo "  Lo trovi anche nelle impostazioni: $(indirizzo_principale)/impostazioni/ → Fuori casa"
+      for _ in $(seq 150); do tailscale_cmd ip -4 >/dev/null 2>&1 && break; sleep 2; done
+    fi
+  elif ! tailscale ip -4 >/dev/null 2>&1; then
     echo "  Ora apri il link che compare qui sotto e accedi (o crea un account gratuito)."
     sudo tailscale up
   fi
-  local ip
-  ip="$(tailscale ip -4 | head -n1)"
+  ip="$(tailscale_cmd ip -4 2>/dev/null | head -n1)"
+  [[ -n "$ip" ]] || errore "Tailscale non è ancora collegato." "Apri il link qui sopra, accedi, poi riprova: mediabox remote"
   scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
   ok "Tailscale attivo. Indirizzo di mediabox da fuori casa: http://$ip"
   echo
@@ -145,7 +168,7 @@ applica_impostazioni_web() {
   applica_scelte() {
     sposta_media "$cartella_prima" "$(leggi_env MEDIA_DIR "$ENV_FILE")"
     aggiorna_ip
-    applica
+    applica_necessario
   }
   con_registro applica_scelte
 }

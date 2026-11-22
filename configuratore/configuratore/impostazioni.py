@@ -140,6 +140,13 @@ class Impostazioni:
         return self.get("HDHOMERUN_IP")
 
     @property
+    def tailscale_docker(self) -> bool:
+        """Tailscale come servizio di mediabox (Linux). Non se è già installato sul PC
+        (TAILSCALE_HOST=si, lo scrive lo script) o se è spento (WITH_TAILSCALE=no)."""
+        return (not self.windows and _si(self.get("WITH_TAILSCALE", "si"))
+                and not _si(self.get("TAILSCALE_HOST", "no")))
+
+    @property
     def windows(self) -> bool:
         return self.get("PIATTAFORMA", "linux").lower() == "windows"
 

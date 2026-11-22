@@ -566,3 +566,65 @@ def test_minimo_di_fonti_in_prowlarr():
     p.salvati.clear()
     imposta_min_fonti(p, 3)
     assert p.salvati == []  # già giusto: niente da salvare
+
+
+def test_tailscale_come_servizio_solo_su_linux_e_se_non_c_e_gia(cartella):
+    import yaml
+
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = yaml.safe_load((cartella / "generato" / "docker-compose.yml").read_text())
+    ts = compose["services"]["tailscale"]
+    assert ts["network_mode"] == "host" and "/dev/net/tun:/dev/net/tun" in ts["devices"]
+    assert ts["image"].startswith("ghcr.io/tailscale/tailscale:v")
+    assert "tailscale_stato" in compose["volumes"]
+    assert "/var/run/tailscale:/var/run/tailscale" in compose["services"]["impostazioni"]["volumes"]
+    # già installato sul PC (vecchio "mediabox remote"): niente doppione, ma la pagina lo vede
+    with open(cartella / ".env", "a") as f:
+        f.write("TAILSCALE_HOST=si\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = yaml.safe_load((cartella / "generato" / "docker-compose.yml").read_text())
+    assert "tailscale" not in compose["services"]
+    assert "/var/run/tailscale:/var/run/tailscale" in compose["services"]["impostazioni"]["volumes"]
+    # Windows: Tailscale si installa con "mediabox remote" (rete dell'host non disponibile)
+    with open(cartella / ".env", "a") as f:
+        f.write("TAILSCALE_HOST=no\nPIATTAFORMA=windows\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = yaml.safe_load((cartella / "generato" / "docker-compose.yml").read_text())
+    assert "tailscale" not in compose["services"]
+    assert not any("tailscale" in v for v in compose["services"]["impostazioni"]["volumes"])
+
+
+def test_piano_delle_impostazioni(tmp_path):
+    from configuratore.piano_impostazioni import Piano, leggi, piano, scrivi
+
+    # la chiave TMDB: solo Cerca va ricreato (lo fa Docker), nessun programma da riconfigurare
+    assert piano({"TMDB_API_KEY"}) == Piano(prepara=False, configura=[])
+    assert piano({"LINGUE_AUDIO"}).configura == ["radarr", "sonarr"]
+    assert piano({"LINGUE_SOTTOTITOLI"}).configura == ["bazarr"]
+    serie = piano({"WITH_SONARR", "SONARR_API_KEY"})
+    assert serie.prepara and serie.configura == ["sonarr", "prowlarr", "bazarr", "jellyfin"]
+    assert piano({"MEDIA_DIR"}) == Piano(prepara=True, configura=[])
+    # una voce sconosciuta: si rifà tutto, meglio lento che sbagliato
+    assert piano({"VOCE_NUOVA"}) == Piano(prepara=True, configura=None)
+    # due salvataggi prima che il PC applichi il primo: si sommano
+    scrivi(tmp_path, piano({"LINGUE_AUDIO"}))
+    assert scrivi(tmp_path, piano({"LINGUE_SOTTOTITOLI"})).configura == ["radarr", "sonarr", "bazarr"]
+    assert (tmp_path / "generato" / "impostazioni.piano").read_text() == "prepara=no\nconfigura=radarr,sonarr,bazarr\n"
+    scrivi(tmp_path, piano({"VOCE_NUOVA"}))
+    assert leggi(tmp_path) == Piano(prepara=True, configura=None)
+    assert "Radarr" in piano({"LINGUE_AUDIO"}).descrizione() and "non si toccano" in piano({"LINGUE_AUDIO"}).descrizione()
+
+
+def test_configura_solo_alcuni_servizi(monkeypatch, cartella):
+    from configuratore import __main__ as principale
+    from configuratore.servizi import bazarr, jellyfin, prowlarr, qbittorrent, radarr, sonarr
+
+    fatti = []
+    for modulo in (qbittorrent, radarr, sonarr, prowlarr, bazarr, jellyfin):
+        monkeypatch.setattr(modulo, "configura", lambda imp, esito, m=modulo.__name__: fatti.append(m.rsplit(".", 1)[-1]))
+    monkeypatch.setattr(principale, "CARTELLA_MEDIABOX", cartella)
+    (cartella / "generato").mkdir(exist_ok=True)
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_SONARR=si\n")
+    assert principale._configura(Impostazioni.carica(cartella), {"radarr", "sonarr"}) == 0
+    assert fatti == ["radarr", "sonarr"]

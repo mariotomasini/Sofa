@@ -179,8 +179,16 @@ def crea_app(cartella: Path = CARTELLA_MEDIABOX) -> FastAPI:
         except p.DatiNonValidi as exc:
             return errore(exc)
         if not cambiato:
-            return {"ok": True, "cambiato": False, "messaggio": "Non hai cambiato nulla."}
-        return {"ok": True, "cambiato": True}
+            return {"ok": True, "cambiato": False, "messaggio": "Non hai cambiato nulla: non salvo e non rifaccio niente."}
+        return {"ok": True, "cambiato": True, "cosa": cambiato}
+
+    @app.get(f"{BASE}/api/tailscale")
+    async def api_tailscale(request: Request):
+        if not connesso(request):
+            return JSONResponse({"errore": "Accedi di nuovo con la password di amministrazione."}, status_code=401)
+        from starlette.concurrency import run_in_threadpool
+
+        return await run_in_threadpool(p.stato_tailscale, p.valori(cartella))
 
     # --- aggiornamenti ---------------------------------------------------------------------------
     def non_connesso() -> JSONResponse:

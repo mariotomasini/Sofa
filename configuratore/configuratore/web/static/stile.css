@@ -218,6 +218,9 @@ body.in-impostazioni .passo h1 { font-size: 1.6rem; }
 
 /* aggiornamenti */
 .aggiornamenti { margin-top: 32px; }
+#salva:disabled { cursor: default; }
+.passi-fuori-casa { padding-left: 1.2rem; margin-top: 12px; }
+.passi-fuori-casa li { margin: 4px 0; }
 .aggiornamenti .versione { margin: 4px 0; font-weight: 600; }
 .comandi-aggiornamento { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 .aggiornamenti .registro {

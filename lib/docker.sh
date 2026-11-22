@@ -86,6 +86,8 @@ scarica_immagini() {
 
 # Tutto il ciclo: genera → prepara → avvia → configura via API
 applica() {
+  # si rifà tutto: un piano rimasto da un cambio di impostazioni non serve più
+  rm -f "$MEDIABOX_DIR/generato/impostazioni.piano"
   configuratore_genera
   titolo "Scarico i programmi (la prima volta può richiedere diversi minuti)"
   scarica_immagini
@@ -101,6 +103,39 @@ applica() {
   ok "Servizi avviati"
   # configura restituisce errore se qualcosa non è andato: il riepilogo lo spiega
   compose run --rm -T configuratore configura || return 1
+}
+
+# Dopo un cambio di impostazioni dal browser: solo quello che serve (generato/impostazioni.piano,
+# scritto dalla pagina). "compose up" ricrea solo i servizi con impostazioni diverse; i programmi
+# si riconfigurano solo se usano le voci cambiate. Senza piano si rifà tutto, come prima.
+voce_piano() {
+  sed -n "s/^$1=//p" "$MEDIABOX_DIR/generato/impostazioni.piano" 2>/dev/null | head -n1
+}
+
+applica_necessario() {
+  local piano="$MEDIABOX_DIR/generato/impostazioni.piano" servizi prepara
+  if [[ ! -f "$piano" ]]; then
+    applica
+    return
+  fi
+  servizi="$(voce_piano configura)"
+  prepara="$(voce_piano prepara)"
+  configuratore_genera
+  titolo "Applico le modifiche"
+  scarica_mancanti
+  if [[ "$prepara" == "si" ]]; then
+    compose run --rm --remove-orphans -T configuratore prepara
+  fi
+  compose up -d --remove-orphans || errore "Alcuni servizi non sono partiti." \
+    "Guarda i messaggi qui sopra; spesso basta riprovare con \"mediabox configura\"."
+  riavvia_segnati
+  rm -f "$piano"
+  case "$servizi" in
+    "") ok "Fatto: nessun programma da riconfigurare" ;;
+    tutto) compose run --rm -T configuratore configura || return 1 ;;
+    *) compose run --rm -T configuratore configura --solo "$servizi" || return 1 ;;
+  esac
+  ok "Modifiche applicate"
 }
 
 # --- Configurazione dal browser -----------------------------------------------------------

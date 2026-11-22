@@ -294,3 +294,37 @@ def test_impostazioni_download_e_telegram(cartella):
         p.salva_impostazioni(cartella, {"telegram": {"api_id": "abc"}})
     scelte = p.scelte_attuali(leggi_env(cartella / ".env"))
     assert scelte["telegram"]["hash_impostato"] and "api_hash" not in scelte["telegram"]
+
+
+def test_senza_modifiche_non_salva_e_con_modifiche_rifa_solo_il_necessario(cartella):
+    p.salva_installazione(cartella, dati_validi())
+    (cartella / p.FLAG_PRONTA).unlink()
+    prima = (cartella / ".env").read_text()
+    # stesse scelte di adesso: niente salvataggio, niente segnale per il PC
+    attuali = leggi_env(cartella / ".env").get("LINGUE_AUDIO", "it,es,en")
+    assert p.salva_impostazioni(cartella, {"lingue_audio": attuali}) is None
+    assert (cartella / ".env").read_text() == prima and not (cartella / p.FLAG_APPLICA).exists()
+    cosa = p.salva_impostazioni(cartella, {"lingue_audio": "es,it"})
+    assert "Radarr" in cosa and (cartella / p.FLAG_APPLICA).exists()
+    assert (cartella / "generato" / "impostazioni.piano").read_text() == "prepara=no\nconfigura=radarr,sonarr\n"
+
+
+def test_stato_tailscale(tmp_path):
+    import httpx
+
+    socket = tmp_path / "tailscaled.sock"
+    assert p.stato_tailscale({}, socket)["stato"] == "spento"
+    assert p.stato_tailscale({"PIATTAFORMA": "windows"}, socket)["stato"] == "windows"
+    socket.write_text("")
+
+    def con(risposta):
+        return httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=risposta)))
+
+    da_collegare = p.stato_tailscale({}, socket, con({"BackendState": "NeedsLogin", "AuthURL": "https://login.tailscale.com/a/x"}))
+    assert da_collegare == {"stato": "da_collegare", "link": "https://login.tailscale.com/a/x"}
+    collegato = p.stato_tailscale({"HTTP_PORT": "80"}, socket, con({
+        "BackendState": "Running", "Self": {"TailscaleIPs": ["100.101.1.2", "fd7a::1"], "DNSName": "mediabox.tail1.ts.net.",
+                                            "KeyExpiry": "2027-05-20T10:00:00Z"},
+        "User": {"1": {"LoginName": "io@example.com"}}}))
+    assert collegato == {"stato": "collegato", "ip": "100.101.1.2", "indirizzo": "http://100.101.1.2",
+                         "nome": "mediabox.tail1.ts.net", "account": "io@example.com", "scade": "2027-05-20"}

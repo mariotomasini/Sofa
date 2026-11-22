@@ -140,7 +140,7 @@ function Applica-ImpostazioniWeb {
         Sposta-Media $cartellaPrima (Leggi-Env "MEDIA_DIR" $script:EnvFile)
         New-Item -ItemType Directory -Force -Path ((Leggi-Env "MEDIA_DIR" $script:EnvFile) -replace "/", "\") | Out-Null
         Aggiorna-Ip
-        Applica-Configurazione
+        Applica-Necessario
     }
     if (-not $ok) { exit 1 }
 }
