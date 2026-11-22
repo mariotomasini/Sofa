@@ -628,3 +628,21 @@ def test_configura_solo_alcuni_servizi(monkeypatch, cartella):
         f.write("WITH_SONARR=si\n")
     assert principale._configura(Impostazioni.carica(cartella), {"radarr", "sonarr"}) == 0
     assert fatti == ["radarr", "sonarr"]
+
+
+def test_pagina_iniziale_con_i_numeri_dei_download(cartella):
+    import yaml
+
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_SONARR=si\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    testo = (cartella / "generato" / "homepage" / "services.yaml").read_text()
+    gruppi = {nome: voci for g in yaml.safe_load(testo) for nome, voci in g.items()}
+    assert list(gruppi) == ["Guarda", "Download", "Manutenzione"]
+    download = {n: v for voce in gruppi["Download"] for n, v in voce.items()}
+    assert download["Radarr"]["widget"]["key"] == "{{HOMEPAGE_VAR_RADARR}}"
+    assert download["Sonarr"]["widget"]["url"] == "http://sonarr:8989/sonarr"
+    # le chiavi vere stanno nel compose, non nella pagina
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert "HOMEPAGE_VAR_RADARR:" in compose
+    assert "Lidarr" not in download

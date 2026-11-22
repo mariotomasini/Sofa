@@ -22,12 +22,16 @@ body { color: var(--mb-testo); }
 .service-name, .service-title { font-weight: 700 !important; font-size: 1.05rem !important; color: var(--mb-testo) !important; }
 .service-description { color: var(--mb-tenue) !important; font-size: .9rem !important; }
 
-/* la tessera "Cerca un film" in evidenza */
-li.service[data-name="Cerca un film"] > div, .service-card[data-name="Cerca un film"] {
-  background: var(--mb-accento) !important;
+/* la riga "Guarda": tessere più grandi, Jellyfin in evidenza */
+li.service[data-name="Jellyfin"] > div, li.service[data-name="Cerca"] > div, li.service[data-name="Kids"] > div {
+  min-height: 92px; display: flex; align-items: center;
 }
-li.service[data-name="Cerca un film"] .service-name,
-li.service[data-name="Cerca un film"] .service-description { color: #1d1208 !important; }
+li.service[data-name="Jellyfin"] > div { background: var(--mb-accento) !important; }
+li.service[data-name="Jellyfin"] .service-name,
+li.service[data-name="Jellyfin"] .service-description { color: #1d1208 !important; }
+
+/* i numeri dal vivo dei download */
+.service-block { background: var(--mb-pannello-2) !important; border-radius: 10px !important; }
 
 /* focus del telecomando */
 a:focus-visible, button:focus-visible { outline: 4px solid #fff !important; outline-offset: 4px; border-radius: 16px; }

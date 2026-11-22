@@ -569,7 +569,7 @@ class CatalogoLibero:
         return {n: tabella[n.casefold()] for n in nomi if n.casefold() in tabella}
 
     async def piattaforme(self, tipo: str = "movie") -> list[dict]:
-        return [{"id": i, "nome": nome, "logo": "", "titolo_riga": f"Di tendenza su {nome}"}
+        return [{"id": i, "nome": nome, "logo": justwatch.logo(i), "titolo_riga": f"Di tendenza su {nome}"}
                 for i, nome, _ in justwatch.PIATTAFORME]
 
     async def su_piattaforma(self, tipo: str, piattaforma: int, pagina: int = 1) -> list[dict]:
@@ -637,7 +637,7 @@ class CatalogoLibero:
             if len(elenco) >= 4:
                 righe.append({"tipo": "genere", "titolo": titolo, "codice": codice_genere, "elementi": etichette(elenco)})
         in_evidenza = next((t for t in top if t.get("sfondo")), top[0] if top else None)
-        return {"piattaforma": {"id": piattaforma, "nome": nome}, "tipo": tipo,
+        return {"piattaforma": {"id": piattaforma, "nome": nome, "logo": justwatch.logo(piattaforma)}, "tipo": tipo,
                 "in_evidenza": {**in_evidenza, "top10": posizioni.get(in_evidenza["id"])} if in_evidenza else None,
                 "righe": righe}
 

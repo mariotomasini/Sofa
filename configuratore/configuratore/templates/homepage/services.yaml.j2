@@ -1,43 +1,84 @@
 # FILE GENERATO DA MEDIABOX — non modificarlo a mano.
-- Inizia da qui:
-    - Cerca un film:
-        href: /cerca/
-        icon: /cerca/static/logo.svg
-        description: Cerca qualsiasi film, guarda dove vederlo e scaricalo
+# Tre righe, dalla più usata: guardare, i download (con i numeri dal vivo), la manutenzione.
+# Le chiavi dei servizi non stanno qui: Homepage le prende dalle variabili HOMEPAGE_VAR_*.
+- Guarda:
     - Jellyfin:
         href: /jellyfin/
         icon: jellyfin.png
-        description: Guarda film, serie{% if anime %}, anime{% endif %}{% if tv %}, TV in diretta{% endif %} e ascolta musica
+        description: Film, serie{% if anime %}, anime{% endif %}{% if tv %}, TV in diretta{% endif %} e musica
+    - Cerca:
+        href: /cerca/
+        icon: /cerca/static/logo.svg
+        description: Trova un film o una serie, guarda dove vederlo e scaricalo
+    - Kids:
+        href: /cerca/kids
+        icon: mdi-teddy-bear
+        description: Solo cartoni e film adatti ai bambini
 
-- Amministrazione:
-    - Impostazioni:
-        href: /impostazioni/
-        icon: mdi-cog
-        description: Cosa guardi, dove salvare, avvisi sul telefono
+- Download:
+    - In arrivo:
+        href: /cerca/download
+        icon: mdi-download-circle
+        description: Film, puntate e musica che sto scaricando, e a che punto sono
     - qBittorrent:
         href: /qbit/
         icon: qbittorrent.png
-        description: Download in corso
+        description: I torrent
+        widget:
+          type: qbittorrent
+          url: http://qbittorrent:8080
+          username: "{% raw %}{{HOMEPAGE_VAR_UTENTE}}{% endraw %}"
+          password: "{% raw %}{{HOMEPAGE_VAR_PASSWORD}}{% endraw %}"
+          fields: ["leech", "download"]
     - Radarr:
         href: /radarr/
         icon: radarr.png
-        description: Archivio dei film
-    - Prowlarr:
-        href: /prowlarr/
-        icon: prowlarr.png
-        description: Fonti di ricerca (indexer)
+        description: I film
+        widget:
+          type: radarr
+          url: http://radarr:7878/radarr
+          key: "{% raw %}{{HOMEPAGE_VAR_RADARR}}{% endraw %}"
+          fields: ["queued", "missing"]
 {%- if sonarr %}
     - Sonarr:
         href: /sonarr/
         icon: sonarr.png
-        description: Archivio delle serie
+        description: Le serie
+        widget:
+          type: sonarr
+          url: http://sonarr:8989/sonarr
+          key: "{% raw %}{{HOMEPAGE_VAR_SONARR}}{% endraw %}"
+          fields: ["queued", "wanted"]
 {%- endif %}
 {%- if lidarr %}
     - Lidarr:
         href: /lidarr/
         icon: lidarr.png
-        description: Archivio della musica
+        description: La musica
+        widget:
+          type: lidarr
+          url: http://lidarr:8686/lidarr
+          key: "{% raw %}{{HOMEPAGE_VAR_LIDARR}}{% endraw %}"
+          fields: ["queued", "wanted"]
 {%- endif %}
+
+- Manutenzione:
+    - Impostazioni:
+        href: /impostazioni/
+        icon: mdi-cog
+        description: Cosa guardi, dove salvare, avvisi sul telefono
+    - Controllo servizi:
+        href: /cerca/diagnosi
+        icon: mdi-stethoscope
+        description: Se qualcosa non va, qui vedi cosa e come risolverlo
+    - Spazio:
+        href: /cerca/spazio
+        icon: mdi-harddisk
+        description: Quanto spazio resta e cosa si può liberare
+    - Prowlarr:
+        href: /prowlarr/
+        icon: prowlarr.png
+        description: Dove cercare i download (indexer)
 {%- if bazarr %}
     - Bazarr:
         href: /bazarr/

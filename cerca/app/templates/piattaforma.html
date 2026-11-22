@@ -3,7 +3,7 @@
 {% block contenuto %}
 {% if piattaforma %}
 <div class="vista-testa">
-  <h1>{{ piattaforma.nome }}</h1>
+  <h1>{% if piattaforma.logo %}<img class="logo-piattaforma grande" src="{{ piattaforma.logo }}" alt="" width="64" height="64" onerror="this.remove()">{% endif %}{{ piattaforma.nome }}</h1>
 </div>
 <nav class="chip-vista" aria-label="Cosa guardare su {{ piattaforma.nome }}">
   <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=serie"{% if mondo == "serie" %} aria-current="page"{% endif %}>Serie</a>

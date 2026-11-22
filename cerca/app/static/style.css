@@ -828,7 +828,8 @@ button.contorno, .bottone.contorno { border-color: rgb(255 255 255 / .35); }
 
 /* testa della vista di una piattaforma */
 .vista-testa { position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; }
-.vista-testa h1 { font-size: 1.4rem; }
+.vista-testa h1 { font-size: 1.4rem; display: inline-flex; align-items: center; gap: .7rem; }
+.vista-testa h1 .logo-piattaforma.grande { width: 44px; height: 44px; border-radius: 11px; }
 .indietro {
   position: absolute; left: 0; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%;
   border: 1px solid rgb(255 255 255 / .3); color: #fff; background: rgb(255 255 255 / .05);
