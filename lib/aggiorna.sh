@@ -165,6 +165,29 @@ UNIT
   fi
 }
 
+# mediabox è un server: se il PC si sospende (coperchio chiuso, inattività) si ferma tutto,
+# anche Tailscale e i download. Sui portatili con Ubuntu la sospensione è attiva di serie.
+impedisci_sospensione() {
+  [[ -d /run/systemd/system ]] || return 0
+  if [[ "$(leggi_env SOSPENSIONE "$ENV_FILE")" == "si" ]]; then
+    info "Sospensione lasciata attiva (SOSPENSIONE=si nel file .env)"
+    return 0
+  fi
+  sudo mkdir -p /etc/systemd/logind.conf.d
+  sudo tee /etc/systemd/logind.conf.d/mediabox.conf >/dev/null <<CONF
+# mediabox: il PC resta acceso anche con il coperchio chiuso
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+CONF
+  sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1 || true
+  # rilegge le impostazioni senza chiudere la sessione
+  sudo systemctl kill -s HUP systemd-logind >/dev/null 2>&1 || true
+  ok "Il PC non si sospende più, nemmeno con il coperchio chiuso"
+}
+
 # Le impostazioni salvate dal browser si applicano da sole: systemd guarda il file .da-applicare
 installa_controllo_impostazioni() {
   if [[ ! -d /run/systemd/system ]]; then
