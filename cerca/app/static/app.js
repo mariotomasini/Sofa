@@ -237,6 +237,7 @@ function htmlDownload(d, compatto = false) {
       `${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}</span>`
     : "";
   let azioni = "";
+  if (d.anticipabile) azioni += `<button class="secondario" data-prima="${esc(d.hash)}">Scarica prima questa</button>`;
   if (d.stato === "da_associare") azioni += `<button data-associa="${d.id}" data-nome="${esc(d.titolo)}">Scegli il film</button>`;
   if (d.stato === "errore") azioni += `<button data-riprova="${d.id}">Riprova</button>`;
   if (d.stato === "errore") azioni += `<button class="secondario" data-associa="${d.id}" data-nome="${esc(d.titolo)}">Cambia film</button>`;

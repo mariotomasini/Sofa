@@ -7,6 +7,9 @@ per stagione e numero, nei posti della coda che avevano già (i film restano dov
 
 "Scarica prima questa" mette un torrent in cima a tutto: quelli scelti così passano
 davanti a tutti, nell'ordine in cui sono stati scelti (l'ultimo scelto per primo).
+
+La musica (un brano o un album, pochi MB) parte subito dopo quelli scelti: non deve
+aspettare decine di puntate già in coda.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import re
 log = logging.getLogger(__name__)
 
 CHIAVE_PRIMI = "download_primi"
+CATEGORIE_SUBITO = ("musica",)  # piccoli e chiesti adesso: davanti alle serie
 MAX_PRIMI = 30
 OGNI = 60  # secondi tra un controllo e l'altro
 
@@ -60,7 +64,8 @@ def ordine_voluto(torrent: list[dict], primi: list[str]) -> list[str]:
     in_fila = iter(sorted(puntate, key=lambda t: (arrivo[numeri[t["hash"]][0]], *numeri[t["hash"]])))
     ordine = [next(in_fila)["hash"] if numeri[t["hash"]] else t["hash"] for t in coda]
     scelti = [h for h in primi if h in numeri]
-    return scelti + [h for h in ordine if h not in scelti]
+    subito = [t["hash"] for t in coda if t.get("category") in CATEGORIE_SUBITO and t["hash"] not in scelti]
+    return scelti + subito + [h for h in ordine if h not in scelti and h not in subito]
 
 
 def posizioni(torrent: list[dict]) -> dict[str, int]:

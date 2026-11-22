@@ -58,3 +58,17 @@ def test_copertina_e_gruppo_da_sonarr():
     assert gruppo_serie(serie, None, "St. 1 · Ep. 1") == {
         "gruppo": "serie:7", "gruppo_titolo": "Dark", "poster": "https://image.tmdb.org/t/p/w342/p.jpg",
         "voce": "St. 1 · Ep. 1"}
+
+
+def test_download_di_cerca_in_coda_in_qbittorrent():
+    from app.gruppi_download import con_coda_qbit, raggruppa
+
+    cerca = [{"id": 1, "stato": "in_corso", "hash": "AB", "titolo": "Artista · Album", "categoria": "musica"},
+             {"id": 2, "stato": "in_corso", "hash": "cd", "titolo": "Artista · Brano", "categoria": "musica"}]
+    torrent = [{"hash": "ab", "state": "queuedDL"}, {"hash": "cd", "state": "stalledDL", "dlspeed": 0}]
+    voci = con_coda_qbit(cerca, torrent, {"ab": 5, "cd": 1})
+    assert voci[0]["stato_qbit"] == "coda" and voci[0]["anticipabile"] and "5° posto" in voci[0]["stato_testo"]
+    assert "nessuno lo condivide" in voci[1]["stato_testo"] and "stato_qbit" not in voci[1]
+    gruppi = {g["titolo"]: g for g in raggruppa([], [], voci)}
+    assert gruppi["Artista · Album"]["stato"] == "coda" and gruppi["Artista · Album"]["stato_testo"] == "1 in coda"
+    assert gruppi["Artista · Brano"]["stato"] == "download"

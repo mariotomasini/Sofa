@@ -76,3 +76,10 @@ def test_riordina_solo_se_serve_e_scarica_prima():
     qbit.torrent[2]["priority"] = 0
     asyncio.run(ordine.ordina())
     assert ordine.primi() == []
+
+
+def test_musica_subito_dopo_i_scelti():
+    torrent = [t("a", "Dark.S01E01", 1), t("b", "Dark.S01E02", 2),
+               {**t("m", "Artista - Album (2024) MP3", 3), "category": "musica"}, t("d", "Dark.S01E03", 4)]
+    assert ordine_voluto(torrent, []) == ["m" * 40, "a" * 40, "b" * 40, "d" * 40]
+    assert ordine_voluto(torrent, ["d" * 40]) == ["d" * 40, "m" * 40, "a" * 40, "b" * 40]

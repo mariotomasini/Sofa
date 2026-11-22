@@ -31,12 +31,12 @@ from .config import Config
 from .db import Archivio
 from .deezer import Deezer
 from .download import GestoreDownload, e_magnet, nome_da_magnet
-from .gruppi_download import raggruppa
+from .gruppi_download import con_coda_qbit, raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
 from .musica import Musica
 from .musica_download import ScaricaMusica
-from .ordine_download import OrdineDownload
+from .ordine_download import OrdineDownload, posizioni
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
 from .qbittorrent import QBittorrent
@@ -832,6 +832,11 @@ async def api_download_gruppi(request: Request):
     s = servizi(request)
     coda, attesa = await asyncio.gather(s.automatici.coda(), s.automatici.in_attesa())
     cerca = (await api_download(request))["download"]
+    try:
+        torrent = await s.qbit.tutti()
+        cerca = con_coda_qbit(cerca, torrent, {h.lower(): p for h, p in posizioni(torrent).items()})
+    except Exception:  # noqa: BLE001 - senza qBittorrent si mostra lo stato salvato
+        pass
     return {"gruppi": raggruppa(coda, attesa, cerca, s.automatici.preferita), "lingua_preferita": s.automatici.preferita}
 
 
