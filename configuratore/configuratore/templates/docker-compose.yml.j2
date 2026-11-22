@@ -403,6 +403,7 @@ services:
       PULIZIA_VISTI: "{{ PULIZIA_VISTI }}"
       PULIZIA_GIORNI: "{{ PULIZIA_GIORNI }}"
       LINGUE_AUDIO: "{{ LINGUE_AUDIO }}"
+      MIN_FONTI: "{{ MIN_FONTI | default('3') }}"
       SONARR_URL: "{{ 'http://sonarr:8989/sonarr' if sonarr else '' }}"
       SONARR_API_KEY: "{{ SONARR_API_KEY if sonarr else '' }}"
       LIDARR_URL: "{{ 'http://lidarr:8686/lidarr' if lidarr else '' }}"

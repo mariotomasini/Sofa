@@ -30,8 +30,29 @@ PREFISSO = "Lingua · "
 DA_ISO = {"ita": "Italiano", "spa": "Spagnolo", "fre": "Francese", "fra": "Francese", "ger": "Tedesco",
           "deu": "Tedesco", "por": "Portoghese", "eng": "Inglese"}
 OGNI_CONTROLLO_TRACCE = 1800
+# Un torrent che non scarica niente da tante ore di solito non finirà mai (nessuna fonte):
+# si toglie, va nella lista nera e Radarr/Sonarr cercano subito un'altra versione.
+ORE_FERMO = 6
+STATI_FERMI = {"stalledDL", "metaDL", "forcedMetaDL"}
 ORA_RICERCA = 4  # di notte, quando nessuno guarda
 CACHE_ATTESA = 600
+
+
+def fermi(prima: dict[str, tuple[int, float]], torrent: list[dict], adesso: float,
+          ore: float = ORE_FERMO) -> tuple[dict[str, tuple[int, float]], set[str]]:
+    """(da quando ogni torrent è fermo, quelli fermi da almeno `ore`).
+
+    Fermo = qBittorrent lo dà senza scambio di dati e i byte scaricati non sono cambiati
+    dall'ultimo controllo. Appena riparte, il conto ricomincia."""
+    ora: dict[str, tuple[int, float]] = {}
+    for t in torrent:
+        h = (t.get("hash") or "").lower()
+        if t.get("state") not in STATI_FERMI or (t.get("progress") or 0) >= 1 or not h:
+            continue
+        scaricati = int(t.get("completed") or 0)
+        precedente = prima.get(h)
+        ora[h] = (scaricati, precedente[1] if precedente and precedente[0] == scaricati else adesso)
+    return ora, {h for h, (_, dal) in ora.items() if adesso - dal >= ore * 3600}
 
 
 def tracce_audio(media: dict | None) -> list[str]:
@@ -135,6 +156,7 @@ class Automatici:
         self._campioni: dict[str, tuple[float, int]] = {}
         self._velocita_qbit: dict[str, int] = {}
         self._posti_qbit: dict[str, int] = {}
+        self._fermi: dict[str, tuple[int, float]] = {}
         self.radarr = radarr
         self.serie = serie
         self._attesa: tuple[float, list[dict]] | None = None
@@ -368,9 +390,44 @@ class Automatici:
             self._attesa = None
         return fermati
 
+    async def cambia_fermi(self) -> list[str]:
+        """Toglie i download fermi da ORE_FERMO ore e fa cercare a Radarr/Sonarr un'altra versione.
+
+        La versione tolta va nella lista nera, così non viene ripresa; ne viene scelta un'altra
+        con le stesse regole (lingua prima di tutto) tra quelle con abbastanza fonti."""
+        if self.qbit is None:
+            return []
+        try:
+            torrent = await self.qbit.tutti()
+        except Exception:  # noqa: BLE001
+            return []
+        self._fermi, bloccati = fermi(self._fermi, torrent, time.time())
+        if not bloccati:
+            return []
+        cambiati = []
+        servizi = [("Radarr", self.radarr._r)]
+        if self.serie.attivo:
+            servizi.append(("Sonarr", self.serie._api))
+        for nome, chiama in servizi:
+            try:
+                coda = await chiama("GET", "queue", params={"pageSize": 200})
+                for r in (coda or {}).get("records", []):
+                    if (r.get("downloadId") or "").lower() in bloccati:
+                        await chiama("DELETE", f"queue/{r['id']}", params={
+                            "removeFromClient": "true", "blocklist": "true", "skipRedownload": "false"})
+                        cambiati.append(r.get("title", ""))
+                        self._fermi.pop((r.get("downloadId") or "").lower(), None)
+            except Exception:  # noqa: BLE001
+                log.warning("Non riesco a cambiare i download fermi in %s", nome, exc_info=True)
+        if cambiati:
+            log.info("Download fermi da %s ore, cerco un'altra versione: %s", ORE_FERMO, ", ".join(cambiati))
+        return cambiati
+
     async def ciclo_tracce(self) -> None:
+        """Ogni 30 minuti: tracce audio vere e download fermi."""
         while True:
             await self.controlla_tracce()
+            await self.cambia_fermi()
             await asyncio.sleep(OGNI_CONTROLLO_TRACCE)
 
     async def ricerca_notturna(self) -> None:

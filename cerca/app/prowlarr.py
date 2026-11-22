@@ -93,10 +93,21 @@ def riassunto(r: dict, lingue: tuple[str, ...] = LINGUE_PREDEFINITE) -> dict:
     }
 
 
-def ordina(risultati: list[dict]) -> list[dict]:
-    """Prima la lingua dell'audio preferita, poi MULTI e sottotitoli (lingue_release.valuta),
-    poi i torrent con più seed (scaricano prima e meglio)."""
-    return sorted(risultati, key=lambda r: (tuple(r.get("lingue") or (r.get("italiano", False),)),
+def con_fonti(risultati: list[dict], min_fonti: int) -> list[dict]:
+    """Segna quelli con poche fonti (la pagina li mostra in grigio, con l'avviso)."""
+    return [{**r, "poche_fonti": not vivo(r, min_fonti)} for r in risultati]
+
+
+def vivo(r: dict, min_fonti: int = 3) -> bool:
+    """Un torrent con abbastanza fonti (seeder) da finire davvero; Usenet non ne ha bisogno."""
+    return r.get("protocollo") != "torrent" or (r.get("seed") or 0) >= min_fonti
+
+
+def ordina(risultati: list[dict], min_fonti: int = 3) -> list[dict]:
+    """Prima quelli che si scaricano davvero (abbastanza fonti); tra questi la lingua dell'audio
+    preferita, poi MULTI e sottotitoli (lingue_release.valuta), poi i torrent con più fonti.
+    Quelli quasi senza fonti restano in fondo: la versione migliore non serve se non arriva mai."""
+    return sorted(risultati, key=lambda r: (vivo(r, min_fonti), tuple(r.get("lingue") or (r.get("italiano", False),)),
                                             r["protocollo"] == "torrent", r["seed"] or 0), reverse=True)
 
 
@@ -148,7 +159,8 @@ class Prowlarr:
         await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:film:{film['id']}", grezzi, 6 * 3600)
         torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
         coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, anno)]
-        risultati = ordina([riassunto(r, self.config.lingue_audio) for r in coerenti])
+        risultati = con_fonti(ordina([riassunto(r, self.config.lingue_audio) for r in coerenti],
+                                           self.config.min_fonti), self.config.min_fonti)
         risposta = {"risultati": risultati[:60], "indexer": len(attivi), "scartati": len(torrent) - len(coerenti)}
         if not risultati and torrent:
             risposta.update(
@@ -182,8 +194,8 @@ class Prowlarr:
         await asyncio.to_thread(self.archivio.cache_scrivi, f"prowlarr:serie:{serie_id}", grezzi, 6 * 3600)
         torrent = [r for r in grezzi if r.get("protocol") == "torrent"]
         coerenti = [r for r in torrent if corrisponde(r.get("title", ""), titoli, "")]
-        risultati = ordina([{**riassunto(r, self.config.lingue_audio), "contenuto": contenuto(r.get("title", ""))}
-                            for r in coerenti])
+        risultati = con_fonti(ordina([{**riassunto(r, self.config.lingue_audio), "contenuto": contenuto(r.get("title", ""))}
+                                      for r in coerenti], self.config.min_fonti), self.config.min_fonti)
         risposta = {"risultati": risultati[:60], "indexer": len(attivi)}
         if not risultati:
             risposta.update(avviso="Nessuna puntata trovata sui tuoi indexer.",

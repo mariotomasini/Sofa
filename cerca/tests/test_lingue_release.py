@@ -49,3 +49,13 @@ def test_risultati_con_solo_sottotitoli_dopo_l_audio_italiano():
     es = [riassunto({"title": n, "seeders": 1, "protocol": "torrent"}, ("es", "it")) for n in
           ("Serie S01E01 ITA", "Serie S01E01 SPA")]
     assert ordina(es)[0]["titolo"] == "Serie S01E01 SPA"
+
+
+def test_prima_quelli_che_si_scaricano_davvero():
+    tutti = [riassunto({"title": "Serie S01E01 ITA 1080p", "seeders": 1, "protocol": "torrent"}),
+             riassunto({"title": "Serie S01E01 ITA 720p", "seeders": 40, "protocol": "torrent"}),
+             riassunto({"title": "Serie S01E01 SPA 1080p", "seeders": 500, "protocol": "torrent"}),
+             riassunto({"title": "Serie S01E01 ENG 1080p", "seeders": 0, "protocol": "torrent"})]
+    # con abbastanza fonti vince sempre la lingua; quelli quasi senza fonti vanno in fondo
+    assert [r["titolo"] for r in ordina(tutti, min_fonti=3)] == [
+        "Serie S01E01 ITA 720p", "Serie S01E01 SPA 1080p", "Serie S01E01 ITA 1080p", "Serie S01E01 ENG 1080p"]

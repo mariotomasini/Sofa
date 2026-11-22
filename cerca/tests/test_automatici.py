@@ -120,3 +120,46 @@ def test_controlla_tracce_ferma_solo_i_multi_con_la_prima_lingua():
     assert asyncio.run(a.controlla_tracce()) == 2
     assert ("PUT", "movie/editor", {"movieIds": [1], "monitored": False}) in chiamate
     assert ("PUT", "episode/monitor", {"episodeIds": [10], "monitored": False}) in chiamate
+
+
+def test_fermi_da_ore():
+    from app.automatici import fermi
+
+    t = lambda h, stato, byte, progresso=0.2: {"hash": h, "state": stato, "completed": byte, "progress": progresso}  # noqa: E731
+    ore = 3600
+    stato, bloccati = fermi({}, [t("A", "stalledDL", 100), t("B", "downloading", 5), t("C", "metaDL", 0)], 0)
+    assert set(stato) == {"a", "c"} and bloccati == set()
+    # 6 ore dopo: A non si è mosso, C ha scaricato qualcosa (il conto ricomincia)
+    stato, bloccati = fermi(stato, [t("A", "stalledDL", 100), t("C", "stalledDL", 50)], 6 * ore)
+    assert bloccati == {"a"} and stato["c"] == (50, 6 * ore)
+    # finito o in coda (queuedDL): non è fermo
+    assert fermi(stato, [t("A", "stalledDL", 100, 1.0), t("C", "queuedDL", 50)], 20 * ore) == ({}, set())
+
+
+def test_cambia_fermi_mette_in_lista_nera_e_cerca_un_altra_versione():
+    import asyncio
+    from types import SimpleNamespace
+
+    chiamate = []
+
+    class Qbit:
+        async def tutti(self):
+            return [{"hash": "ABC", "state": "stalledDL", "completed": 0, "progress": 0}]
+
+    class Arr:
+        attivo = True
+
+        async def _r(self, metodo, percorso, **kw):
+            chiamate.append((metodo, percorso, kw.get("params")))
+            if percorso == "queue":
+                return {"records": [{"id": 9, "downloadId": "ABC", "title": "Film.2024.ITA"},
+                                    {"id": 10, "downloadId": "ZZZ", "title": "Altro"}]}
+
+        _api = _r
+
+    a = Automatici(SimpleNamespace(lingue_audio=("it",)), Arr(), Arr(), Qbit())
+    a._fermi = {"abc": (0, 0.0)}  # fermo da tanto
+    assert asyncio.run(a.cambia_fermi()) == ["Film.2024.ITA", "Film.2024.ITA"]  # una volta per Radarr e Sonarr finti
+    tolte = [c for c in chiamate if c[0] == "DELETE"]
+    assert tolte[0] == ("DELETE", "queue/9", {"removeFromClient": "true", "blocklist": "true", "skipRedownload": "false"})
+    assert all(c[1] != "queue/10" for c in tolte)

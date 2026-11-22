@@ -538,3 +538,31 @@ def test_i_bonus_non_superano_mai_una_lingua():
     from configuratore.servizi.formati import PUNTI_1080P, PUNTI_LINGUA, PUNTI_MULTI, PUNTI_MULTI_SUB, PUNTI_SUB
     bonus = PUNTI_MULTI + PUNTI_MULTI_SUB + sum(PUNTI_SUB) + PUNTI_1080P
     assert all(a - b > bonus for a, b in zip(PUNTI_LINGUA, [*PUNTI_LINGUA[1:], 0], strict=True))
+
+
+def test_minimo_di_fonti_in_prowlarr():
+    from configuratore.impostazioni import Impostazioni
+    from configuratore.servizi.prowlarr import imposta_min_fonti, min_fonti
+
+    assert min_fonti(Impostazioni({})) == 3
+    assert min_fonti(Impostazioni({"MIN_FONTI": "5"})) == 5
+    assert min_fonti(Impostazioni({"MIN_FONTI": "tanti"})) == 3 and min_fonti(Impostazioni({"MIN_FONTI": "0"})) == 1
+
+    class ProwlarrFinto:
+        def __init__(self):
+            self.profili = [{"id": 1, "name": "Standard", "minimumSeeders": 1}]
+            self.salvati = []
+
+        def get(self, percorso, *a, **kw):
+            return self.profili
+
+        def put(self, percorso, dati, *a, **kw):
+            self.salvati.append((percorso, dati["minimumSeeders"]))
+
+    p = ProwlarrFinto()
+    imposta_min_fonti(p, 3)
+    assert p.salvati == [("appprofile/1", 3)]
+    p.profili[0]["minimumSeeders"] = 3
+    p.salvati.clear()
+    imposta_min_fonti(p, 3)
+    assert p.salvati == []  # già giusto: niente da salvare
