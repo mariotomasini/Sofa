@@ -463,8 +463,11 @@ class Automatici:
     async def ciclo_tracce(self) -> None:
         """Ogni 30 minuti: tracce audio vere e download fermi."""
         while True:
-            await self.controlla_tracce()
-            await self.cambia_fermi()
+            try:
+                await self.controlla_tracce()
+                await self.cambia_fermi()
+            except Exception:  # noqa: BLE001 - un errore imprevisto non deve fermare il controllo per sempre
+                log.exception("Errore nel controllo di tracce audio e download fermi")
             await asyncio.sleep(OGNI_CONTROLLO_TRACCE)
 
     async def ricerca_notturna(self) -> None:

@@ -111,7 +111,11 @@ async def manutenzione_cache(archivio: Archivio) -> None:
 
 
 async def dopo(secondi: float, coro) -> None:
-    await asyncio.sleep(secondi)
+    try:
+        await asyncio.sleep(secondi)
+    except asyncio.CancelledError:
+        coro.close()  # Cerca si spegne prima della partenza: niente "coroutine never awaited"
+        raise
     await coro
 
 
@@ -984,6 +988,7 @@ async def api_avvisami(request: Request, tmdb_id: int):
     s.archivio.avvisami_aggiungi(tmdb_id, film["titolo"], film["anno"], film["poster"])
     provider = await s.tmdb.provider(tmdb_id)
     if provider["gratis"]:
-        s.archivio.avvisami_imposta(tmdb_id, time.time(), provider["gratis"], False)
+        # l'utente lo vede già adesso nella pagina: niente notifica sul telefono dopo
+        s.archivio.avvisami_imposta(tmdb_id, time.time(), provider["gratis"], True)
         return {"attivo": True, "messaggio": "È già gratis adesso! Lo trovi in evidenza nella pagina iniziale."}
     return {"attivo": True, "messaggio": "Ok! Controllo ogni giorno e ti avviso quando diventa gratis."}

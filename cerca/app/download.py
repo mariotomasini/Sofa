@@ -97,6 +97,21 @@ class GestoreDownload:
         self.serie = None  # Serie (Sonarr): la imposta main.py
         self._compiti: dict[int, asyncio.Task] = {}
         self._importazioni: set[int] = set()
+        # asyncio tiene solo un riferimento debole ai compiti: senza questo insieme un compito
+        # in sottofondo (es. il passaggio a Radarr) poteva sparire a metà senza lasciare traccia
+        self._in_sottofondo: set[asyncio.Task] = set()
+
+    def _sottofondo(self, coro) -> asyncio.Task:
+        """Avvia un compito in sottofondo tenendolo in vita fino alla fine, e ne registra gli errori."""
+        compito = asyncio.create_task(coro)
+        self._in_sottofondo.add(compito)
+        compito.add_done_callback(self._fine_sottofondo)
+        return compito
+
+    def _fine_sottofondo(self, compito: asyncio.Task) -> None:
+        self._in_sottofondo.discard(compito)
+        if not compito.cancelled() and (exc := compito.exception()) is not None:
+            log.error("Errore in un compito dei download", exc_info=exc)
 
     # --- avvio dei download ------------------------------------------------------
     async def da_archive_http(self, film: dict, versione: dict) -> int:
@@ -132,7 +147,7 @@ class GestoreDownload:
         )
         await self.qbit.aggiungi(categoria="cerca", etichetta=etichetta(id_download), file_torrent=r.content)
         # Il torrent di Archive contiene tutto l'item: scarichiamo solo il file scelto
-        asyncio.create_task(self._solo_file_scelto(id_download, versione["nome"]))
+        self._sottofondo(self._solo_file_scelto(id_download, versione["nome"]))
         return id_download
 
     async def da_torrent(
@@ -169,7 +184,7 @@ class GestoreDownload:
             self.archivio.elimina_download(id_download)
             raise
         if solo_brano:
-            asyncio.create_task(self._solo_brano(id_download, solo_brano))
+            self._sottofondo(self._solo_brano(id_download, solo_brano))
         return id_download
 
     async def _solo_brano(self, id_download: int, titolo: str) -> None:
@@ -191,7 +206,7 @@ class GestoreDownload:
         voce = self.archivio.download(id_download)
         if voce and voce["stato"] in ("da_associare", "errore") and voce.get("percorso"):
             self.archivio.aggiorna_download(id_download, stato="completato", messaggio="")
-            asyncio.create_task(self._passa_a_radarr(id_download))
+            self._sottofondo(self._passa_a_radarr(id_download))
 
     async def riprova(self, id_download: int) -> None:
         voce = self.archivio.download(id_download)
@@ -202,7 +217,7 @@ class GestoreDownload:
             self._avvia_http(id_download)
         elif voce.get("percorso") and voce["stato"] in ("errore", "da_associare"):
             self.archivio.aggiorna_download(id_download, stato="completato", messaggio="")
-            asyncio.create_task(self._passa_a_radarr(id_download))
+            self._sottofondo(self._passa_a_radarr(id_download))
         else:
             self.archivio.aggiorna_download(id_download, stato="in_corso", messaggio="")
 
@@ -224,7 +239,23 @@ class GestoreDownload:
 
     # --- download HTTP -----------------------------------------------------------
     def _avvia_http(self, id_download: int) -> None:
-        self._compiti[id_download] = asyncio.create_task(self._scarica_http(id_download))
+        self._compiti[id_download] = asyncio.create_task(self._scarica_http_sicuro(id_download))
+
+    async def _scarica_http_sicuro(self, id_download: int) -> None:
+        """Un errore inatteso non deve lasciare il download "in corso" per sempre."""
+        try:
+            await self._scarica_http(id_download)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - qualsiasi problema va mostrato con il tasto "Riprova"
+            log.exception("Errore inatteso nel download %s", id_download)
+            self.archivio.aggiorna_download(
+                id_download, stato="errore", velocita=0,
+                messaggio="Il download si è fermato per un errore inatteso. Premi \"Riprova\": riparte da dove era.",
+            )
+        finally:
+            if self._compiti.get(id_download) is asyncio.current_task():
+                self._compiti.pop(id_download, None)
 
     async def _scarica_http(self, id_download: int) -> None:
         voce = self.archivio.download(id_download)
@@ -280,7 +311,7 @@ class GestoreDownload:
                     return
                 await asyncio.sleep(10 * tentativi)
         parziale.replace(destinazione)
-        self._compiti.pop(id_download, None)
+        self._compiti.pop(id_download, None)  # da qui "Annulla" non interrompe più l'importazione
         self.archivio.aggiorna_download(id_download, stato="completato", velocita=0)
         await self._passa_a_radarr(id_download)
 
@@ -337,7 +368,7 @@ class GestoreDownload:
                 campi.update(stato="completato", percorso=t.get("content_path") or "", velocita=0)
             self.archivio.aggiorna_download(voce["id"], **campi)
             if campi.get("stato") == "completato":
-                asyncio.create_task(self._passa_a_radarr(voce["id"]))
+                self._sottofondo(self._passa_a_radarr(voce["id"]))
 
     async def _musica_pronta(self, voce: dict) -> None:
         """La musica è già nella sua cartella: si toglie il torrent (non i file) e si avvisa Jellyfin."""
@@ -456,7 +487,7 @@ class GestoreDownload:
                 self._avvia_http(voce["id"])
             elif voce["stato"] in ("importazione", "completato"):
                 self.archivio.aggiorna_download(voce["id"], stato="completato")
-                asyncio.create_task(self._passa_a_radarr(voce["id"]))
+                self._sottofondo(self._passa_a_radarr(voce["id"]))
 
     async def ciclo(self) -> None:
         await self.riprendi_all_avvio()

@@ -20,6 +20,15 @@ def _numero(testo: str, predefinito: int) -> int:
         return predefinito
 
 
+def _decimale(testo: str, predefinito: float) -> float:
+    """Un numero come "10" o "7,5"; se nel .env c'è scritto male si usa quello di partenza."""
+    try:
+        valore = float((testo or "").replace(",", "."))
+    except ValueError:
+        return predefinito
+    return valore if 0 <= valore <= 100 else predefinito
+
+
 @dataclass(frozen=True)
 class Config:
     tmdb_chiave: str = field(default_factory=lambda: _env("TMDB_API_KEY"))
@@ -45,8 +54,9 @@ class Config:
     sonarr_url: str = field(default_factory=lambda: _env("SONARR_URL"))
     sonarr_chiave: str = field(default_factory=lambda: _env("SONARR_API_KEY"))
     pulizia_visti: bool = field(default_factory=lambda: _env("PULIZIA_VISTI", "no").lower() in VERO)
-    pulizia_giorni: int = field(default_factory=lambda: int(_env("PULIZIA_GIORNI", "30") or 30))
-    soglia_disco: float = field(default_factory=lambda: float(_env("SOGLIA_DISCO_LIBERO", "10") or 10))
+    # un valore scritto male nel .env non deve impedire a Cerca di partire
+    pulizia_giorni: int = field(default_factory=lambda: _numero(_env("PULIZIA_GIORNI", "30"), 30))
+    soglia_disco: float = field(default_factory=lambda: _decimale(_env("SOGLIA_DISCO_LIBERO", "10"), 10.0))
     utente: str = field(default_factory=lambda: _env("ADMIN_USER", "admin"))
     password: str = field(default_factory=lambda: _env("ADMIN_PASSWORD"))
     ntfy_topic: str = field(default_factory=lambda: _env("NTFY_TOPIC"))

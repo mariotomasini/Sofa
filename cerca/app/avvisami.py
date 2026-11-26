@@ -63,15 +63,21 @@ class Avvisami:
                 log.info("Controllo di %s saltato: %s", voce["titolo"], exc.cosa)
                 continue
             gratis = provider["gratis"]
+            link = f"{self.config.indirizzo_pubblico}/cerca/film/{voce['tmdb_id']}"
             if gratis and not voce["gratis_dal"]:
                 nuovi += 1
-                link = f"{self.config.indirizzo_pubblico}/cerca/film/{voce['tmdb_id']}"
                 inviata = await self.notifica(
                     "Film gratis!", messaggio_notifica(voce["titolo"], voce["anno"], gratis), link
                 )
                 self.archivio.avvisami_imposta(voce["tmdb_id"], time.time(), gratis, inviata)
             elif gratis:
-                self.archivio.avvisami_imposta(voce["tmdb_id"], voce["gratis_dal"], gratis, bool(voce["notificato"]))
+                inviata = bool(voce["notificato"])
+                if not inviata and self.config.ntfy_topic:
+                    # la volta scorsa la notifica non è partita (es. rete giù): si riprova
+                    inviata = await self.notifica(
+                        "Film gratis!", messaggio_notifica(voce["titolo"], voce["anno"], gratis), link
+                    )
+                self.archivio.avvisami_imposta(voce["tmdb_id"], voce["gratis_dal"], gratis, inviata)
             elif voce["gratis_dal"]:
                 # non è più gratis: torna in attesa
                 self.archivio.avvisami_imposta(voce["tmdb_id"], None, [], False)
