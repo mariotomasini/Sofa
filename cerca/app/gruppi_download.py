@@ -16,7 +16,7 @@ import time
 # Dal più urgente: decide lo stato della scheda e l'ordine delle schede
 ORDINE = ["problema", "download", "importazione", "coda", "da_associare", "cerco", "non_uscito", "attesa", "pronto"]
 DA_CERCA = {  # stati dei download di Cerca → stati della pagina
-    "in_corso": "download", "completato": "importazione", "importazione": "importazione",
+    "ricerca": "cerco", "in_corso": "download", "completato": "importazione", "importazione": "importazione",
     "importato": "pronto", "da_associare": "da_associare", "errore": "problema",
 }
 PRONTI_PER = 3 * 24 * 3600  # i download di Cerca già in Jellyfin restano in vista 3 giorni

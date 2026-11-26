@@ -28,6 +28,7 @@ function avviso(testo, errore = false) {
 const ICONE = {
   scarica: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>',
   play: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  chiudi: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
   info: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>',
   nota: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
   lente: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>',
@@ -278,7 +279,7 @@ function htmlDownload(d, compatto = false) {
     `</div><div class="azioni">${azioni}</div></div>`;
 }
 
-const ICONA_DOWNLOAD = { in_corso: "download", completato: "importazione", importazione: "importazione", importato: "pronto",
+const ICONA_DOWNLOAD = { ricerca: "cerco", in_corso: "download", completato: "importazione", importazione: "importazione", importato: "pronto",
   da_associare: "problema", errore: "problema" };
 
 // Download di Radarr/Sonarr: la lingua sempre in vista, in giallo se non è quella preferita
@@ -386,6 +387,49 @@ function htmlVoceDownload(v) {
   return htmlAutomatico({ ...v, titolo: v.voce || v.titolo }, v.origine === "auto");
 }
 
+// In cima al dettaglio: annullare in un colpo una stagione o tutto (non solo una puntata alla volta)
+function htmlAzioniGruppo(g) {
+  const auto = g.voci.filter((v) => v.origine === "auto" && v.annullabile);
+  const cerca = g.voci.filter((v) => v.origine === "cerca" && !["importazione", "importato"].includes(v.stato));
+  if (auto.length + cerca.length < 2) return "";  // una voce sola: basta il suo "Annulla"
+  const tipo = (auto[0] || {}).tipo || (g.tipo === "serie" ? "serie" : "film");
+  let html = "";
+  if (g.tipo === "serie") {
+    const stagioni = {};
+    for (const v of auto) {
+      for (const [n, ids] of Object.entries(v.per_stagione || {})) (stagioni[n] = stagioni[n] || []).push(...ids);
+    }
+    const numeri = Object.keys(stagioni).sort((a, b) => Number(a) - Number(b));
+    if (numeri.length > 1 || cerca.length) {
+      for (const n of numeri) {
+        const nome = Number(n) === 0 ? "gli speciali" : `stagione ${n}`;
+        html += `<button class="secondario" data-tieni data-annulla-gruppo data-tipo-gruppo="serie" ` +
+          `data-ids-auto="${stagioni[n].join(",")}">Annulla ${nome}</button>`;
+      }
+    } else if (numeri.length === 1) {
+      html += `<button class="secondario" data-tieni data-annulla-gruppo data-tipo-gruppo="serie" ` +
+        `data-ids-auto="${stagioni[numeri[0]].join(",")}">Annulla tutta la stagione ${Number(numeri[0]) || ""}</button>`;
+      return html;
+    }
+  }
+  const tutti = auto.flatMap((v) => v.ids || []);
+  html += `<button class="secondario" data-tieni data-annulla-gruppo data-tipo-gruppo="${esc(tipo)}" ` +
+    `data-ids-auto="${tutti.join(",")}" data-ids-cerca="${cerca.map((v) => v.id).join(",")}">` +
+    `${g.tipo === "serie" ? "Annulla tutta la serie" : "Annulla tutto"}</button>`;
+  return html;
+}
+
+async function annullaGruppo(b) {
+  const numeri = (x) => (x || "").split(",").filter(Boolean).map(Number);
+  const auto = numeri(b.dataset.idsAuto), cerca = numeri(b.dataset.idsCerca);
+  b.disabled = true;
+  try {
+    if (auto.length) await inviaJSON("/api/automatici/annulla", { tipo: b.dataset.tipoGruppo, ids: auto });
+    for (const id of cerca) await chiama(`/api/download/${id}/annulla`, { method: "POST" });
+    avviso("Annullato: non le cerco e non le scarico più. Quello che è già in Jellyfin resta.");
+  } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
+}
+
 function avviaPaginaDownload() {
   const griglia = document.getElementById("griglia-download");
   const dettaglio = document.getElementById("dettaglio-download");
@@ -400,6 +444,14 @@ function avviaPaginaDownload() {
     if (g.velocita) pezzi.push(`${dimensione(g.velocita)}/s`);
     if (g.rimanente) pezzi.push(`mancano ${tempoRimanente(g.rimanente)}`);
     document.getElementById("dettaglio-stato").textContent = pezzi.join(" · ");
+    const azioni = document.getElementById("dettaglio-azioni");
+    const htmlAzioni = htmlAzioniGruppo(g);
+    if (azioni._html !== htmlAzioni) {
+      azioni._html = htmlAzioni;
+      azioni.innerHTML = htmlAzioni;
+      azioni.hidden = !htmlAzioni;
+      preparaTieni(azioni, eseguiVoce);
+    }
     const voci = document.getElementById("dettaglio-voci");
     const html = g.voci.map(htmlVoceDownload).join("");
     if (voci._html !== html) {
@@ -465,6 +517,7 @@ function avviaPaginaDownload() {
     dettaglio.showModal();
   });
   document.getElementById("dettaglio-chiudi").addEventListener("click", () => dettaglio.close());
+  document.getElementById("dettaglio-x").addEventListener("click", () => dettaglio.close());
 
   // i pulsanti delle voci: quelle di Radarr/Sonarr hanno data-tipo, quelle di Cerca il numero del download.
   // "Annulla" e "Togli dall'elenco" si confermano tenendo premuto (movimento.js: tieniPremuto).
@@ -474,6 +527,7 @@ function avviaPaginaDownload() {
   });
 
   async function eseguiVoce(b) {
+    if (b.dataset.annullaGruppo !== undefined) { await annullaGruppo(b); aggiorna(); return; }
     if (b.dataset.prima) {
       b.disabled = true;
       try { avviso((await inviaJSON("/api/download/prima", { hash: b.dataset.prima })).messaggio); aggiorna(); }
@@ -728,7 +782,7 @@ function entraVetrina(contenitore) {
   v._entrata = true;
   if (!FERMO) {
     const t = v.querySelector(".rivela > span");
-    if (t) G.from(t, { yPercent: 105, duration: 0.6, ease: "power3.out" });
+    if (t) G.fromTo(t, { yPercent: 105 }, { yPercent: 0, duration: 0.6, ease: "power3.out" });
     G.from(v.querySelectorAll(".vetrina-top, .vetrina-generi, .vetrina-trama, .vetrina-azioni"),
       { opacity: 0, y: 8, duration: 0.4, stagger: 0.06, delay: 0.2, ease: "power3.out", clearProps: "all" });
     const l = v.querySelector(".vetrina-locandina");
@@ -1280,6 +1334,7 @@ function dialogoSerie() {
   document.body.insertAdjacentHTML("beforeend", `
 <dialog id="dialogo-serie" aria-labelledby="titolo-serie">
   <div class="modulo">
+    <button type="button" class="chiudi-x" id="serie-x" aria-label="Chiudi">${ICONE.chiudi}</button>
     <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
     <p id="serie-trama" class="serie-trama"></p>
     <button type="button" id="serie-tutte" class="bottone lampada scarica-grande">${ICONE.scarica}Scarica tutte</button>
@@ -1298,6 +1353,7 @@ function dialogoSerie() {
   const esito = document.getElementById("serie-esito");
   d.addEventListener("close", () => clearInterval(d._aggiorna));
   document.getElementById("serie-chiudi").addEventListener("click", () => d.close());
+  document.getElementById("serie-x").addEventListener("click", () => d.close());
 
   // gli "Annulla" si confermano tenendo premuto: smetto di cercarle e fermo i download (quelle in Jellyfin restano)
   async function invia(percorso, corpo) {
@@ -1391,4 +1447,12 @@ document.addEventListener("click", (ev) => {
   if (!a || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;  // con Ctrl si apre comunque Sonarr
   ev.preventDefault();
   try { apriSerie(JSON.parse(a.dataset.serie), a.href); } catch (e) { window.location.href = a.href; }
+});
+
+// Toccare fuori da una finestra la chiude: non serve scorrere fino al tasto "Chiudi"
+document.addEventListener("click", (ev) => {
+  const d = ev.target;
+  if (!(d instanceof HTMLDialogElement) || !d.open || ev.clientX === 0 && ev.clientY === 0) return;
+  const r = d.getBoundingClientRect();
+  if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) d.close();
 });

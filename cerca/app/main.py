@@ -64,6 +64,7 @@ CARTELLA = Path(__file__).parent
 MAX_TORRENT = 10 * 1024 * 1024
 
 STATI = {
+    "ricerca": "Lo cerco sui tuoi indexer…",
     "in_corso": "Download in corso",
     "completato": "Scaricato, preparo l'importazione",
     "importazione": "Lo sto mettendo in Jellyfin…",
@@ -282,7 +283,8 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     contesto.setdefault("sezione", "cerca")
     # il tasto "‹ Indietro" in alto a sinistra: ovunque tranne nelle pagine iniziali dei mondi
     contesto.setdefault("indietro", nome not in PAGINE_INIZIALI)
-    attivi = [d for d in s.archivio.elenco_download(60) if d["stato"] in ("in_corso", "completato", "importazione")]
+    attivi = [d for d in s.archivio.elenco_download(60)
+              if d["stato"] in ("ricerca", "in_corso", "completato", "importazione")]
     return modelli.TemplateResponse(
         request,
         nome,
@@ -1127,7 +1129,12 @@ async def api_associa(request: Request, id_download: int, dati: RichiestaAssocia
 
 @app.post("/api/download/{id_download}/riprova")
 async def api_riprova(request: Request, id_download: int):
-    await servizi(request).download.riprova(id_download)
+    s = servizi(request)
+    voce = s.archivio.download(id_download)
+    # la musica rimasta senza torrent (non trovata, o ricerca interrotta): si rifà la ricerca
+    if voce and voce.get("categoria") == "musica" and voce["stato"] == "errore" and await s.scarica_musica.riprova(voce):
+        return {"messaggio": "Lo cerco di nuovo sui tuoi indexer."}
+    await s.download.riprova(id_download)
     return {"messaggio": "Riprovo."}
 
 

@@ -10,6 +10,7 @@ Non serve Lidarr: funziona con gli indexer che hai già.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -79,9 +80,17 @@ class ScaricaMusica:
         self.download = download
 
     async def _cerca(self, testi: list[str]) -> list[dict]:
+        """Le ricerche partono insieme: una dopo l'altra, con indexer lenti, ci volevano minuti."""
+        testi = list(dict.fromkeys(t.strip() for t in testi if t and t.strip()))
+        risposte = await asyncio.gather(*(self.prowlarr._cerca_testo(t, categoria=CATEGORIA_AUDIO) for t in testi),
+                                        return_exceptions=True)
+        if risposte and all(isinstance(r, BaseException) for r in risposte):
+            raise risposte[0]
         risultati: dict[str, dict] = {}
-        for testo in dict.fromkeys(t.strip() for t in testi if t and t.strip()):
-            for r in await self.prowlarr._cerca_testo(testo, categoria=CATEGORIA_AUDIO):
+        for risposta in risposte:
+            if isinstance(risposta, BaseException):
+                continue
+            for r in risposta:
                 risultati.setdefault(f"{r.get('indexerId')}|{r.get('guid')}", r)
         return list(risultati.values())
 
@@ -91,21 +100,40 @@ class ScaricaMusica:
             "I brani molto nuovi o di artisti piccoli spesso non ci sono: prova l'album intero, "
             "riprova tra qualche giorno o aggiungi in Prowlarr un indexer che ha musica.")
 
-    async def _avvia(self, scelto: dict, artista: str, titolo: str, copertina: str, solo_brano: str = "") -> int:
+    def _in_elenco(self, artista: str, titolo: str, copertina: str, origine: str) -> int:
+        """La voce compare subito nella pagina Download ("Cerco sugli indexer"), prima della ricerca,
+        che con molti indexer dura anche un minuto o due."""
+        return self.download.archivio.nuovo_download(
+            tmdb_id=None, titolo=f"{artista} · {titolo}", anno="", poster=copertina, fonte="prowlarr",
+            tipo="torrent", url=origine, categoria=CATEGORIA_QBIT, stato="ricerca")
+
+    async def _avvia(self, id_download: int, scelto: dict, artista: str, titolo: str, copertina: str,
+                     solo_brano: str = "") -> int:
         magnet, file_torrent = await self.prowlarr.scarica_torrent(scelto)
         cartella = str(Path(self.config.cartella_musica) / nome_cartella(artista))
         return await self.download.da_torrent(
             fonte="prowlarr", categoria=CATEGORIA_QBIT, film=None, titolo=f"{artista} · {titolo}",
-            magnet=magnet, file_torrent=file_torrent, poster=copertina, cartella=cartella, solo_brano=solo_brano)
+            magnet=magnet, file_torrent=file_torrent, poster=copertina, cartella=cartella, solo_brano=solo_brano,
+            id_download=id_download)
 
-    async def brano(self, id_brano: int) -> dict:
+    async def _dati_brano(self, id_brano: int) -> tuple[str, str, str, str]:
         t = await self.deezer._get(f"track/{id_brano}", durata=7 * 24 * 3600)
         artista = (t.get("artist") or {}).get("name", "")
         titolo = t.get("title_short") or t.get("title") or ""
         album = (t.get("album") or {})
-        nome_album = album.get("title", "")
         if not artista or not titolo:
             raise ErroreServizio("Deezer non mi dà i dati di questo brano.", "Riprova tra poco.")
+        return artista, titolo, album.get("title", ""), album.get("cover_medium") or ""
+
+    async def _dati_album(self, id_album: int) -> tuple[str, str, str, str]:
+        a = await self.deezer._get(f"album/{id_album}", durata=7 * 24 * 3600)
+        artista = (a.get("artist") or {}).get("name", "")
+        titolo = a.get("title", "")
+        if not artista or not titolo:
+            raise ErroreServizio("Deezer non mi dà i dati di questo album.", "Riprova tra poco.")
+        return artista, titolo, (a.get("release_date") or "")[:4], a.get("cover_medium") or ""
+
+    async def _scarica_brano(self, id_download: int, artista: str, titolo: str, nome_album: str, copertina: str) -> None:
         risultati = await self._cerca([f"{artista} {titolo}", f"{artista} {nome_album}"])
         # prima un torrent del brano stesso (o del singolo); se no l'album che lo contiene, solo quel file
         scelto = scegli(risultati, artista, [titolo], MAX_BRANO, self.config.min_fonti)
@@ -114,21 +142,45 @@ class ScaricaMusica:
         if scelto is None:
             raise self._non_trovato(f"\"{titolo}\" di {artista}")
         # in un album o in una raccolta si scarica solo il file di questo brano
-        await self._avvia(scelto, artista, titolo, album.get("cover_medium") or "", solo_brano=titolo)
-        return {"messaggio": f"Scarico \"{titolo}\" di {artista}: lo trovi in Jellyfin, nella Musica, appena finisce. "
-                             "Lo segui nella pagina Download."}
+        await self._avvia(id_download, scelto, artista, titolo, copertina, solo_brano=titolo)
 
-    async def album(self, id_album: int) -> dict:
-        a = await self.deezer._get(f"album/{id_album}", durata=7 * 24 * 3600)
-        artista = (a.get("artist") or {}).get("name", "")
-        titolo = a.get("title", "")
-        if not artista or not titolo:
-            raise ErroreServizio("Deezer non mi dà i dati di questo album.", "Riprova tra poco.")
-        anno = (a.get("release_date") or "")[:4]
+    async def _scarica_album(self, id_download: int, artista: str, titolo: str, anno: str, copertina: str) -> None:
         scelto = scegli(await self._cerca([f"{artista} {titolo}", f"{artista} {titolo} {anno}"]),
                         artista, [titolo], MAX_ALBUM, self.config.min_fonti)
         if scelto is None:
             raise self._non_trovato(f"l'album \"{titolo}\" di {artista}")
-        await self._avvia(scelto, artista, titolo, a.get("cover_medium") or "")
-        return {"messaggio": f"Scarico l'album \"{titolo}\" di {artista}: lo trovi in Jellyfin, nella Musica, "
-                             "appena finisce. Lo segui nella pagina Download."}
+        await self._avvia(id_download, scelto, artista, titolo, copertina)
+
+    async def brano(self, id_brano: int) -> dict:
+        artista, titolo, nome_album, copertina = await self._dati_brano(id_brano)
+        id_download = self._in_elenco(artista, titolo, copertina, f"deezer:brano:{id_brano}")
+        self.download.cerca_in_sottofondo(
+            id_download, self._scarica_brano(id_download, artista, titolo, nome_album, copertina))
+        return {"id": id_download,
+                "messaggio": f"\"{titolo}\" di {artista} è nella pagina Download: lo cerco sui tuoi indexer e "
+                             "appena finisce lo trovi in Jellyfin, nella Musica."}
+
+    async def album(self, id_album: int) -> dict:
+        artista, titolo, anno, copertina = await self._dati_album(id_album)
+        id_download = self._in_elenco(artista, titolo, copertina, f"deezer:album:{id_album}")
+        self.download.cerca_in_sottofondo(
+            id_download, self._scarica_album(id_download, artista, titolo, anno, copertina))
+        return {"id": id_download,
+                "messaggio": f"L'album \"{titolo}\" di {artista} è nella pagina Download: lo cerco sui tuoi indexer "
+                             "e appena finisce lo trovi in Jellyfin, nella Musica."}
+
+    async def riprova(self, voce: dict) -> bool:
+        """Rifà la ricerca di una voce rimasta senza torrent. False se la voce non è di questo tipo."""
+        origine = (voce.get("url") or "").split(":")
+        if len(origine) != 3 or origine[0] != "deezer" or not origine[2].isdigit() or voce.get("hash"):
+            return False
+        id_download, id_deezer = voce["id"], int(origine[2])
+        if origine[1] == "album":
+            artista, titolo, anno, copertina = await self._dati_album(id_deezer)
+            lavoro = self._scarica_album(id_download, artista, titolo, anno, copertina)
+        else:
+            artista, titolo, nome_album, copertina = await self._dati_brano(id_deezer)
+            lavoro = self._scarica_brano(id_download, artista, titolo, nome_album, copertina)
+        self.download.archivio.aggiorna_download(id_download, stato="ricerca", messaggio="")
+        self.download.cerca_in_sottofondo(id_download, lavoro)
+        return True
