@@ -670,6 +670,8 @@ def test_cerca_e_la_pagina_principale_e_il_pannello_ha_la_sua_porta(cartella):
     assert principale.index("handle /jellyfin/*") < principale.index("# --- Cerca: la pagina principale")
     # il Pannello: Homepage, e i link ai servizi tornano all'indirizzo principale (porta 80: senza porta)
     assert "reverse_proxy homepage:3000" in pannello
+    # il Pannello è solo per l'amministratore: chiede la sua password
+    assert "import pannello" in pannello.split("reverse_proxy homepage:3000")[0]
     assert "redir http://{host}{uri} 302" in pannello
     compose = (cartella / "generato" / "docker-compose.yml").read_text()
     assert '"8081:8081"' in compose
@@ -685,3 +687,69 @@ def test_pannello_con_un_altra_porta_principale(cartella):
     compose = (cartella / "generato" / "docker-compose.yml").read_text()
     assert '"9090:8081"' in compose
     assert 'INDIRIZZO_PUBBLICO: "http://mediabox.local:8080"' in compose
+
+
+# --- utenti di casa ------------------------------------------------------------------
+class JellyfinFinto:
+    """Risponde come Jellyfin a /Users, /Users/New e /Users/{id}/Policy."""
+
+    def __init__(self, utenti):
+        self.utenti = utenti
+        self.politiche = {}
+
+    def get(self, percorso, cosa, **kw):
+        from types import SimpleNamespace
+        return SimpleNamespace(json=lambda: [dict(u, Policy=dict(u["Policy"])) for u in self.utenti])
+
+    def post(self, percorso, cosa, **kw):
+        from types import SimpleNamespace
+        if percorso == "/Users/New":
+            nuovo = {"Id": f"id-{kw['json']['Name']}", "Name": kw["json"]["Name"],
+                     "Policy": {"IsAdministrator": False, "IsHidden": True, "EnableAllFolders": True}}
+            self.utenti.append(nuovo)
+            return SimpleNamespace(json=lambda: dict(nuovo, Policy=dict(nuovo["Policy"])))
+        id_utente = percorso.split("/")[2]
+        self.politiche[id_utente] = kw["json"]
+        return SimpleNamespace(json=lambda: {})
+
+
+def test_utenti_di_casa_jellyfin():
+    from configuratore.servizi.jellyfin import utenti_di_casa
+
+    jf = JellyfinFinto([
+        {"Id": "a1", "Name": "admin", "Policy": {"IsAdministrator": True, "IsHidden": False}},
+        {"Id": "m1", "Name": "mario", "Policy": {"IsAdministrator": False, "IsHidden": True}},
+    ])
+    imp = Impostazioni({"UTENTI_CASA": "Mario, Anna,anna, admin ,"})
+    assert imp.utenti_casa == ["Mario", "Anna"]
+    utenti_di_casa(jf, imp)
+    # Anna creata, visibile sulla TV, non amministratrice; Mario (già c'era) reso visibile
+    assert jf.politiche["id-Anna"]["IsHidden"] is False and jf.politiche["id-Anna"]["IsAdministrator"] is False
+    assert jf.politiche["m1"]["IsHidden"] is False
+    # l'amministratore sparisce dalla schermata della TV
+    assert jf.politiche["a1"]["IsHidden"] is True and jf.politiche["a1"]["IsAdministrator"] is True
+    # la seconda volta non cambia niente
+    jf.utenti = [dict(u, Policy={**u["Policy"], **jf.politiche.get(u["Id"], {})}) for u in jf.utenti]
+    jf.politiche = {}
+    utenti_di_casa(jf, imp)
+    assert jf.politiche == {}
+
+
+def test_senza_utenti_di_casa_jellyfin_non_si_tocca():
+    from configuratore.servizi.jellyfin import utenti_di_casa
+
+    jf = JellyfinFinto([{"Id": "a1", "Name": "admin", "Policy": {"IsAdministrator": True, "IsHidden": False}}])
+    utenti_di_casa(jf, Impostazioni({}))
+    assert jf.politiche == {}
+
+
+def test_utenti_casa_dalla_pagina():
+    from configuratore.piano_impostazioni import piano
+    from configuratore.web.procedura import DatiNonValidi, utenti_validi
+
+    assert utenti_validi(" Mario , Anna,mario, Nonna Pina ") == "Mario,Anna,Nonna Pina"
+    assert utenti_validi("") == ""
+    for sbagliato in ("admin", "Mario<script>", "x" * 31, ",".join(f"u{i}" for i in range(13))):
+        with pytest.raises(DatiNonValidi):
+            utenti_validi(sbagliato)
+    assert piano(["UTENTI_CASA"]).configura == ["jellyfin"]

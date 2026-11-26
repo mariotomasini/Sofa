@@ -76,6 +76,18 @@ class Impostazioni:
         return self.obbligatorio("ADMIN_PASSWORD")
 
     @property
+    def utenti_casa(self) -> list[str]:
+        """Le persone di casa (UTENTI_CASA=Mario,Anna,Bimbi): un utente di Jellyfin ciascuna."""
+        nomi = [n.strip() for n in self.get("UTENTI_CASA").split(",") if n.strip()]
+        visti: set[str] = set()
+        risultato = []
+        for nome in nomi:
+            if nome.lower() not in visti and nome.lower() != self.utente.lower():
+                visti.add(nome.lower())
+                risultato.append(nome)
+        return risultato
+
+    @property
     def vaapi(self) -> bool:
         return _si(self.get("VAAPI", "no"))
 
