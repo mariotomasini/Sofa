@@ -1049,6 +1049,16 @@ async def api_download(request: Request):
     return {"download": elenco}
 
 
+@app.get("/api/download/{id_download}")
+async def api_download_voce(request: Request, id_download: int):
+    """Lo stato di un download solo: lo segue l'avviso della musica mentre la cerco."""
+    voce = servizi(request).archivio.download(id_download)
+    if not voce:
+        raise ErroreServizio("Questo download non c'è più.", "Forse è stato annullato.")
+    return {"id": voce["id"], "stato": voce["stato"], "messaggio": voce.get("messaggio") or "",
+            "titolo": voce.get("titolo") or ""}
+
+
 class RichiestaAssocia(BaseModel):
     tmdb_id: int
 

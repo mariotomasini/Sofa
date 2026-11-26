@@ -164,6 +164,19 @@ function mostraAvviso(testo, stato = "pronto", durata = 5000) {
   }, durata);
 }
 
+// --- finestre che entrano (OpenMotion): salgono piano, poi le voci a cascata --------------------
+function entraFinestra(d) {
+  if (FERMO || !d) return;
+  G.fromTo(d, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: CURVA, clearProps: "opacity,transform" });
+  const voci = [...d.querySelectorAll(".dettaglio-azioni > *, .dettaglio-voci > *, .serie-puntate > *, .elenco-piattaforme > *, .scelte > *")]
+    .slice(0, 12);
+  if (voci.length) G.from(voci, { opacity: 0, y: 10, duration: 0.35, ease: CURVA, stagger: 0.04, delay: 0.12, clearProps: "opacity,transform" });
+}
+if (window.HTMLDialogElement && HTMLDialogElement.prototype.showModal) {
+  const apri = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function showModal() { apri.call(this); entraFinestra(this); };
+}
+
 // Mostra "in corso" finché la promessa non finisce, poi il risultato
 async function conAvviso(promessa, attesa) {
   mostraAvviso(attesa, "attesa", 0);

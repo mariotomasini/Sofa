@@ -195,7 +195,7 @@ Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torre
 
 ### Come è fatta
 
-Cerca ha un aspetto suo, "il salotto la sera": sfondo scuro caldo, un solo colore d'accento (il giallo della lampada) per **Scarica**, l'avanzamento e il N° 1, e le locandine che portano tutto il resto del colore. I caratteri sono Atkinson Hyperlegible, scelto perché si legge bene anche dal divano, e Instrument Serif per i titoli grandi.
+Cerca ha un aspetto suo, "il salotto la sera": sfondo scuro caldo, un solo colore d'accento (il giallo della lampada) per **Scarica**, l'avanzamento e il N° 1, e le locandine che portano tutto il resto del colore. Il carattere è uno solo, Inter, per titoli, testo e numeri: si legge bene anche dal divano e i titoli grandi restano precisi.
 
 Al posto delle emoji ogni stato ha una **piccola animazione** che spiega cosa succede: la freccia che scende nel vassoio mentre scarica, la clessidra che si gira in coda, la lente che cerca, il quadro che entra in Jellyfin, il segno di spunta che si disegna quando è pronto. Si muovono di continuo solo le cose vive (un download che scarica); conferme ed errori si disegnano una volta. La barra di avanzamento dei download è una **pellicola** che scorre. Se nel telefono o nel PC hai attivato *Riduci movimento*, Cerca resta ferma e mostra subito lo stato finale.
 

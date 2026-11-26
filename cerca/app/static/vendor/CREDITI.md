@@ -7,10 +7,10 @@
 
 ## Caratteri (cartella `fonts/`)
 
-- **Atkinson Hyperlegible Next** e **Atkinson Hyperlegible Mono**, © Braille Institute of America.
-- **Instrument Serif**, © The Instrument Serif Project Authors.
+- **Inter** (variabile, con la dimensione ottica), © The Inter Project Authors, https://github.com/rsms/inter.
+  Un solo carattere per tutto: titoli, testo e numeri.
 
-Tutti con la SIL Open Font License 1.1 (testo in `fonts/OFL.txt`).
+Con la SIL Open Font License 1.1 (testo in `fonts/OFL.txt`).
 
 ## Foto degli utenti
 
