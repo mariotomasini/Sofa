@@ -26,10 +26,11 @@
 		respond "ok" 200
 	}
 
-	# --- Cerca -----------------------------------------------------------
-	redir /cerca /cerca/
-	handle_path /cerca/* {
-		reverse_proxy cerca:8000
+	# --- Vecchi indirizzi di Cerca (/cerca/...): ora Cerca è la pagina principale.
+	# "/cerca" senza barra resta di Cerca: è la pagina dei risultati di ricerca (/cerca?q=...)
+	@vecchia_cerca path_regexp vecchia_cerca ^/cerca(/.*)$
+	handle @vecchia_cerca {
+		redir {re.vecchia_cerca.1}?{query} 301
 	}
 
 	# --- Impostazioni (con il suo accesso: serve anche durante l'installazione)
@@ -94,11 +95,9 @@
 	}
 {%- endif %}
 
-	# --- Pagina iniziale -------------------------------------------------
+	# --- Cerca: la pagina principale di mediabox (tutto quello che resta) --
 	handle {
-		reverse_proxy homepage:3000 {
-			header_up Host localhost:3000
-		}
+		reverse_proxy cerca:8000
 	}
 
 	handle_errors 502 503 504 {
@@ -109,5 +108,34 @@
 <p>Potrebbe essere ancora in avvio: aspetta un minuto e ricarica la pagina.</p>
 <p>Se il problema resta, sul PC di mediabox scrivi <code>mediabox status</code> e poi <code>mediabox restart</code>.</p>
 <p><a style="color:#8cf" href="/">Torna alla pagina iniziale</a></p></body>` {err.status_code}
+	}
+}
+
+# --- Pannello: tessere dei servizi e stato del PC (Homepage) -----------------
+# Homepage non sa stare sotto un percorso (/pannello): ha la sua porta. I collegamenti
+# ai servizi (/jellyfin/, /radarr/…) tornano all'indirizzo principale.
+:8081 {
+	@fuori not remote_ip private_ranges 100.64.0.0/10
+	handle @fuori {
+		respond "mediabox è raggiungibile solo dalla rete di casa o da Tailscale." 403
+	}
+
+	encode gzip
+
+	# caratteri e logo di Cerca, per lo stile del Pannello
+	handle_path /cerca/static/* {
+		rewrite * /static{path}
+		reverse_proxy cerca:8000
+	}
+
+	@servizi path /cerca/* /jellyfin* /qbit* /radarr* /prowlarr* /sonarr* /lidarr* /bazarr* /beszel* /tv* /impostazioni*
+	handle @servizi {
+		redir http://{host}{{ porta_principale }}{uri} 302
+	}
+
+	handle {
+		reverse_proxy homepage:3000 {
+			header_up Host localhost:3000
+		}
 	}
 }

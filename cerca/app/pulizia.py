@@ -293,6 +293,6 @@ class Pulizia:
                 "Pulizia del disco",
                 f"Ho liberato {liberati / 1024**3:.1f} GB togliendo {len(tolti)} elementi "
                 f"(il dettaglio è nella pagina Spazio di Cerca).",
-                f"{self.config.indirizzo_pubblico}/cerca/spazio",
+                f"{self.config.indirizzo_pubblico}{self.config.root_path}/spazio",
             )
         return {"tolti": len(tolti), "liberati": liberati, "libero_percento": await self._libero_percento()}

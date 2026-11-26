@@ -1,28 +1,38 @@
 {% extends "base.html" %}
 {% block titolo %}Spazio{% endblock %}
 {% block contenuto %}
-<h1 class="titolo-pagina">Spazio sul disco</h1>
+<h1 class="titolo-pagina"><span class="rivela"><span>Spazio sul disco</span></span></h1>
+<p class="sottotitolo">Quando lo spazio libero scende sotto il {{ disco.get('soglia', 10) | int }}% mediabox fa pulizia da solo{% if ntfy %} e ti avvisa sul telefono{% endif %}</p>
 {% if disco.disponibile %}
-<section class="blocco disco">
-  <p class="disco-numeri"><strong>{{ disco.libero | dimensione }} liberi</strong> <span class="sottotitolo">su {{ disco.totale | dimensione }} · {{ ("%.0f" % disco.libero_percento) }}% libero</span></p>
-  <div class="barra grande{{ ' piena' if disco.quasi_pieno else '' }}" role="progressbar" aria-label="Spazio usato"
-       aria-valuenow="{{ (100 - disco.libero_percento) | round | int }}" aria-valuemin="0" aria-valuemax="100">
-    <div style="width:{{ 100 - disco.libero_percento }}%"></div>
+<section class="blocco disco" aria-label="Spazio sul disco dei film"
+         data-usato="{{ (100 - disco.libero_percento) | round(1) }}" data-soglia="{{ disco.soglia }}" data-libero="{{ disco.libero }}">
+  <div id="lancetta"></div>
+  <div>
+    <p class="disco-numeri">
+      <span class="grande" id="libero-grande">{{ disco.libero | dimensione }}</span>
+      <span class="su">liberi su <span class="num">{{ disco.totale | dimensione }}</span> · <span class="num">{{ ("%.0f" % disco.libero_percento) }}%</span> libero</span>
+    </p>
+    <p class="legenda-disco">
+      <span><i style="background:var(--lampada)"></i>Usato</span>
+      <span><i style="background:rgb(236 106 110 / .4)"></i>Sotto il {{ disco.soglia | int }}% libero: pulizia automatica</span>
+    </p>
   </div>
-  <p class="sottotitolo">Quando lo spazio libero scende sotto il {{ disco.soglia | int }}% mediabox fa pulizia da solo{% if ntfy %} e ti avvisa sul telefono{% endif %}.</p>
 </section>
 {% endif %}
 
 <div class="due-colonne">
   <section class="blocco">
     <h2>Cosa posso liberare</h2>
-    <div id="anteprima"><p class="caricamento">Controllo…</p></div>
-    <p><button id="libera" disabled>Libera spazio adesso</button></p>
+    <div id="anteprima"><p class="caricamento">Controllo</p></div>
+    <div class="piede-blocco">
+      <span class="sottotitolo" id="totale-liberabile"></span>
+      <button id="libera" data-tieni disabled>Libera spazio adesso</button>
+    </div>
   </section>
 
   <section class="blocco">
     <h2>Pulizie fatte</h2>
-    <div id="registro"><p class="caricamento">Carico…</p></div>
+    <div id="registro"><p class="caricamento">Carico</p></div>
   </section>
 </div>
 {% endblock %}

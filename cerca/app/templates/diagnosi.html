@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block titolo %}Controllo servizi{% endblock %}
 {% block contenuto %}
-<h1 class="titolo-pagina">Controllo servizi</h1>
-<p class="sottotitolo">Se una pagina di Cerca non si carica, qui vedi quale servizio non risponde e cosa fare.</p>
+<h1 class="titolo-pagina"><span class="rivela"><span>Controllo servizi</span></span></h1>
+<p class="sottotitolo">Se una pagina di Cerca non si carica, qui vedi quale servizio non risponde e cosa fare</p>
 
-<div class="azioni-riga"><button id="ricontrolla" type="button" class="secondario">Controlla di nuovo</button></div>
-<p id="riassunto-diagnosi" class="nota-mondo" role="status"></p>
-<ul id="elenco-diagnosi" class="elenco-diagnosi" aria-live="polite"><li class="caricamento">Controllo i servizi…</li></ul>
+<div class="azioni-riga"><button id="ricontrolla" type="button" class="secondario"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>Controlla di nuovo</button></div>
+<p id="riassunto-diagnosi" role="status"></p>
+<ul id="elenco-diagnosi" class="elenco-diagnosi" aria-live="polite"><li class="caricamento">Controllo i servizi</li></ul>
 {% endblock %}
 {% block script %}<script>avviaDiagnosi();</script>{% endblock %}

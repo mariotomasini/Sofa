@@ -1,4 +1,4 @@
-// Cerca — script delle pagine. Niente librerie esterne, niente build.
+// Cerca — script delle pagine. Niente build: le animazioni e i componenti animati sono in movimento.js.
 "use strict";
 
 const BASE = window.BASE || "";
@@ -21,13 +21,19 @@ function dimensione(byte) {
 }
 
 function avviso(testo, errore = false) {
-  const box = document.getElementById("avviso");
-  box.textContent = testo;
-  box.classList.toggle("errore", errore);
-  box.hidden = false;
-  clearTimeout(avviso._t);
-  avviso._t = setTimeout(() => { box.hidden = true; }, 6000);
+  mostraAvviso(testo, errore ? "errore" : "pronto", errore ? 8000 : 5000);
 }
+
+// Icone a linea (una famiglia, un tratto): al posto dei simboli e delle emoji
+const ICONE = {
+  scarica: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>',
+  play: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  info: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>',
+  nota: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
+  lente: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>',
+  audioSpento: '<svg class="icona spento" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5m0-5-5 5"/></svg>',
+  audioAcceso: '<svg class="icona acceso" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+};
 
 // Dopo questo tempo smettiamo di aspettare e diciamo cosa succede (niente caricamenti infiniti)
 const ATTESA_MASSIMA = 45000;
@@ -64,7 +70,7 @@ function inviaJSON(percorso, corpo) {
 function htmlErrore(e) {
   return `<div class="errore"><strong>${esc(e.errore || "Errore")}</strong>` +
     (e.cosa_fare ? `<p>${esc(e.cosa_fare)}</p>` : "") +
-    `<p><a href="${BASE}/diagnosi">Controlla quali servizi rispondono →</a></p></div>`;
+    `<p><a href="${BASE}/diagnosi">Controlla quali servizi rispondono</a></p></div>`;
 }
 
 // Segnaposto per i film senza locandina: titolo in alto, anno in basso
@@ -85,14 +91,24 @@ function avviaFilm(tmdbId) {
   // Dopo il clic il tasto lascia il posto allo stato: in coda, in download, cerco, pronto.
   const auto = document.getElementById("scarica-auto");
   const statoBox = document.getElementById("stato-film");
+  const testoScarica = auto ? auto.innerHTML : "";
+  let ultimoStato = "";
   async function aggiornaStato() {
     if (!statoBox) return;
     try {
       const d = await chiama(`/api/film/${tmdbId}/stato`);
-      statoBox.innerHTML = htmlStatoFilm(d);
+      const html = htmlStatoFilm(d);
+      if (html !== ultimoStato) {  // ridisegna solo se cambia: le animazioni non ripartono ogni 5 secondi
+        ultimoStato = html;
+        statoBox.innerHTML = html;
+        preparaTieni(statoBox, (b) => azioneAutomatico(b, aggiornaStato));
+      } else {
+        const p = statoBox.querySelector(".pellicola");
+        if (p && d.percentuale != null) p.style.setProperty("--p", `${d.percentuale}%`);
+      }
       auto.hidden = d.stato !== "nessuno";
       auto.disabled = false;
-      auto.textContent = "⬇ Download";
+      auto.innerHTML = testoScarica;
     } catch (e) { /* Radarr spento: resta il tasto */ }
   }
   if (auto) {
@@ -100,15 +116,13 @@ function avviaFilm(tmdbId) {
     setInterval(aggiornaStato, 5000);
     auto.addEventListener("click", async () => {
       auto.disabled = true;
-      auto.textContent = "Avvio…";
       try {
-        const r = await inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId });
-        avviso(r.messaggio);
+        await conAvviso(inviaJSON("/api/scarica/auto", { tmdb_id: tmdbId }), "Lo aggiungo ai download");
         aggiornaStato();
-      } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); auto.disabled = false; auto.textContent = "⬇ Download"; }
+      } catch (e) { auto.disabled = false; }
     });
     statoBox.addEventListener("click", (ev) => {
-      const b = ev.target.closest("button[data-tipo]");
+      const b = ev.target.closest("button[data-tipo]:not([data-tieni])");
       if (b) azioneAutomatico(b, aggiornaStato);
     });
   }
@@ -118,13 +132,20 @@ function avviaFilm(tmdbId) {
     avvisami.disabled = true;
     try {
       const r = await chiama(`/api/avvisami/${tmdbId}`, { method: "POST" });
-      avvisami.textContent = r.attivo ? "✓ Ti avviserò se diventa gratis" : "🔔 Avvisami se diventa disponibile gratis";
-      avvisami.className = r.attivo ? "attivo" : "secondario";
+      avvisami.setAttribute("aria-pressed", r.attivo ? "true" : "false");
+      avvisami.querySelector("span").textContent = r.attivo ? "Ti avviso se diventa gratis" : "Avvisami se diventa gratis";
+      if (r.attivo) suonaCampanella(avvisami.querySelector("svg"));
       avviso(r.messaggio);
     } catch (e) { avviso(e.errore, true); }
     avvisami.disabled = false;
   });
 }
+
+// "Trailer": si apre grande, con l'audio (dalla scheda del film e sul telefono)
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-apri-trailer]");
+  if (b) { ev.preventDefault(); apriTrailer(b.dataset.apriTrailer); }
+});
 
 // Logo del servizio, con l'iniziale al suo posto se l'immagine manca o non si carica
 function htmlLogo(p) {
@@ -169,7 +190,7 @@ function cercatoreFilm(campo, bottone, contenitore, quandoScelto) {
   async function cerca() {
     const q = campo.value.trim();
     if (!q) return;
-    contenitore.innerHTML = '<p class="caricamento">Cerco…</p>';
+    contenitore.innerHTML = '<p class="caricamento">Cerco</p>';
     try {
       const d = await chiama(`/api/tmdb?q=${encodeURIComponent(q)}`);
       if (!d.film.length) { contenitore.innerHTML = "<p>Nessun film trovato.</p>"; return; }
@@ -211,7 +232,7 @@ function avviaTorrent() {
     try {
       const r = await chiama("/api/torrent", { method: "POST", body: new FormData(form) });
       avviso(r.messaggio);
-      setTimeout(() => { window.location.href = BASE + "/download"; }, 1200);
+      setTimeout(() => { window.location.href = `${BASE}/download`; }, 1200);
     } catch (e) {
       avviso(e.errore + " " + (e.cosa_fare || ""), true);
       bottone.disabled = false;
@@ -229,10 +250,10 @@ function htmlDownload(d, compatto = false) {
     return `<a class="download compatto stato-${d.stato}" href="${BASE}/download">` +
       (d.poster ? `<img src="${esc(d.poster)}" alt="">` : htmlSenzaPoster(d.titolo, d.anno)) +
       `<span class="descrizione"><strong>${esc(d.titolo)}${d.anno ? " (" + esc(d.anno) + ")" : ""}</strong>` +
-      `<span class="barra"><span style="width:${d.percentuale}%"></span></span><span class="sottotitolo">${riga}</span></span></a>`;
+      `${htmlPellicola(d.percentuale, { viva: d.stato === "in_corso" })}<span class="sottotitolo">${riga}</span></span></a>`;
   }
   const barra = d.stato === "in_corso"
-    ? `<div class="barra"><span style="width:${d.percentuale}%"></span></div>` +
+    ? htmlPellicola(d.percentuale, { viva: true }) +
       `<span class="sottotitolo">${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}` +
       `${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}</span>`
     : "";
@@ -243,33 +264,34 @@ function htmlDownload(d, compatto = false) {
   if (d.stato === "errore") azioni += `<button class="secondario" data-associa="${d.id}" data-nome="${esc(d.titolo)}">Cambia film</button>`;
   if (d.stato !== "importazione") {
     const etichetta = d.stato === "importato" ? "Togli dall'elenco" : "Annulla";
-    azioni += `<button class="secondario" data-annulla="${d.id}" data-stato="${d.stato}">${etichetta}</button>`;
+    azioni += `<button class="secondario" data-tieni data-annulla="${d.id}" data-stato="${d.stato}">${etichetta}</button>`;
   }
   return `<div class="download stato-${d.stato}">` +
     (d.poster ? `<img src="${esc(d.poster)}" alt="">` : htmlSenzaPoster(d.titolo, d.anno)) +
     `<div class="descrizione"><strong>${esc(d.titolo)}${d.anno ? " (" + esc(d.anno) + ")" : ""}</strong>` +
-    `<span class="riga-stato"><span class="stato">${esc(d.stato_testo)}</span> <span class="sottotitolo">· ${esc(fonte)}</span></span>` +
+    `<span class="riga-stato"><span class="stato">${iconaAnimata(ICONA_DOWNLOAD[d.stato] || "")}${esc(d.stato_testo)}</span> <span class="sottotitolo">· ${esc(fonte)}</span></span>` +
     barra + (d.messaggio ? `<p class="messaggio">${esc(d.messaggio)}</p>` : "") +
     `</div><div class="azioni">${azioni}</div></div>`;
 }
+
+const ICONA_DOWNLOAD = { in_corso: "download", completato: "importazione", importazione: "importazione", importato: "pronto",
+  da_associare: "problema", errore: "problema" };
 
 // Download di Radarr/Sonarr: la lingua sempre in vista, in giallo se non è quella preferita
 function etichettaLingua(x) {
   if (x.senza_lingua || !x.lingua) return "";
   if (x.preferita) return `<span class="lingua">${esc(x.lingua)}</span>`;
-  return `<span class="lingua altra">⚠ ${esc(x.lingua)} · non in ${esc(x.lingua_preferita.toLowerCase())}</span>`;
+  return `<span class="lingua altra">${esc(x.lingua)} · non in ${esc(x.lingua_preferita.toLowerCase())}</span>`;
 }
 
-const ICONE_STATO = { download: "⬇", coda: "⏳", importazione: "📥", problema: "⚠", cerco: "🔎", non_uscito: "📅", pronto: "✓" };
-
 function htmlStatoAutomatico(x) {
-  const icona = ICONE_STATO[x.stato] || "";
-  let html = `<span class="riga-stato stato-auto-${esc(x.stato || "")}"><span class="stato">${icona} ${esc(x.stato_testo || "")}</span></span>`;
+  const icona = iconaAnimata(x.stato);
+  let html = `<span class="riga-stato stato-auto-${esc(x.stato || "")}"><span class="stato">${icona}${esc(x.stato_testo || "")}</span></span>`;
   if (x.stato === "download") {
     const pezzi = [`${Math.round(x.percentuale)}%${x.dimensione ? " di " + dimensione(x.dimensione) : ""}`];
     if (x.velocita) pezzi.push(`${dimensione(x.velocita)}/s`);
     if (x.rimanente) pezzi.push(`mancano ${tempoRimanente(x.rimanente)}`);
-    html += `<div class="barra"><span style="width:${x.percentuale}%"></span></div>` +
+    html += htmlPellicola(x.percentuale, { viva: true, grande: true }) +
       `<span class="sottotitolo">${pezzi.map(esc).join(" · ")}</span>`;
   }
   return html;
@@ -284,7 +306,7 @@ function tempoRimanente(s) {
 
 function etichettaFonte(x) {
   if (!x.fonte) return "";
-  return `<span class="fonte fonte-${x.fonte.toLowerCase()}">${x.fonte === "Telegram" ? "✈ Telegram" : "Torrent"}</span>`;
+  return `<span class="fonte fonte-${x.fonte.toLowerCase()}">${x.fonte === "Telegram" ? "Telegram" : "Torrent"}</span>`;
 }
 
 function htmlAutomatico(x, inCorso) {
@@ -294,7 +316,7 @@ function htmlAutomatico(x, inCorso) {
   const azioni = inCorso
     ? (x.anticipabile ? `<button class="secondario" data-prima="${esc(x.hash)}">Scarica prima questa</button>` : "") +
       (x.ricercabile ? `<button class="secondario" data-riprova ${dati}>Cerca di nuovo</button>` : "") +
-      (x.annullabile ? `<button class="secondario" data-annulla-auto ${dati}>Annulla</button>` : "")
+      (x.annullabile ? `<button class="secondario" data-tieni data-annulla-auto ${dati}>Annulla</button>` : "")
     : "";
   const altra = !x.senza_lingua && x.lingua && !x.preferita;
   return `<article class="download${altra ? " non-preferita" : ""}"><div class="descrizione">` +
@@ -307,7 +329,7 @@ function htmlAutomatico(x, inCorso) {
 
 async function azioneAutomatico(b, dopo) {
   const corpo = { tipo: b.dataset.tipo, ids: b.dataset.ids.split(",").filter(Boolean).map(Number) };
-  if (b.dataset.annullaAuto !== undefined && !confirm("Annullo? Smetto di cercarlo e fermo il download (quello che è già in Jellyfin resta).")) return;
+  // "Annulla" si conferma tenendo premuto il tasto (smetto di cercarlo e fermo il download; quello in Jellyfin resta)
   b.disabled = true;
   try {
     const percorso = b.dataset.annullaAuto !== undefined ? "/api/automatici/annulla" : "/api/automatici/riprova";
@@ -322,7 +344,7 @@ function htmlStatoFilm(d) {
   const dati = `data-tipo="film" data-ids="${d.id}"`;
   let azioni = "";
   if (["cerco"].includes(d.stato)) azioni += `<button class="secondario" data-riprova ${dati}>Cerca di nuovo</button>`;
-  if (d.stato !== "pronto" || d.migliorabile) azioni += `<button class="secondario" data-annulla-auto ${dati}>Annulla</button>`;
+  if (d.stato !== "pronto" || d.migliorabile) azioni += `<button class="secondario" data-tieni data-annulla-auto ${dati}>Annulla</button>`;
   const nota = d.stato === "pronto" && d.migliorabile
     ? `<span class="sottotitolo">Cerco ancora la versione in ${esc(d.lingua_preferita.toLowerCase())}: la sostituisco da sola.</span>` : "";
   return `<div class="stato-film"><span>${etichettaLingua(d)}${etichettaFonte(d)}</span>${htmlStatoAutomatico(d)}${nota}` +
@@ -335,13 +357,24 @@ const COLORE_STATO = { problema: "problema", download: "attivo", importazione: "
 
 function htmlSchedaDownload(g) {
   const copertina = g.poster ? `<img src="${esc(g.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(g.titolo, "");
-  const barra = g.stato === "download" || g.stato === "importazione" || g.stato === "pronto"
-    ? `<span class="barra-copertina"><span style="width:${g.percentuale}%"></span></span>` : "";
+  const barra = g.stato === "download" || g.stato === "importazione"
+    ? htmlPellicola(g.percentuale, { viva: true }) : "";
   const quante = g.tipo === "serie" && g.quante > 1 ? `<span class="conta-puntate">${g.quante}</span>` : "";
-  return `<button type="button" class="scheda-download colore-${COLORE_STATO[g.stato] || "attesa"}" data-gruppo="${esc(g.chiave)}">` +
-    `<span class="poster">${copertina}${barra}${quante}</span>` +
+  return `<button type="button" class="scheda-download colore-${COLORE_STATO[g.stato] || "attesa"}" data-gruppo="${esc(g.chiave)}" data-stato="${esc(g.stato)}">` +
+    `<span class="poster">${copertina}${quante}</span>` +
     `<span class="titolo">${esc(g.titolo)}</span>` +
-    `<span class="stato-breve">${ICONE_STATO[g.stato] || ""} ${esc(g.stato_testo)}</span></button>`;
+    `<span class="stato-breve">${iconaAnimata(g.stato)}${esc(g.stato_testo)}</span>${barra}</button>`;
+}
+
+// In cima alla pagina Download: quello che sta scaricando adesso, con la velocità dal vivo
+function htmlOra(g) {
+  const copertina = g.poster ? `<img src="${esc(g.poster)}" alt="">` : htmlSenzaPoster(g.titolo, "");
+  return `<div class="copertina">${copertina}</div><div>` +
+    `<span class="stato-breve colore-attivo" style="color:var(--lampada)">${iconaAnimata("download")}In download</span>` +
+    `<h2>${esc(g.titolo)}</h2>${htmlPellicola(g.percentuale, { viva: true, grande: true })}` +
+    `<div class="cifre"><span><b class="num" data-ora="percentuale">${Math.round(g.percentuale || 0)}%</b></span>` +
+    `<span class="num" data-ora="rimanente">${g.rimanente ? `mancano ${esc(tempoRimanente(g.rimanente))}` : ""}</span></div></div>` +
+    `<div class="velocita" aria-hidden="true"><span class="velocita-nome">Velocità</span><div class="grafico-velocita"></div></div>`;
 }
 
 function htmlVoceDownload(v) {
@@ -363,15 +396,59 @@ function avviaPaginaDownload() {
     if (g.velocita) pezzi.push(`${dimensione(g.velocita)}/s`);
     if (g.rimanente) pezzi.push(`mancano ${tempoRimanente(g.rimanente)}`);
     document.getElementById("dettaglio-stato").textContent = pezzi.join(" · ");
-    document.getElementById("dettaglio-voci").innerHTML = g.voci.map(htmlVoceDownload).join("");
+    const voci = document.getElementById("dettaglio-voci");
+    const html = g.voci.map(htmlVoceDownload).join("");
+    if (voci._html !== html) {
+      voci._html = html;
+      voci.innerHTML = html;
+      preparaTieni(voci, eseguiVoce);
+    }
+  }
+
+  const ora = document.getElementById("ora");
+  const riassunto = document.getElementById("riassunto-download");
+  let chiaveOra = "", linea = null, ultimaGriglia = "";
+
+  function disegnaOra() {
+    const g = gruppi.find((x) => x.stato === "download");
+    ora.hidden = !g;
+    if (!g) { chiaveOra = ""; return; }
+    if (g.chiave !== chiaveOra) {
+      chiaveOra = g.chiave;
+      ora.innerHTML = htmlOra(g);
+      linea = lineaDalVivo(ora.querySelector(".grafico-velocita"), { formato: (v) => `${dimensione(v)}/s` });
+    }
+    const p = ora.querySelector(".pellicola");
+    p.style.setProperty("--p", `${g.percentuale || 0}%`);
+    ora.querySelector('[data-ora="percentuale"]').textContent = `${Math.round(g.percentuale || 0)}%`;
+    ora.querySelector('[data-ora="rimanente"]').textContent = g.rimanente ? `mancano ${tempoRimanente(g.rimanente)}` : "";
+    linea.aggiungi(g.velocita || 0);
+  }
+
+  function disegnaRiassunto() {
+    const conta = (stati) => gruppi.filter((g) => stati.includes(g.stato)).length;
+    const pezzi = [[conta(["download"]), "in download"], [conta(["coda", "cerco", "attesa"]), "in attesa"],
+      [conta(["problema", "da_associare"]), "da sistemare"], [conta(["pronto"]), "pronti"]].filter(([n]) => n);
+    riassunto.innerHTML = pezzi.map(([n, t]) => `<span><span class="num">${n}</span> ${t}</span>`).join("");
   }
 
   async function aggiorna() {
     try {
       const d = await chiama("/api/download/gruppi");
       gruppi = d.gruppi;
-      griglia.innerHTML = gruppi.length ? gruppi.map(htmlSchedaDownload).join("")
-        : '<p class="vuoto">Niente in download. Cerca un film o una serie e premi Download.</p>';
+      const html = gruppi.length ? gruppi.map(htmlSchedaDownload).join("")
+        : `<div class="salotto-vuoto">${SALOTTO}<h2>Niente in download</h2>` +
+          `<p>Cerca un film e premi Scarica: lo ritrovi in Jellyfin, pronto da guardare sulla TV.</p>` +
+          `<a class="bottone" href="${BASE}/">${ICONE.lente}Cerca un film</a></div>`;
+      if (html !== ultimaGriglia) {  // ridisegna solo se qualcosa cambia: le animazioni restano fluide
+        ultimaGriglia = html;
+        griglia.innerHTML = html;
+        griglia.classList.toggle("griglia-download", gruppi.length > 0);
+        accendiSalotto(griglia.querySelector(".salotto"));
+      }
+      document.getElementById("cerca-ora").parentElement.hidden = !gruppi.length;
+      disegnaOra();
+      disegnaRiassunto();
       if (dettaglio.open) disegnaDettaglio();
     } catch (e) { if (!gruppi.length) griglia.innerHTML = htmlErrore(e); }
   }
@@ -385,10 +462,14 @@ function avviaPaginaDownload() {
   });
   document.getElementById("dettaglio-chiudi").addEventListener("click", () => dettaglio.close());
 
-  // i pulsanti delle voci: quelle di Radarr/Sonarr hanno data-tipo, quelle di Cerca il numero del download
-  document.getElementById("dettaglio-voci").addEventListener("click", async (ev) => {
-    const b = ev.target.closest("button");
-    if (!b) return;
+  // i pulsanti delle voci: quelle di Radarr/Sonarr hanno data-tipo, quelle di Cerca il numero del download.
+  // "Annulla" e "Togli dall'elenco" si confermano tenendo premuto (movimento.js: tieniPremuto).
+  document.getElementById("dettaglio-voci").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button:not([data-tieni])");
+    if (b) eseguiVoce(b);
+  });
+
+  async function eseguiVoce(b) {
     if (b.dataset.prima) {
       b.disabled = true;
       try { avviso((await inviaJSON("/api/download/prima", { hash: b.dataset.prima })).messaggio); aggiorna(); }
@@ -400,10 +481,7 @@ function avviaPaginaDownload() {
       if (b.dataset.riprova) {
         avviso((await chiama(`/api/download/${b.dataset.riprova}/riprova`, { method: "POST" })).messaggio);
       } else if (b.dataset.annulla) {
-        const domanda = b.dataset.stato === "importato"
-          ? "Tolgo il download dall'elenco? Quello che è in Jellyfin resta."
-          : "Annullo il download e cancello i file scaricati finora?";
-        if (!confirm(domanda)) return;
+        // tolto dall'elenco: quello che è in Jellyfin resta; annullato: i file scaricati finora si cancellano
         avviso((await chiama(`/api/download/${b.dataset.annulla}/annulla`, { method: "POST" })).messaggio);
       } else if (b.dataset.associa) {
         dettaglio.close();
@@ -411,7 +489,7 @@ function avviaPaginaDownload() {
       }
       aggiorna();
     } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
-  });
+  }
 
   document.getElementById("cerca-ora").addEventListener("click", async (ev) => {
     ev.target.disabled = true;
@@ -448,9 +526,23 @@ function avviaPaginaDownload() {
 }
 
 // --- novità nelle pagine iniziali dei mondi -------------------------------------------
+// Il trailer al passaggio: film e serie con l'id di TMDB (le serie di TVmaze non ce l'hanno)
+function chiaveTrailer(f) {
+  if (f.sottotitolo || !f.id) return "";
+  if (f.serie) return "generi_tvmaze" in f ? "" : `tv:${f.id}`;
+  return `movie:${f.id}`;
+}
+function attrTrailer(f) {
+  const k = chiaveTrailer(f);
+  return k ? ` data-trailer="${esc(k)}"` : "";
+}
+function votoBreve(v) {
+  return v ? Number(v).toFixed(1).replace(".", ",") : "";
+}
+
 function htmlScheda(f) {
   let link = `${BASE}/film/${f.id}`;
-  let sotto = esc(f.anno || "");
+  let sotto = esc([f.anno, votoBreve(f.voto)].filter(Boolean).join(" · "));
   let dati = "";
   if (f.serie) {
     link = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
@@ -460,7 +552,7 @@ function htmlScheda(f) {
     link = "/jellyfin/";
     sotto = `${esc(f.sottotitolo)}${f.pronto ? ' · <span class="pronto">pronto</span>' : ""}`;
   }
-  return `<a class="scheda" href="${link}"${dati}><span class="poster">` +
+  return `<a class="scheda" href="${link}"${dati}${attrTrailer(f)}><span class="poster">` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
     htmlEtichette(f) + "</span>" +
     `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${sotto}</span></a>`;
@@ -498,12 +590,14 @@ async function avviaGeneri() {
   }
 }
 
+// Top 10: il posto è un numero piccolo sulla locandina, niente numeroni contornati
 function htmlTop(f, i) {
   const link = f.serie ? `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}` : `${BASE}/film/${f.id}`;
-  return `<a class="scheda-top" href="${link}"${f.serie ? attrSerie(f) : ""} aria-label="${i + 1}. ${esc(f.titolo)}">` +
-    `<span class="numero" aria-hidden="true">${i + 1}</span><span class="poster-top">` +
+  return `<a class="scheda-top" href="${link}"${f.serie ? attrSerie(f) : ""}${attrTrailer(f)} aria-label="${i + 1}. ${esc(f.titolo)}">` +
+    `<span class="poster-top"><span class="numero num" aria-hidden="true">${i + 1}</span>` +
     (f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(f.titolo, f.anno)) +
-    (f.nuovo ? '<span class="nastro">Aggiunto di recente</span>' : "") + "</span></a>";
+    (f.nuovo ? '<span class="nastro">Aggiunto di recente</span>' : "") + "</span>" +
+    `<span class="titolo">${esc(f.titolo)}</span><span class="anno">${esc([f.anno, votoBreve(f.voto)].filter(Boolean).join(" · "))}</span></a>`;
 }
 
 // Jellyfin non ha l'immagine: al suo posto il segnaposto con il titolo
@@ -527,7 +621,7 @@ function htmlRiga(r, mondo) {
   let tutti = "";
   if (r.genere) tutti = `${BASE}/genere/${r.genere}?mondo=${encodeURIComponent(mondo)}`;
   if (r.piattaforma) tutti = `${BASE}/piattaforma/${r.piattaforma}?mondo=${encodeURIComponent(mondo)}`;
-  const link = tutti ? `<a class="link-accento" href="${tutti}">Vedi tutti →</a>` : "";
+  const link = tutti ? `<a class="link-accento" href="${tutti}"${r.piattaforma && r.codice ? ` data-tema="${esc(r.codice)}"` : ""}>Vedi tutti</a>` : "";
   const id = r.ancora || `riga-${r.tipo}-${r.genere || r.piattaforma || ""}`;
   const logo = r.logo ? `<img class="logo-piattaforma" src="${esc(r.logo)}" alt="" width="36" height="36" onerror="this.remove()">` : "";
   return `<section class="riga riga-${esc(r.tipo)}" aria-labelledby="${id}">` +
@@ -547,11 +641,12 @@ async function avviaHome(mondo = "film") {
       `<div class="centrato"><button type="button" class="secondario" id="scegli-piattaforme">Scegli le tue piattaforme</button></div>`;
     document.getElementById("scegli-piattaforme").addEventListener("click", () => apriScegliPiattaforme(mondo));
     contenitore.removeAttribute("aria-busy");
+    entraVetrina(contenitore);
   };
   await conMemoria(`home:${mondo}`, `/api/home?mondo=${encodeURIComponent(mondo)}`, disegna, (e) => {
     contenitore.innerHTML = htmlErrore(e);
     contenitore.removeAttribute("aria-busy");
-  }, "Carico i consigli…", contenitore);
+  }, "Carico i consigli", contenitore);
 }
 
 // --- memoria della pagina: si vede subito l'ultima versione, poi si aggiorna solo se è cambiata ----
@@ -588,29 +683,54 @@ const NOMI_GENERI = {
 };
 
 function htmlEtichette(f) {
-  return (f.top10 ? '<span class="etichetta-top" aria-label="Top 10">TOP<b>10</b></span>' : "") +
-    (f.nuovo ? '<span class="nastro">Aggiunto di recente</span>' : "");
+  return f.nuovo ? '<span class="nastro">Aggiunto di recente</span>' : "";
 }
 
 function grande(url, misura) {
   return (url || "").replace("/s332/", `/${misura}/`).replace("/w342/", "/w780/");
 }
 
+// La vetrina in cima: con l'immagine di sfondo è una scena piena (piattaforme), altrimenti la locandina
+// a destra e il suo colore sfumato dietro. Dopo qualche secondo parte il trailer muto.
 function htmlInEvidenza(f, mondo, dove) {
   if (!f || !f.poster) return "";
   const generi = [f.serie ? "Serie" : "Film", ...(f.genre_ids || []).map((g) => NOMI_GENERI[g]).filter(Boolean).slice(0, 2)];
+  const meta = [f.anno, generi.join(", "), votoBreve(f.voto)].filter(Boolean).join(" · ");
   const sonarr = `/sonarr/add/new?term=${encodeURIComponent(f.titolo_originale || f.titolo)}`;
-  const azioni = f.serie
-    ? `<a class="bottone bianco" href="${sonarr}"${attrSerie(f)}><span aria-hidden="true">⬇</span> Download</a>`
-    : `<a class="bottone bianco" href="${BASE}/film/${f.id}"><span aria-hidden="true">▶</span> Scarica</a>` +
-      `<a class="bottone grigio" href="${BASE}/film/${f.id}"><span aria-hidden="true">ⓘ</span> Scheda</a>`;
-  const top = f.top10 ? `<p class="vetrina-top">${htmlEtichette({ top10: 1 })} N° ${f.top10} oggi ${dove ? "su " + esc(dove) : (f.serie ? "tra le serie" : "tra i film")}</p>` : "";
-  return `<section class="vetrina" aria-label="In evidenza: ${esc(f.titolo)}">` +
-    `<picture>${f.sfondo ? `<source media="(min-width: 900px)" srcset="${esc(f.sfondo)}">` : ""}` +
-    `<img src="${esc(grande(f.poster, "s718"))}" alt=""></picture>` +
-    `<div class="vetrina-testo"><h2>${esc(f.titolo)}</h2>${top}` +
-    `<p class="vetrina-generi">${generi.map(esc).join('<span aria-hidden="true"> • </span>')}</p>` +
-    `<div class="vetrina-azioni">${azioni}</div></div></section>`;
+  const trailer = chiaveTrailer(f);
+  const azioni = (f.serie
+    ? `<a class="bottone lampada" href="${sonarr}"${attrSerie(f)}>${ICONE.scarica}Segui la serie</a>`
+    : `<a class="bottone lampada" href="${BASE}/film/${f.id}">${ICONE.scarica}Scarica</a>` +
+      `<a class="bottone secondario" href="${BASE}/film/${f.id}">Scheda</a>`) +
+    (trailer ? `<button type="button" class="secondario" data-apri-trailer="${esc(trailer)}">${ICONE.play}Trailer</button>` : "");
+  const top = f.top10 ? `<p class="vetrina-top"><span class="num">N° ${f.top10}</span>oggi ${dove ? "su " + esc(dove) : (f.serie ? "tra le serie" : "tra i film")}</p>` : "";
+  const testo = `<div class="vetrina-testo">${top}<h2><span class="rivela"><span>${esc(f.titolo)}</span></span></h2>` +
+    `<p class="vetrina-generi">${esc(meta)}</p>${f.trama ? `<p class="vetrina-trama">${esc(f.trama)}</p>` : ""}` +
+    `<div class="vetrina-azioni">${azioni}</div></div>`;
+  const audio = trailer ? `<button type="button" class="audio-trailer" aria-pressed="false" aria-label="Ascolta l'audio del trailer" hidden>${ICONE.audioSpento}${ICONE.audioAcceso}</button>` : "";
+  const dati = trailer ? ` data-trailer="${esc(trailer)}"` : "";
+  if (f.sfondo) {
+    return `<section class="vetrina scena"${dati} aria-label="In evidenza: ${esc(f.titolo)}">` +
+      `<div class="sfondo"><img src="${esc(f.sfondo)}" alt=""></div><div class="vetrina-video"></div>${testo}${audio}</section>`;
+  }
+  const locandina = esc(grande(f.poster, "s718"));
+  return `<section class="vetrina"${dati} aria-label="In evidenza: ${esc(f.titolo)}" style="--sfondo-vetrina:url('${locandina}')">` +
+    `<div class="alone"></div>${testo}<div class="vetrina-locandina"><img src="${locandina}" alt=""><div class="vetrina-video"></div>${audio}</div></section>`;
+}
+
+function entraVetrina(contenitore) {
+  const v = contenitore.querySelector(".vetrina");
+  if (!v || v._entrata) return;
+  v._entrata = true;
+  if (!FERMO) {
+    const t = v.querySelector(".rivela > span");
+    if (t) G.from(t, { yPercent: 105, duration: 0.6, ease: "power3.out" });
+    G.from(v.querySelectorAll(".vetrina-top, .vetrina-generi, .vetrina-trama, .vetrina-azioni"),
+      { opacity: 0, y: 8, duration: 0.4, stagger: 0.06, delay: 0.2, ease: "power3.out", clearProps: "all" });
+    const l = v.querySelector(".vetrina-locandina");
+    if (l) G.from(l, { opacity: 0, y: 16, duration: 0.7, ease: "power3.out", clearProps: "opacity,transform" });
+  }
+  trailerVetrina(v);
 }
 
 async function avviaChipPiattaforme(mondo) {
@@ -623,9 +743,11 @@ async function avviaChipPiattaforme(mondo) {
   // subito sotto ricerca e generi: si vede senza scorrere
   const generi = document.getElementById("generi");
   if (generi) generi.after(nav); else contenitore.before(nav);
+  // un tasto per piattaforma col suo logo vero; aprendola, Cerca prende i suoi colori
   await conMemoria(`piattaforme:${mondo}`, `/api/piattaforme?mondo=${encodeURIComponent(mondo)}`, (d) => {
     nav.innerHTML = d.tutte.map((p) =>
-      `<a class="chip" href="${BASE}/piattaforma/${p.id}?mondo=${encodeURIComponent(mondo)}">${esc(p.nome)}</a>`).join("");
+      `<a class="chip" href="${BASE}/piattaforma/${p.id}?mondo=${encodeURIComponent(mondo)}"${p.codice ? ` data-tema="${esc(p.codice)}"` : ""}>` +
+      `${htmlLogo(p)}<span>${esc(p.nome)}</span></a>`).join("");
   }, () => nav.remove(), "", null);
 }
 
@@ -640,11 +762,12 @@ async function avviaVista(id, mondo) {
         : `<p>Nessun titolo trovato su ${esc(nome)}.</p>`);
     menu.innerHTML = d.righe.map((r, i) => `<a href="#riga-${i}">${esc(r.titolo)}</a>`).join("");
     contenitore.removeAttribute("aria-busy");
+    entraVetrina(contenitore);
   };
   await conMemoria(`vista:${id}:${mondo}`, `/api/vista/${id}?mondo=${encodeURIComponent(mondo)}`, disegna, (e) => {
     contenitore.innerHTML = htmlErrore(e);
     contenitore.removeAttribute("aria-busy");
-  }, "Carico…", contenitore);
+  }, "Carico", contenitore);
   menu.addEventListener("click", (ev) => { if (ev.target.closest("a")) ev.target.closest("details").open = false; });
 }
 
@@ -683,7 +806,7 @@ function avviaGenere(genere, mondo) {
 async function apriScegliPiattaforme(mondo) {
   const dialogo = document.getElementById("dialogo-piattaforme");
   const elenco = document.getElementById("elenco-piattaforme");
-  elenco.innerHTML = '<p class="caricamento">Carico…</p>';
+  elenco.innerHTML = '<p class="caricamento">Carico</p>';
   dialogo.showModal();
   try {
     const d = await chiama(`/api/piattaforme?mondo=${encodeURIComponent(mondo)}`);
@@ -717,28 +840,31 @@ async function avviaDiagnosi() {
   const bottone = document.getElementById("ricontrolla");
   async function controlla() {
     bottone.disabled = true;
-    elenco.innerHTML = '<li class="caricamento">Controllo i servizi… (al massimo 10 secondi)</li>';
+    elenco.innerHTML = '<li class="caricamento">Controllo i servizi (al massimo 10 secondi)</li>';
     riassunto.textContent = "";
     try {
       const d = await chiama("/api/diagnosi", { attesa: 30000 });
-      const icona = { ok: "✓", lento: "!", errore: "✗" };
+      // ogni servizio: il suo stato (animato) e le barre degli ultimi controlli fatti da questo browser
+      const icona = { ok: "pronto", lento: "lento", errore: "errore" };
       elenco.innerHTML = d.risultati.map((r) =>
-        `<li class="servizio-stato ${esc(r.stato)}"><span class="icona-stato" aria-hidden="true">${icona[r.stato] || "?"}</span>` +
+        `<li class="servizio-stato ${esc(r.stato)}"><span class="icona-stato">${iconaAnimata(icona[r.stato] || "problema")}</span>` +
         `<div><strong>${esc(r.nome)}</strong> <span class="sottotitolo">serve per ${esc(r.a_cosa_serve)}</span>` +
-        `<p>${esc(r.messaggio)}${r.millisecondi ? ` <span class="sottotitolo">(${(r.millisecondi / 1000).toFixed(1).replace(".", ",")} s)</span>` : ""}</p>` +
-        (r.cosa_fare ? `<p class="cosa-fare">${esc(r.cosa_fare)}</p>` : "") + "</div></li>").join("");
+        `<p>${esc(r.messaggio)}</p>` +
+        (r.cosa_fare ? `<p class="cosa-fare">${esc(r.cosa_fare)}</p>` : "") +
+        htmlStorico(storicoServizio(r.nome, r.stato)) + "</div>" +
+        `<span class="tempo">${r.millisecondi ? `${(r.millisecondi / 1000).toFixed(1).replace(".", ",")} s` : ""}</span></li>`).join("");
       const male = d.risultati.filter((r) => r.stato === "errore").map((r) => r.nome);
-      riassunto.textContent = d.tutto_ok ? "Tutto a posto: tutti i servizi rispondono."
-        : male.length ? `Non rispondono: ${male.join(", ")}.` : "Rispondono tutti, ma qualcuno è lento.";
+      riassunto.textContent = d.tutto_ok ? "Tutto a posto: tutti i servizi rispondono"
+        : male.length ? `Non rispondono: ${male.join(", ")}` : "Rispondono tutti, ma qualcuno è lento";
       const b = d.ultimo_blocco;
       if (b) {
         const quando = new Date(b.quando).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
         elenco.insertAdjacentHTML("beforeend",
-          '<li class="servizio-stato lento"><span class="icona-stato" aria-hidden="true">!</span><div>' +
+          `<li class="servizio-stato lento"><span class="icona-stato">${iconaAnimata("lento")}</span><div>` +
           `<strong>Ultimo blocco di Cerca</strong> <span class="sottotitolo">${esc(quando)}</span>` +
           `<p>Era fermo da ${b.secondi} secondi${b.riavviato ? " e si è riavviato da solo" : ""}.</p>` +
           (b.punti && b.punti.length ? `<details><summary>Dove era fermo (da mandare a chi ti aiuta)</summary><pre class="dove-blocco">${esc(b.punti.join("\n"))}</pre></details>` : "") +
-          "</div></li>");
+          '</div><span class="tempo"></span></li>');
       }
     } catch (e) {
       elenco.innerHTML = `<li>${htmlErrore(e)}</li>`;
@@ -753,11 +879,6 @@ async function avviaDiagnosi() {
 function durataBrano(s) {
   const m = Math.floor((s || 0) / 60);
   return `${m}:${String((s || 0) % 60).padStart(2, "0")}`;
-}
-
-function saluto() {
-  const ora = new Date().getHours();
-  return ora < 5 ? "Buonanotte" : ora < 12 ? "Buongiorno" : ora < 18 ? "Buon pomeriggio" : "Buonasera";
 }
 
 const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
@@ -831,7 +952,7 @@ function htmlRigaPreferito(t, i, coda) {
   return `<div class="riga-con-scarica"><button type="button" class="riga-brano" data-brano="jf:${esc(t.id)}" data-coda="${coda}" ` +
     `data-titolo="${esc(t.titolo)}" data-artista="${esc(t.artista)}" data-copertina="${esc(copertina)}">` +
     `<span class="numero">${i + 1}</span>` +
-    (copertina ? `<img src="${esc(copertina)}" alt="" loading="lazy">` : `<span class="copertina-vuota" aria-hidden="true">♪</span>`) +
+    (copertina ? `<img src="${esc(copertina)}" alt="" loading="lazy">` : `<span class="copertina-vuota" aria-hidden="true">${ICONE.nota}</span>`) +
     `<span class="testi"><span class="titolo">${esc(t.titolo)}</span><span class="artista">${esc(t.artista)}</span></span>` +
     `<span class="durata">${durataBrano(t.durata)}</span></button>` +
     `<span class="scarica-musica fatto" title="Scaricato" aria-label="Scaricato">${SCARICATO}</span></div>`;
@@ -951,7 +1072,6 @@ async function seguiArtista(b) {
 }
 
 function avviaMusica() {
-  document.getElementById("saluto").textContent = saluto();
   const scorciatoie = document.getElementById("scorciatoie");
   const righe = document.getElementById("righe-musica");
   conMemoria("musica:home", "/api/musica/home", (d) => {
@@ -963,7 +1083,7 @@ function avviaMusica() {
     righe.innerHTML = d.righe.map(htmlRigaMusica).join("") +
       (d.avviso && !d.righe.length ? `<div class="nota"><p>${esc(d.avviso)}</p></div>` : "");
     righe.removeAttribute("aria-busy");
-  }, (e) => { righe.innerHTML = htmlErrore(e); righe.removeAttribute("aria-busy"); }, "Carico la tua musica…", righe);
+  }, (e) => { righe.innerHTML = htmlErrore(e); righe.removeAttribute("aria-busy"); }, "Carico la tua musica", righe);
 }
 
 async function avviaArtista(id) {
@@ -1036,7 +1156,7 @@ async function avviaPreferiti() {
 async function avviaCercaMusica(q) {
   const box = document.getElementById("risultati-musica");
   if (!q) { box.innerHTML = ""; return; }
-  box.innerHTML = '<p class="caricamento">Cerco…</p>';
+  box.innerHTML = '<p class="caricamento">Cerco</p>';
   try {
     const d = await chiama(`/api/musica/cerca?q=${encodeURIComponent(q)}`);
     const coda = d.brani.map((t) => t.id).join(",");
@@ -1045,7 +1165,7 @@ async function avviaCercaMusica(q) {
         d.brani.map((t, i) => htmlRigaBrano(t, i, coda)).join("") + `</div></section>` : "") +
       (d.artisti.length ? htmlRigaMusica({ tipo: "artisti", titolo: "Artisti", elementi: d.artisti }) : "") +
       (d.album.length ? htmlRigaMusica({ tipo: "album", titolo: "Album", elementi: d.album }) : "") ||
-      `<p>Nessun risultato per "${esc(q)}".</p>`;
+      `<p>Nessun risultato per "${esc(q)}"</p>`;
   } catch (e) { box.innerHTML = htmlErrore(e); }
 }
 
@@ -1054,10 +1174,19 @@ function avviaSpazio() {
   const anteprima = document.getElementById("anteprima");
   const registro = document.getElementById("registro");
   const bottone = document.getElementById("libera");
+  const totale = document.getElementById("totale-liberabile");
+
+  // la lancetta del disco (bklit-ui: gauge), con la zona della pulizia automatica in rosso
+  const disco = document.querySelector(".disco[data-usato]");
+  if (disco) {
+    const box = document.getElementById("lancetta");
+    box.innerHTML = htmlLancetta(Number(disco.dataset.usato), Number(disco.dataset.soglia));
+    muoviLancetta(box.querySelector("svg"));
+  }
 
   function voce(testo, byte, dettaglio) {
     return `<li><div class="descrizione"><strong>${esc(testo)}</strong>` +
-      `<span class="sottotitolo">${esc(dettaglio)}</span></div><div class="azioni">${dimensione(byte)}</div></li>`;
+      `<span class="sottotitolo">${esc(dettaglio)}</span></div><div class="azioni num">${dimensione(byte)}</div></li>`;
   }
 
   async function carica() {
@@ -1065,35 +1194,40 @@ function avviaSpazio() {
       const d = await chiama("/api/pulizia");
       let html = "";
       if (d.abbandonati.length) {
-        html += "<h3>Download abbandonati (tolti sempre)</h3><ul class=\"risultati\">" +
+        html += "<h3>Download abbandonati, tolti sempre</h3><ul class=\"risultati\">" +
           d.abbandonati.map((a) => voce(a.nome, a.dimensione, `fermo da ${a.giorni} giorni, non lo usa nessun download`)).join("") + "</ul>";
       }
       if (d.pulizia_visti) {
-        html += `<h3>Già visti da più di ${d.giorni} giorni (tolti solo se serve spazio, dal più vecchio)</h3>`;
+        html += `<h3>Già visti da più di ${d.giorni} giorni, tolti solo se serve spazio, dal più vecchio</h3>`;
         html += d.visti.length
           ? "<ul class=\"risultati\">" + d.visti.map((v) => voce(v.serie ? `${v.serie} – ${v.nome}` : v.nome, v.dimensione,
               `visto ${v.giorni} giorni fa`)).join("") + "</ul>"
-          : "<p>Nessun film o episodio visto da abbastanza tempo.</p>";
+          : "<p class=\"sottotitolo\">Nessun film o episodio visto da abbastanza tempo</p>";
       } else {
         html += '<div class="nota"><p>La pulizia dei film e degli episodi già visti è spenta. Puoi attivarla con ' +
           '<code>mediabox impostazioni</code>: tocca solo quello che è già stato visto da tempo, mai i preferiti.</p></div>';
       }
-      if (!d.abbandonati.length && !(d.pulizia_visti && d.visti.length)) html = "<p>Niente da togliere: tutto in ordine. 👍</p>" + html;
-      html += `<p class="sottotitolo">Totale che si potrebbe liberare: <strong>${dimensione(d.totale)}</strong></p>`;
+      if (!d.abbandonati.length && !(d.pulizia_visti && d.visti.length)) {
+        html = `<p class="stato" style="color:var(--verde)">${iconaAnimata("pronto")}Niente da togliere, tutto in ordine</p>` + html;
+      }
       anteprima.innerHTML = html;
+      totale.innerHTML = d.totale ? `Totale <span class="num" style="color:var(--testo)">${dimensione(d.totale)}</span>` : "";
       bottone.disabled = !d.totale;
+      bottone.lastChild.textContent = d.totale ? `Libera ${dimensione(d.totale)}` : "Libera spazio adesso";
       registro.innerHTML = d.registro.length
         ? "<ul class=\"risultati\">" + d.registro.map((r) => voce(r.cosa, r.dimensione,
-            new Date(r.quando * 1000).toLocaleString("it-IT") + " · " + (r.motivo || ""))).join("") + "</ul>"
-        : "<p>Nessuna pulizia finora.</p>";
+            new Date(r.quando * 1000).toLocaleString("it-IT", { dateStyle: "medium", timeStyle: "short" }) + " · " + (r.motivo || ""))).join("") + "</ul>"
+        : "<p class=\"sottotitolo\">Nessuna pulizia finora</p>";
     } catch (e) { anteprima.innerHTML = htmlErrore(e); registro.innerHTML = ""; }
   }
 
-  bottone.addEventListener("click", async () => {
-    if (!confirm("Tolgo i download abbandonati" + " e, se serve spazio e la pulizia dei visti è attiva, i film ed episodi visti da tempo. Continuo?")) return;
+  // "Libera" si conferma tenendo premuto: toglie i download abbandonati e, se serve spazio e la
+  // pulizia dei visti è attiva, i film ed episodi visti da tempo
+  tieniPremuto(bottone, async () => {
     bottone.disabled = true;
-    try { avviso((await chiama("/api/pulizia", { method: "POST" })).messaggio); }
-    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
+    try { await conAvviso(chiama("/api/pulizia", { method: "POST" }), "Faccio pulizia"); } catch (e) { /* già detto */ }
+    bottone.classList.remove("confermato");
+    bottone._presa = false;
     carica();
   });
   carica();
@@ -1110,9 +1244,10 @@ function attrSerie(f) {
 }
 
 const STATI_PUNTATA = {
-  pronta: "✓ In Jellyfin", download: "⬇ In download", cerco: "🔎 Cerco una fonte",
-  in_arrivo: "📅 La scarico appena esce", libera: "", non_uscita: "Non ancora uscita",
+  pronta: "In Jellyfin", download: "In download", cerco: "Cerco una fonte",
+  in_arrivo: "La scarico appena esce", libera: "", non_uscita: "Non ancora uscita",
 };
+const ICONA_PUNTATA = { pronta: "pronto", download: "download", cerco: "cerco", in_arrivo: "in_arrivo" };
 
 function htmlPuntate(stagioni) {
   if (!stagioni.length) return '<p class="sottotitolo">Sonarr non ha ancora l\'elenco delle puntate: riprova tra poco.</p>';
@@ -1121,15 +1256,15 @@ function htmlPuntate(stagioni) {
     const seguite = st.puntate.some((p) => p.seguita && p.stato !== "pronta");
     const righe = st.puntate.map((p) => {
       let bottone = "";
-      if (p.stato === "libera") bottone = `<button data-puntata="${p.id}">⬇</button>`;
-      else if (["download", "cerco", "in_arrivo"].includes(p.stato)) bottone = `<button class="secondario" data-annulla-puntata="${p.id}">Annulla</button>`;
-      const stato = p.stato === "download" ? `⬇ In download ${Math.round(p.percentuale)}%` : STATI_PUNTATA[p.stato];
+      if (p.stato === "libera") bottone = `<button class="secondario" data-puntata="${p.id}" aria-label="Scarica la puntata ${p.numero}">${ICONE.scarica}</button>`;
+      else if (["download", "cerco", "in_arrivo"].includes(p.stato)) bottone = `<button class="secondario" data-tieni data-annulla-puntata="${p.id}">Annulla</button>`;
+      const stato = p.stato === "download" ? `In download ${Math.round(p.percentuale)}%` : STATI_PUNTATA[p.stato];
       return `<div class="puntata"><div class="descrizione"><span><strong>${p.numero}.</strong> ${esc(p.titolo || "Puntata " + p.numero)}</span>` +
-        `<span class="stato-puntata">${esc(stato || "")}${p.data ? (stato ? " · " : "") + esc(p.data) : ""}</span></div>${bottone}</div>`;
+        `<span class="stato-puntata">${iconaAnimata(ICONA_PUNTATA[p.stato] || "")}${esc(stato || "")}${p.data ? (stato ? " · " : "") + esc(p.data) : ""}</span></div>${bottone}</div>`;
     }).join("");
     const azione = seguite
-      ? `<button class="secondario" data-annulla-stagione="${st.numero}">Annulla stagione</button>`
-      : (pronte < st.puntate.length ? `<button data-stagione="${st.numero}">⬇ Stagione</button>` : "");
+      ? `<button class="secondario" data-tieni data-annulla-stagione="${st.numero}">Annulla stagione</button>`
+      : (pronte < st.puntate.length ? `<button class="secondario" data-stagione="${st.numero}">${ICONE.scarica}Stagione</button>` : "");
     return `<details class="stagione"${stagioni.length === 1 ? " open" : ""}><summary><span>Stagione ${st.numero} ` +
       `<span class="sottotitolo">${pronte}/${st.puntate.length} in Jellyfin</span></span>${azione}</summary>${righe}</details>`;
   }).join("");
@@ -1143,13 +1278,13 @@ function dialogoSerie() {
   <div class="modulo">
     <div class="serie-testa"><img id="serie-poster" alt=""><div><h2 id="titolo-serie"></h2><p class="sottotitolo" id="serie-anno"></p></div></div>
     <p id="serie-trama" class="serie-trama"></p>
-    <button type="button" id="serie-tutte" class="scarica-grande">⬇ Scarica tutte</button>
+    <button type="button" id="serie-tutte" class="bottone lampada scarica-grande">${ICONE.scarica}Scarica tutte</button>
     <p class="sottotitolo">Tutte le puntate già uscite e quelle nuove appena escono. Oppure scegli qui sotto
       una stagione o una puntata. Prima la versione in italiano.</p>
     <p id="serie-esito" class="messaggio-serie" role="status"></p>
     <div id="serie-puntate" class="serie-puntate"></div>
     <div class="azioni-riga">
-      <button type="button" class="secondario" id="serie-annulla-tutte" hidden>Annulla tutte</button>
+      <button type="button" class="secondario" id="serie-annulla-tutte" data-tieni hidden>Annulla tutte</button>
       <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
     </div>
   </div>
@@ -1160,8 +1295,8 @@ function dialogoSerie() {
   d.addEventListener("close", () => clearInterval(d._aggiorna));
   document.getElementById("serie-chiudi").addEventListener("click", () => d.close());
 
-  async function invia(percorso, corpo, conferma) {
-    if (conferma && !confirm(conferma)) return;
+  // gli "Annulla" si confermano tenendo premuto: smetto di cercarle e fermo i download (quelle in Jellyfin restano)
+  async function invia(percorso, corpo) {
     try {
       const r = await inviaJSON(`/api/serie/${d.dataset.serieId}/${percorso}`, corpo);
       esito.className = "messaggio-serie ok";
@@ -1172,18 +1307,25 @@ function dialogoSerie() {
       esito.textContent = `${e.errore || "Non ci sono riuscito."} ${e.cosa_fare || ""}`;
     }
   }
-  const annulla = "Annullo? Smetto di cercarle e fermo i download (quelle già in Jellyfin restano).";
   document.getElementById("serie-tutte").addEventListener("click", () => invia("scarica", { tutte: true }));
-  document.getElementById("serie-annulla-tutte").addEventListener("click", () => invia("annulla", { tutte: true }, annulla));
+  const annullaTutte = document.getElementById("serie-annulla-tutte");
+  tieniPremuto(annullaTutte, async () => {
+    await invia("annulla", { tutte: true });
+    annullaTutte.classList.remove("confermato");
+    annullaTutte._presa = false;
+  });
+  d._azione = (b) => {
+    b.disabled = true;
+    if (b.dataset.puntata) invia("scarica", { puntate: [Number(b.dataset.puntata)] });
+    else if (b.dataset.annullaPuntata) invia("annulla", { puntate: [Number(b.dataset.annullaPuntata)] });
+    else if (b.dataset.stagione) invia("scarica", { stagione: Number(b.dataset.stagione) });
+    else if (b.dataset.annullaStagione) invia("annulla", { stagione: Number(b.dataset.annullaStagione) });
+  };
   box.addEventListener("click", (ev) => {
     const b = ev.target.closest("button");
     if (!b) return;
     ev.preventDefault();  // il clic sul tasto della stagione non apre/chiude l'elenco
-    b.disabled = true;
-    if (b.dataset.puntata) invia("scarica", { puntate: [Number(b.dataset.puntata)] });
-    else if (b.dataset.annullaPuntata) invia("annulla", { puntate: [Number(b.dataset.annullaPuntata)] }, annulla);
-    else if (b.dataset.stagione) invia("scarica", { stagione: Number(b.dataset.stagione) });
-    else if (b.dataset.annullaStagione) invia("annulla", { stagione: Number(b.dataset.annullaStagione) }, annulla);
+    if (!b.hasAttribute("data-tieni")) d._azione(b);
   });
   return d;
 }
@@ -1195,6 +1337,7 @@ async function aggiornaPuntate(d) {
     const r = await chiama(`/api/serie/${d.dataset.serieId}/puntate`);
     const aperteNumeri = new Set([...box.querySelectorAll("details[open] summary")].map((x) => x.textContent.match(/Stagione (\d+)/)?.[1]));
     box.innerHTML = htmlPuntate(r.stagioni);
+    preparaTieni(box, d._azione);
     box.querySelectorAll("details").forEach((x) => {
       if (aperteNumeri.has(x.querySelector("summary").textContent.match(/Stagione (\d+)/)?.[1])) x.open = true;
     });
@@ -1218,7 +1361,7 @@ async function apriSerie(dati) {
   esito.className = "messaggio-serie";
   esito.textContent = "";
   const box = document.getElementById("serie-puntate");
-  box.innerHTML = '<p class="caricamento">Carico stagioni e puntate…</p>';
+  box.innerHTML = '<p class="caricamento">Carico stagioni e puntate</p>';
   document.getElementById("serie-tutte").disabled = true;
   document.getElementById("serie-annulla-tutte").hidden = true;
   d.showModal();
@@ -1226,6 +1369,7 @@ async function apriSerie(dati) {
     const r = await inviaJSON("/api/serie/apri", { titolo: dati.titolo, nome: dati.nome || "", imdb: dati.imdb, tvdb: dati.tvdb, tmdb: dati.tmdb });
     d.dataset.serieId = r.serie_id;
     box.innerHTML = htmlPuntate(r.stagioni);
+    preparaTieni(box, d._azione);
     document.getElementById("serie-tutte").disabled = false;
     const tutte = r.stagioni.flatMap((st) => st.puntate);
     document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
