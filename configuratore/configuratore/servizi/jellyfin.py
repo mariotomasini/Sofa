@@ -213,8 +213,13 @@ def utenti_di_casa(jf: Jellyfin, imp: Impostazioni) -> None:
         if (utente.get("Policy") or {}).get("IsAdministrator"):
             avviso(f"\"{nome}\" in Jellyfin è un amministratore: lo lascio com'è.")
             continue
-        if _salva_politica(jf, utente, f"mostrare l'utente {nome} sulla TV", IsHidden=False):
-            ok(f"Utente di casa \"{nome}\" ora visibile sulla TV")
+        cambiato = _salva_politica(jf, utente, f"mostrare l'utente {nome} sulla TV", IsHidden=False)
+        if utente.get("HasPassword") or utente.get("HasConfiguredPassword"):
+            # gli utenti di casa entrano senza password: solo l'amministratore ne ha una
+            jf.post(f"/Users/{utente['Id']}/Password", f"togliere la password a {nome}", json={"ResetPassword": True})
+            cambiato = True
+        if cambiato:
+            ok(f"Utente di casa \"{nome}\" visibile sulla TV e senza password")
         else:
             info(f"Utente di casa \"{nome}\" già presente")
     admin = per_nome.get(imp.utente.lower())

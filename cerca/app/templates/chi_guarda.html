@@ -2,6 +2,8 @@
 {% block titolo %}Chi guarda?{% endblock %}
 {% block contenuto %}
 <section class="chi-guarda" aria-labelledby="t-chi-guarda">
+  {# la luce della lampada, calda, dietro le facce: "il salotto la sera" #}
+  <div class="luce-salotto" aria-hidden="true"></div>
   <h1 id="t-chi-guarda" class="titolo-pagina"><span class="rivela"><span>Chi guarda?</span></span></h1>
 
   {% if errore_accesso %}
@@ -12,44 +14,27 @@
   <ul class="profili" role="list">
     {% for p in profili %}
     <li>
-      {% if p.password %}
-      {# con la password: si apre il campo sotto la faccia #}
-      <details class="profilo"{% if scelto == p.id %} open{% endif %}>
-        <summary>
-          <span class="faccia" aria-hidden="true">{{ p.iniziali }}</span>
-          <span class="nome-profilo">{{ p.nome }}</span>
-        </summary>
-        <form method="post" action="{{ base }}/chi-guarda" class="password-profilo">
-          <input type="hidden" name="id" value="{{ p.id }}">
-          <input type="hidden" name="dopo" value="{{ dopo }}">
-          <label class="nascosto" for="pw-{{ p.id }}">Password di {{ p.nome }}</label>
-          <input id="pw-{{ p.id }}" name="password" type="password" placeholder="Password" autocomplete="current-password"{% if scelto == p.id %} autofocus{% endif %}>
-          <button type="submit">Entra</button>
-        </form>
-      </details>
-      {% else %}
       <form method="post" action="{{ base }}/chi-guarda" class="profilo">
         <input type="hidden" name="id" value="{{ p.id }}">
         <input type="hidden" name="dopo" value="{{ dopo }}">
-        <button type="submit" class="tasto-profilo">
-          <span class="faccia" aria-hidden="true">{{ p.iniziali }}</span>
+        <button type="submit" class="tasto-profilo" data-nome="{{ p.nome }}" data-iniziali="{{ p.iniziali }}">
+          <span class="faccia" aria-hidden="true"><svg class="anello" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x="1.5" y="1.5" width="97" height="97" rx="15" pathLength="1"/></svg><span class="lettere">{{ p.iniziali }}</span></span>
           <span class="nome-profilo">{{ p.nome }}</span>
         </button>
       </form>
-      {% endif %}
     </li>
     {% endfor %}
   </ul>
   {% elif not jellyfin_spento %}
   <div class="blocco senza-profili">
     <h2>Non ci sono ancora utenti di casa</h2>
-    <p class="sottotitolo">L'amministratore li crea in <a href="/impostazioni/">Impostazioni</a> → <em>Utenti di casa</em>, uno per ogni persona. Sulla TV e qui compaiono come facce da scegliere, senza password.</p>
+    <p class="sottotitolo">L'amministratore li crea in <a href="/impostazioni/">Impostazioni</a> → <em>Utenti di casa</em>, uno per ogni persona. Sulla TV e qui compaiono come facce da scegliere, senza password: la password ce l'ha solo l'amministratore.</p>
   </div>
   {% endif %}
 
   <details class="accesso-admin"{% if not profili or scelto in (amministratori | map(attribute='id') | list) or scelto == nome_admin %} open{% endif %}>
     <summary>Amministratore <span class="sottotitolo">· solo per la configurazione</span></summary>
-    <form method="post" action="{{ base }}/chi-guarda" class="modulo password-profilo">
+    <form method="post" action="{{ base }}/chi-guarda" class="modulo password-profilo" data-nome="{{ nome_admin }}" data-iniziali="{{ nome_admin[:1] | upper }}">
       <input type="hidden" name="dopo" value="{{ dopo }}">
       {% if amministratori | length == 1 %}
       <input type="hidden" name="id" value="{{ amministratori[0].id }}">
@@ -65,7 +50,9 @@
       <label class="nascosto" for="admin-pw">Password di amministrazione</label>
       <input id="admin-pw" name="password" type="password" placeholder="Password di amministrazione" autocomplete="current-password">
       <button type="submit" class="secondario">Entra come amministratore</button>
+      <p class="msg-profilo" role="alert"></p>
     </form>
   </details>
 </section>
 {% endblock %}
+{% block script %}<script>avviaChiGuarda();</script>{% endblock %}

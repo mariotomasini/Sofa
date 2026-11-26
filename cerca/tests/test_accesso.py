@@ -111,13 +111,20 @@ def test_utente_senza_password_entra_e_non_vede_il_pannello(tmp_path):
     assert ":8081" not in pagina
 
 
-def test_password_sbagliata_e_giusta(tmp_path):
+def test_utenti_di_casa_sempre_senza_password_solo_admin_la_chiede(tmp_path):
     c = cliente(tmp_path)
-    r = c.post("/chi-guarda", data={"id": ANNA, "password": "no"})
-    assert r.status_code == 401 and "Password sbagliata" in r.text and COOKIE not in r.cookies
-    r = c.post("/chi-guarda", data={"id": ANNA, "password": "anna1234"})
+    # Anna in Jellyfin ha una password, ma in Cerca gli utenti di casa entrano senza
+    assert "Password di Anna" not in c.get("/chi-guarda").text
+    r = c.post("/chi-guarda", data={"id": ANNA})
     assert r.status_code == 303
     assert app.state.servizi.accesso.leggi(r.cookies[COOKIE])["nome"] == "Anna"
+    # l'amministratore invece sì
+    r = c.post("/chi-guarda", data={"id": ADMIN, "password": "no"})
+    assert r.status_code == 401 and "Password sbagliata" in r.text and COOKIE not in r.cookies
+    r = c.post("/chi-guarda", data={"id": ADMIN, "password": "no"}, headers={"X-Cerca": "accesso"})
+    assert r.status_code == 401 and r.json()["errore"].startswith("Password sbagliata")
+    r = c.post("/chi-guarda", data={"id": MARIO}, headers={"X-Cerca": "accesso"})
+    assert r.json() == {"vai": "/"} and COOKIE in r.cookies
 
 
 def test_admin_vede_il_pannello(tmp_path):

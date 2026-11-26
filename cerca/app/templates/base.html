@@ -36,6 +36,11 @@
     <a class="logo{% if indietro %} logo-con-indietro{% endif %}" href="{{ base }}{{ '/kids' if kids else '/' }}" aria-label="Cerca, pagina iniziale">
       <span class="logo-segno">{{ icona_logo }}</span><span>Cerca</span>
     </a>
+    {% if utente and not senza_menu and not kids %}
+    <a class="utente-testata" href="{{ base }}/esci" aria-label="{{ utente.nome }}: cambia utente">
+      <span class="faccia piccola" aria-hidden="true">{{ iniziali_utente }}</span>
+    </a>
+    {% endif %}
     {% if senza_menu %}
     {% elif kids %}
     <nav class="nav" aria-label="Kids">

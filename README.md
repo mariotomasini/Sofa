@@ -167,7 +167,7 @@ Apri le **impostazioni** (`/impostazioni`) e scrivi in *Utenti di casa* chi guar
 - **non amministratore**, con tutte le librerie;
 - ognuno ha i suoi "già visto", "Continua a guardare" e consigli.
 
-L'utente **admin** sparisce dalla schermata della TV: resta solo per la configurazione (sulla TV si usa *Accesso manuale* se serve). Un utente tolto dall'elenco non viene cancellato da Jellyfin, perché dentro ci sono i suoi "già visto": se vuoi, toglilo da Jellyfin (*Pannello di controllo → Utenti*). Se vuoi una password per qualcuno, mettila da Jellyfin (*Impostazioni → Profilo*): in Cerca e sulla TV la chiederà.
+L'utente **admin** sparisce dalla schermata della TV: resta solo per la configurazione (sulla TV si usa *Accesso manuale* se serve). Un utente tolto dall'elenco non viene cancellato da Jellyfin, perché dentro ci sono i suoi "già visto": se vuoi, toglilo da Jellyfin (*Pannello di controllo → Utenti*). Gli utenti di casa sono sempre senza password (se qualcuno ne aveva una, mediabox la toglie): la password ce l'ha solo **admin**.
 
 ### 3. Collega la TV
 

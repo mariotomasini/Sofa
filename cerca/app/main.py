@@ -481,6 +481,13 @@ async def _chi_guarda(request: Request, dopo: str, errore: str = "", scelto: str
 async def entra(request: Request, id: str = Form(""), nome: str = Form(""), password: str = Form(""),
                 dopo: str = Form("")):
     s = servizi(request)
+    animata = request.headers.get("x-cerca") == "accesso"
+
+    async def rifiuta(messaggio: str, scelto: str, status: int):
+        if animata:  # la pagina resta lì: scuote il campo e mostra il messaggio
+            return JSONResponse({"errore": messaggio}, status_code=status)
+        return await _chi_guarda(request, dopo, messaggio, scelto, status)
+
     utente = None
     if id:
         try:
@@ -488,23 +495,28 @@ async def entra(request: Request, id: str = Form(""), nome: str = Form(""), pass
         except ErroreServizio:
             trovato = None
         if trovato is None:
-            return await _chi_guarda(request, dopo, "Questo utente non c'è più: scegline un altro.", status=400)
+            return await rifiuta("Questo utente non c'è più: scegline un altro.", "", 400)
         nome = trovato["nome"]
+        if not trovato["admin"]:
+            # gli utenti di casa entrano senza password: la password ce l'ha solo l'amministratore
+            utente = {"id": trovato["id"], "nome": trovato["nome"], "admin": False}
     nome = nome.strip()
     if not nome:
-        return await _chi_guarda(request, dopo, "Scegli chi sta guardando.", status=400)
+        return await rifiuta("Scegli chi sta guardando.", "", 400)
     try:
-        utente = await s.jellyfin.verifica(nome, password)
+        if utente is None:
+            utente = await s.jellyfin.verifica(nome, password)
     except ErroreServizio:
         # Jellyfin spento: l'amministratore entra lo stesso con la password di mediabox
         if (nome == s.config.utente and password and s.config.password
                 and hmac.compare_digest(password.encode(), s.config.password.encode())):
             utente = {"id": "amministratore", "nome": nome, "admin": True}
         else:
-            return await _chi_guarda(request, dopo, "Jellyfin non risponde: riprova tra poco.", id or nome, 503)
+            return await rifiuta("Jellyfin non risponde: riprova tra poco.", id or nome, 503)
     if utente is None or not utente.get("id"):
-        return await _chi_guarda(request, dopo, "Password sbagliata: riprova.", id or nome, 401)
-    risposta = RedirectResponse(destinazione_sicura(dopo, s.config.root_path), status_code=303)
+        return await rifiuta("Password sbagliata: riprova.", id or nome, 401)
+    vai = destinazione_sicura(dopo, s.config.root_path)
+    risposta = JSONResponse({"vai": vai}) if animata else RedirectResponse(vai, status_code=303)
     risposta.set_cookie(COOKIE_UTENTE, s.accesso.cookie(utente), max_age=DURATA_ACCESSO, httponly=True,
                         samesite="lax", path="/")
     return risposta

@@ -548,7 +548,148 @@ function apriTrailer(chiave) {
   });
 }
 
+// --- chi guarda: le facce sotto la lampada --------------------------------------------------
+// Entrata a cascata (OpenMotion: timeline), anello che si disegna intorno alla faccia scelta,
+// password sbagliata che scuote il campo, e un saluto che accompagna fino in Cerca: la faccia
+// vola nell'angolo in alto, dove resta a dire chi sta guardando.
+const ANELLO = '<svg class="anello" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
+  '<rect x="1.5" y="1.5" width="97" height="97" rx="15" pathLength="1"/></svg>';
+const FONDO_SALOTTO = "rgba(22, 21, 19, 1)";
+
+function avviaChiGuarda() {
+  const pagina = document.querySelector(".chi-guarda");
+  if (!pagina) return;
+  if (!FERMO) {
+    const tl = G.timeline({ delay: 0.1 });
+    tl.from(".luce-salotto", { opacity: 0, scale: 0.5, duration: 1.2, ease: "power2.out" }, 0)
+      .from(".profili > li", { opacity: 0, y: 28, scale: 0.88, duration: 0.65, ease: CURVA, stagger: 0.09,
+        clearProps: "transform,opacity" }, 0.25)
+      .fromTo(".profili .anello rect", { strokeDashoffset: 1 }, { keyframes: [{ strokeDashoffset: 0, duration: 0.45, ease: "power2.inOut" },
+        { strokeDashoffset: 1, duration: 0.4, ease: "power2.in", delay: 0.15 }], stagger: 0.09, clearProps: "strokeDashoffset" }, 0.45)
+      .from(".accesso-admin, .senza-profili", { opacity: 0, y: 10, duration: 0.4, ease: CURVA, clearProps: "transform,opacity" }, "-=.35");
+    // la lampada respira piano, come una luce vera
+    G.to(".luce-salotto", { opacity: 0.7, scale: 0.96, duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: -1, delay: 1.4 });
+  }
+  // col telecomando si parte già dalla prima faccia
+  const prima = pagina.querySelector(".profili summary, .profili .tasto-profilo");
+  if (prima && !pagina.querySelector("[autofocus]")) setTimeout(() => prima.focus({ preventScroll: true }), FERMO ? 0 : 500);
+
+  pagina.querySelectorAll("details").forEach((d) => d.addEventListener("toggle", () => {
+    if (!d.open) return;
+    pagina.querySelectorAll("details[open]").forEach((altro) => { if (altro !== d) altro.open = false; });
+    const modulo = d.querySelector("form");
+    if (modulo && !FERMO) G.from(modulo, { opacity: 0, y: -8, duration: 0.35, ease: CURVA, clearProps: "transform,opacity" });
+    const campo = d.querySelector('input[type="password"]');
+    if (campo) setTimeout(() => campo.focus(), 60);
+  }));
+  pagina.querySelectorAll("form").forEach((f) => f.addEventListener("submit", (ev) => entraCome(f, ev)));
+  pagina.querySelectorAll('input[type="password"]').forEach((c) => c.addEventListener("input", () => {
+    c.classList.remove("sbagliata");
+    const msg = c.form && c.form.querySelector(".msg-profilo");
+    if (msg) msg.innerHTML = "";
+  }));
+}
+
+async function entraCome(form, ev) {
+  if (!window.fetch || !window.URLSearchParams) return;  // browser vecchio: invio normale
+  ev.preventDefault();
+  if (form._invio) return;
+  form._invio = true;
+  let risposta = null, dati = {};
+  try {
+    risposta = await fetch(form.action, {
+      method: "POST", body: new URLSearchParams(new FormData(form)), headers: { "X-Cerca": "accesso" },
+    });
+    dati = await risposta.json();
+  } catch (e) {
+    dati = { errore: "Cerca non risponde: controlla la connessione e riprova." };
+  }
+  form._invio = false;
+  if (!risposta || !risposta.ok || !dati.vai) { accessoNegato(form, dati.errore || "Non sono riuscito a entrare: riprova."); return; }
+  const sorgente = (form.closest("details") && form.closest("details").querySelector("summary")) ||
+    form.querySelector(".tasto-profilo") || form;
+  salutaEVai(sorgente.querySelector(".faccia"), sorgente.dataset.nome || form.dataset.nome || "",
+    sorgente.dataset.iniziali || form.dataset.iniziali || "", dati.vai);
+}
+
+function accessoNegato(form, testo) {
+  const msg = form.querySelector(".msg-profilo");
+  const campo = form.querySelector('input[type="password"]');
+  if (msg) msg.innerHTML = iconaAnimata("problema") + `<span>${esc(testo)}</span>`;
+  if (!campo) return;
+  campo.classList.add("sbagliata");
+  campo.value = "";
+  campo.focus();
+  if (!FERMO) G.fromTo(campo, { x: 0 }, { keyframes: [{ x: -9 }, { x: 8 }, { x: -6 }, { x: 4 }, { x: -2 }, { x: 0 }], duration: 0.42, ease: "power1.out" });
+}
+
+function htmlBenvenuto(nome, iniziali) {
+  const v = document.createElement("div");
+  v.className = "benvenuto";
+  v.setAttribute("aria-hidden", "true");
+  v.innerHTML = `<div class="luce"></div><span class="faccia">${ANELLO}<span class="lettere">${esc(iniziali)}</span></span>` +
+    `<span class="saluto"><span>Ciao, ${esc(nome)}</span></span>`;
+  document.body.append(v);
+  return v;
+}
+
+function centro(r) { return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+
+function salutaEVai(faccia, nome, iniziali, vai) {
+  try { sessionStorage.setItem("cerca:benvenuto", JSON.stringify({ nome, iniziali })); } catch (e) { /* niente */ }
+  if (FERMO) { window.location.href = vai; return; }
+  const pagina = document.querySelector(".chi-guarda");
+  const altre = [...pagina.querySelectorAll(".profili > li")].filter((li) => !faccia || !li.contains(faccia));
+  const v = htmlBenvenuto(nome, iniziali);
+  const nuova = v.querySelector(".faccia");
+  const arrivo = centro(nuova.getBoundingClientRect());
+  const da = faccia ? faccia.getBoundingClientRect() : null;
+  const partenza = da ? centro(da) : arrivo;
+  const tl = G.timeline({ onComplete: () => { window.location.href = vai; } });
+  // le altre facce si fanno da parte, la scelta resta sotto la lampada
+  tl.to(altre, { opacity: 0, scale: 0.85, y: 12, duration: 0.35, ease: "power2.in", stagger: 0.04 }, 0)
+    .to(pagina.querySelectorAll(".titolo-pagina, .accesso-admin, .senza-profili"), { opacity: 0, y: -10, duration: 0.3, ease: "power2.in" }, 0)
+    // il salotto si chiude intorno alla faccia (come il passaggio nelle piattaforme)
+    .fromTo(v, { clipPath: `circle(0px at ${partenza.x}px ${partenza.y}px)` },
+      { clipPath: `circle(${Math.hypot(innerWidth, innerHeight)}px at ${partenza.x}px ${partenza.y}px)`, duration: 0.6, ease: "power3.inOut" }, 0.1)
+    .fromTo(nuova, { x: partenza.x - arrivo.x, y: partenza.y - arrivo.y, scale: da ? da.width / nuova.offsetWidth : 0.8 },
+      { x: 0, y: 0, scale: 1, duration: 0.7, ease: "power3.inOut" }, 0.1)
+    .fromTo(nuova.querySelector(".anello rect"), { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.55, ease: "power2.inOut" }, 0.45)
+    .fromTo(nuova.querySelector(".lettere"), { textShadow: "0 0 0px rgba(242,180,90,0)" },
+      { textShadow: "0 0 28px rgba(242,180,90,.6)", duration: 0.5 }, 0.55)
+    .from(v.querySelector(".luce"), { opacity: 0, scale: 0.6, duration: 0.8, ease: "power2.out" }, 0.4)
+    .from(v.querySelector(".saluto > span"), { yPercent: 105, duration: 0.55, ease: CURVA }, 0.7)
+    .to({}, { duration: 0.4 });
+}
+
+// Appena entrati in Cerca: il saluto si scioglie e la faccia vola dove resta, in alto
+function benvenuto() {
+  let dati = null;
+  try { dati = JSON.parse(sessionStorage.getItem("cerca:benvenuto") || "null"); sessionStorage.removeItem("cerca:benvenuto"); } catch (e) { /* niente */ }
+  if (!dati || FERMO || document.querySelector(".chi-guarda")) return;
+  const v = htmlBenvenuto(dati.nome, dati.iniziali);
+  v.style.backgroundColor = FONDO_SALOTTO;
+  const faccia = v.querySelector(".faccia");
+  const meta = [...document.querySelectorAll(".testata .faccia.piccola")].find((f) => f.getBoundingClientRect().width > 0);
+  const tl = G.timeline({ onComplete: () => v.remove() });
+  tl.to(v.querySelector(".saluto"), { opacity: 0, y: -8, duration: 0.3, ease: "power2.in" }, 0.2)
+    .to(v.querySelector(".luce"), { opacity: 0, duration: 0.5 }, 0.2)
+    .to(v, { backgroundColor: "rgba(22, 21, 19, 0)", duration: 0.55, ease: "power2.out" }, 0.35);
+  if (meta) {
+    const a = centro(faccia.getBoundingClientRect()), b = centro(meta.getBoundingClientRect());
+    meta.style.visibility = "hidden";
+    tl.to(faccia, { x: b.x - a.x, y: b.y - a.y, scale: meta.offsetWidth / faccia.offsetWidth, duration: 0.75, ease: "power3.inOut" }, 0.25)
+      .to(faccia.querySelector(".anello"), { opacity: 0, duration: 0.3 }, 0.6)
+      .add(() => { meta.style.visibility = ""; }, 1.0)
+      .to(faccia, { opacity: 0, duration: 0.01 }, 1.0)
+      .fromTo(meta, { scale: 1.35 }, { scale: 1, duration: 0.5, ease: "back.out(2.2)", clearProps: "transform" }, 1.0);
+  } else {
+    tl.to(faccia, { scale: 0.4, opacity: 0, duration: 0.45, ease: "power2.in" }, 0.3);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  benvenuto();
   chiudiVelo();
   disegnaLogo();
   indicatoreScorrevole(document.querySelector(".mondi"));
