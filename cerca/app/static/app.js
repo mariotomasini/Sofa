@@ -1223,7 +1223,7 @@ async function apriSerie(dati) {
   document.getElementById("serie-annulla-tutte").hidden = true;
   d.showModal();
   try {
-    const r = await inviaJSON("/api/serie/apri", { titolo: dati.titolo, imdb: dati.imdb, tvdb: dati.tvdb, tmdb: dati.tmdb });
+    const r = await inviaJSON("/api/serie/apri", { titolo: dati.titolo, nome: dati.nome || "", imdb: dati.imdb, tvdb: dati.tvdb, tmdb: dati.tmdb });
     d.dataset.serieId = r.serie_id;
     box.innerHTML = htmlPuntate(r.stagioni);
     document.getElementById("serie-tutte").disabled = false;
