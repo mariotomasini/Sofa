@@ -39,6 +39,7 @@ from .musica_download import ScaricaMusica
 from .ordine_download import OrdineDownload, posizioni
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
+from .puntate_italiane import PuntateItaliane, ricorda_titoli
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, non_raggiungibile, nuovo_client
@@ -91,6 +92,7 @@ class Servizi:
         self.download.serie = self.serie
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
         self.ordine = OrdineDownload(self.archivio, self.qbit)
+        self.puntate_italiane = PuntateItaliane(config, self.archivio, self.serie, self.prowlarr, self.download)
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.deezer = Deezer(self.archivio, client)
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
@@ -135,6 +137,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(servizi.automatici.ricerca_notturna()),
             asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
             asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
+            asyncio.create_task(dopo(600, servizi.puntate_italiane.ciclo())),
         ]
         log.info("Cerca è pronto")
         yield
@@ -639,6 +642,7 @@ async def api_musica_tendenze(request: Request):
 
 class RichiestaSerie(BaseModel):
     titolo: str = ""
+    nome: str = ""  # il titolo italiano (titolo è quello originale, per Sonarr)
     tvdb: int | None = None
     tmdb: int | None = None
     imdb: str = ""
@@ -649,13 +653,17 @@ async def api_serie_segui(request: Request, dati: RichiestaSerie):
     """"Segui la serie": la aggiunge a Sonarr, che scarica tutte le puntate e poi quelle nuove."""
     if in_kids(request):
         return JSONResponse({"errore": "In modalità Kids non si aggiungono serie."}, status_code=403)
-    return await servizi(request).serie.segui(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
+    s = servizi(request)
+    risposta = await s.serie.segui(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
+    await asyncio.to_thread(ricorda_titoli, s.archivio, risposta.get("serie_id") or 0, [dati.nome, dati.titolo])
+    return risposta
 
 
 @app.get("/api/serie/{serie_id}/torrent")
 async def api_serie_torrent(request: Request, serie_id: int, nome: str = "", originale: str = ""):
     """Le puntate da scaricare: cercate con il titolo italiano, quello originale e quelli di Sonarr."""
     s = servizi(request)
+    await asyncio.to_thread(ricorda_titoli, s.archivio, serie_id, [nome, originale])
     try:
         titoli_sonarr = await s.serie.titoli(serie_id)
     except ErroreServizio:
@@ -929,6 +937,8 @@ async def api_serie_apri(request: Request, dati: RichiestaSerie):
         return JSONResponse({"errore": "In modalità Kids non si aggiungono serie."}, status_code=403)
     s = servizi(request)
     serie = await s.serie.prepara(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
+    # per cercare da soli le puntate nuove anche con il titolo italiano (puntate_italiane.py)
+    await asyncio.to_thread(ricorda_titoli, s.archivio, serie["id"], [dati.nome, dati.titolo])
     return {"serie_id": serie["id"], "stagioni": await s.serie.puntate(serie["id"])}
 
 
