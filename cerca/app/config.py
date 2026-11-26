@@ -57,7 +57,10 @@ class Config:
     min_fonti: int = field(default_factory=lambda: _numero(_env("MIN_FONTI", "3"), 3))
     cartella_musica: str = field(default_factory=lambda: _env("CARTELLA_MUSICA", "/data/media/musica"))
     cartella_film_radarr: str = field(default_factory=lambda: _env("CARTELLA_FILM_RADARR", "/data/media/film"))
-    root_path: str = field(default_factory=lambda: _env("ROOT_PATH", "/cerca"))
+    # Cerca è la pagina principale di mediabox: sta alla radice (http://mediabox.local/)
+    root_path: str = field(default_factory=lambda: _env("ROOT_PATH", "").rstrip("/"))
+    # il Pannello (tessere dei servizi e stato del PC) ha la sua porta
+    pannello_porta: str = field(default_factory=lambda: _env("PANNELLO_PORT", "8081"))
 
     @property
     def lingua_tmdb(self) -> str:
