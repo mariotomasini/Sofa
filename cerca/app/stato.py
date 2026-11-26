@@ -87,7 +87,8 @@ class ControlloDisco:
         ultimo = float(self.archivio.stato_leggi(CHIAVE_ULTIMO_AVVISO) or 0)
         if time.time() - ultimo < UN_GIORNO:
             return
-        await self.avvisami.notifica("Disco quasi pieno", info["messaggio"], f"{self.config.indirizzo_pubblico}/cerca/")
+        link = f"{self.config.indirizzo_pubblico}{self.config.root_path}/spazio"
+        await self.avvisami.notifica("Disco quasi pieno", info["messaggio"], link)
         self.archivio.stato_scrivi(CHIAVE_ULTIMO_AVVISO, str(time.time()))
 
     async def ciclo(self) -> None:

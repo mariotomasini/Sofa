@@ -194,7 +194,10 @@ def indirizzi(v: dict[str, str]) -> dict:
     if v.get("HOST_IP"):
         tutti.append(f"http://{v['HOST_IP']}{suffisso}")
     principale = tutti[-1]
-    return {"tutti": tutti, "principale": principale, "jellyfin_tv": f"{principale}/jellyfin"}
+    # il Pannello (tessere dei servizi e stato del PC) sta sulla sua porta
+    host = principale.rsplit(":", 1)[0] if principale.count(":") > 1 else principale
+    pannello = f"{host}:{v.get('PANNELLO_PORT') or '8081'}/"
+    return {"tutti": tutti, "principale": principale, "jellyfin_tv": f"{principale}/jellyfin", "pannello": pannello}
 
 
 # --- validazione e salvataggio ---------------------------------------------------------

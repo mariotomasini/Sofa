@@ -9,37 +9,40 @@
       {% else %}<span class="senza-poster grande"><span class="titolo">{{ film.titolo }}</span><span class="anno">{{ film.anno }}</span></span>{% endif %}
     </div>
     <div class="film-info">
-      <h1>{{ film.titolo }}{% if film.anno %} <span class="anno">{{ film.anno }}</span>{% endif %}</h1>
+      <h1><span class="rivela"><span>{{ film.titolo }}</span></span></h1>
       {% if film.titolo_originale != film.titolo %}<p class="originale">{{ film.titolo_originale }}</p>{% endif %}
       <ul class="chip" aria-label="Dettagli">
-        {% if film.durata %}<li>{{ film.durata }} minuti</li>{% endif %}
-        {% for g in film.generi[:3] %}<li>{{ g }}</li>{% endfor %}
-        {% if film.voto %}<li><span aria-hidden="true">★</span> {{ ("%.1f" % film.voto) | replace(".", ",") }}</li>{% endif %}
+        {% if film.anno %}<li>{{ film.anno }}</li>{% endif %}
+        {% if film.durata %}<li>{{ film.durata }} min</li>{% endif %}
+        {% if film.generi %}<li style="font-family:var(--font)">{{ film.generi[:3] | join(", ") }}</li>{% endif %}
+        {% if film.voto %}<li>{{ ("%.1f" % film.voto) | replace(".", ",") }} / 10</li>{% endif %}
       </ul>
       <p class="trama">{{ film.trama or "Trama non disponibile in italiano." }}</p>
-      {% if con_tmdb %}
-      <button id="avvisami" class="{{ 'attivo' if avvisami else 'secondario' }}" data-attivo="{{ 'si' if avvisami else 'no' }}">
-        {{ "✓ Ti avviserò se diventa gratis" if avvisami else "🔔 Avvisami se diventa disponibile gratis" }}
-      </button>
+      <div class="azioni-film">
+        {% if not kids %}<button type="button" id="scarica-auto" class="bottone lampada scarica-grande"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>Scarica</button>{% endif %}
+        <button type="button" class="secondario" data-apri-trailer="movie:{{ film.id }}"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>Trailer</button>
+        {% if con_tmdb %}
+        <button type="button" id="avvisami" class="secondario" aria-pressed="{{ 'true' if avvisami else 'false' }}">
+          <svg class="ia" viewBox="0 0 24 24" data-ia-statica="campanella" aria-hidden="true"><g class="ia-camp"><path d="M6.5 16V11a5.5 5.5 0 0 1 11 0v5l1.5 2h-14z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></g></svg>
+          <span>{{ "Ti avviso se diventa gratis" if avvisami else "Avvisami se diventa gratis" }}</span>
+        </button>
+        {% endif %}
+      </div>
+      {% if not kids %}
+      <div id="stato-film" class="stato-film" role="status"></div>
+      <p class="nota-scarica">Sceglie da solo la versione migliore, prima in italiano, la scarica e la mette in Jellyfin con i sottotitoli</p>
       {% endif %}
     </div>
   </header>
 
-  <div class="film-corpo{% if kids %} solo-guarda{% endif %}">
-    {% if kids %}
+  {% if kids %}
+  <div class="film-corpo solo-guarda">
     <section class="blocco dove-vederlo" id="provider" aria-labelledby="titolo-provider">
       <h2 id="titolo-provider">Dove vederlo</h2>
-      <div class="contenuto"><p class="caricamento">Cerco…</p></div>
+      <div class="contenuto"><p class="caricamento">Cerco</p></div>
     </section>
-    {% else %}
-    <section class="blocco" id="auto">
-      <button type="button" id="scarica-auto" class="scarica-grande">⬇ Download</button>
-      <div id="stato-film" role="status"></div>
-      <p class="sottotitolo">Sceglie da solo la versione migliore (prima in italiano), la scarica e la mette
-        in Jellyfin con i sottotitoli.</p>
-    </section>
-    {% endif %}
   </div>
+  {% endif %}
 </article>
 {% endif %}
 {% endblock %}

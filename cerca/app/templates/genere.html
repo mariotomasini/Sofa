@@ -2,8 +2,10 @@
 {% from "_mondi.html" import selettore, ricerca %}
 {% block titolo %}{{ genere.nome if genere else "Generi" }}{% endblock %}
 {% block contenuto %}
-{{ selettore(mondo, base, mondi, kids) }}
-{{ ricerca(mondo, base, mondi, autofocus=false) }}
+<div class="capo">
+  {{ selettore(mondo, base, mondi, kids) }}
+  {{ ricerca(mondo, base, mondi, autofocus=false) }}
+</div>
 
 {% if genere %}
 <nav class="generi" aria-label="Generi">
@@ -15,8 +17,8 @@
 <div class="genere-testa">
   <div>
     <p class="etichetta-maiuscola">{{ mondi[mondo].nome }}</p>
-    <h1>{{ genere.nome }}</h1>
-    <p class="sottotitolo">I più visti di questo genere.</p>
+    <h1><span class="rivela"><span>{{ genere.nome }}</span></span></h1>
+    <p class="sottotitolo">I più visti di questo genere</p>
   </div>
 </div>
 

@@ -15,8 +15,8 @@
 <form class="ricerca" action="{{ base }}/cerca" method="get" role="search">
   <input type="hidden" name="mondo" value="{{ mondo }}">
   <label for="q" class="nascosto">Titolo</label>
-  <span class="lente" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></span>
-  <input id="q" name="q" type="search" value="{{ valore }}" placeholder="{{ mondi[mondo].segnaposto if mondo in mondi else 'Cerca un film…' }}"
+  <span class="lente" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg></span>
+  <input id="q" name="q" type="search" value="{{ valore }}" placeholder="{{ mondi[mondo].segnaposto if mondo in mondi else 'Titolo del film' }}"
          autocomplete="off" required{% if autofocus %} autofocus{% endif %}>
   <button type="submit">Cerca</button>
 </form>

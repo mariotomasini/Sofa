@@ -62,8 +62,7 @@ def indirizzi_base(imp: Impostazioni) -> list[str]:
 def pagine(imp: Impostazioni) -> list[tuple[str, str, bool]]:
     """(nome, percorso, protetto da password)"""
     elenco = [
-        ("Pagina iniziale", "/", False),
-        ("Cerca un film", "/cerca/", False),
+        ("Cerca", "/", False),
         ("Jellyfin", "/jellyfin/", False),
         ("qBittorrent", "/qbit/", True),
         ("Radarr", "/radarr/", True),
@@ -94,6 +93,9 @@ def stampa_indirizzi(imp: Impostazioni) -> None:
     for nome, percorso, protetto in pagine(imp):
         lucchetto = "  (utente e password di amministrazione)" if protetto else ""
         print(f"    {nome:<16} {principale}{percorso}{lucchetto}")
+    # il Pannello (tessere dei servizi e stato del PC) ha la sua porta
+    senza_porta = principale.rsplit(":", 1)[0] if principale.count(":") > 1 else principale
+    print(f"    {'Pannello':<16} {senza_porta}:{imp.get('PANNELLO_PORT', '8081') or '8081'}/")
     print(f"\n  Utente: {imp.utente}   Password: quella scelta durante l'installazione")
     if imp.beszel:
         print(f"  Per Beszel l'utente è l'email {imp.utente}@mediabox.local (stessa password)")

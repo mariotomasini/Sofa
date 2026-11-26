@@ -65,7 +65,7 @@ class Avvisami:
             gratis = provider["gratis"]
             if gratis and not voce["gratis_dal"]:
                 nuovi += 1
-                link = f"{self.config.indirizzo_pubblico}/cerca/film/{voce['tmdb_id']}"
+                link = f"{self.config.indirizzo_pubblico}{self.config.root_path}/film/{voce['tmdb_id']}"
                 inviata = await self.notifica(
                     "Film gratis!", messaggio_notifica(voce["titolo"], voce["anno"], gratis), link
                 )

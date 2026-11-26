@@ -1,21 +1,21 @@
 {
   "name": "Cerca · mediabox",
   "short_name": "Cerca",
-  "description": "Cerca un film, guarda dove vederlo e scaricalo nel media server di casa.",
+  "description": "Trova un film, una serie o una canzone e scaricala nel media server di casa.",
   "lang": "it",
-  "start_url": "/cerca/",
-  "scope": "/cerca/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#17130f",
-  "theme_color": "#17130f",
+  "background_color": "#161513",
+  "theme_color": "#161513",
   "icons": [
-    { "src": "/cerca/static/icone/icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/cerca/static/icone/icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/cerca/static/icone/icona-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/cerca/static/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "/static/icone/icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icone/icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icone/icona-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Download", "url": "/cerca/download", "icons": [{ "src": "/cerca/static/icone/icona-192.png", "sizes": "192x192" }] },
-    { "name": "Musica", "url": "/cerca/musica", "icons": [{ "src": "/cerca/static/icone/icona-192.png", "sizes": "192x192" }] }
+    { "name": "Download", "url": "/download", "icons": [{ "src": "/static/icone/icona-192.png", "sizes": "192x192" }] },
+    { "name": "Musica", "url": "/musica", "icons": [{ "src": "/static/icone/icona-192.png", "sizes": "192x192" }] }
   ]
 }
