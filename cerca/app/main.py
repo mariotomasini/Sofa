@@ -198,11 +198,17 @@ async def chi_guarda(request: Request, call_next):
     base = s.config.root_path
     utente = s.accesso.leggi(request.cookies.get(COOKIE_UTENTE))
     request.state.utente = utente
-    if utente is None and not percorso_libero(request.url.path, base):
-        if request.url.path.startswith(f"{base}/api/"):
+    # il percorso dentro Cerca: uvicorn parte con --root-path /cerca (vecchi indirizzi), e allora
+    # request.url.path comincia con /cerca anche se Caddy lo ha già tolto
+    percorso = request.url.path
+    prefisso = request.scope.get("root_path") or ""
+    if prefisso and percorso.startswith(prefisso):
+        percorso = percorso[len(prefisso):] or "/"
+    if utente is None and not percorso_libero(percorso):
+        if percorso.startswith("/api/"):
             return JSONResponse({"errore": "Scegli prima chi sta guardando.", "cosa_fare": "Ricarica la pagina.",
                                  "accesso": True}, status_code=401)
-        dopo = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        dopo = base + percorso + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"{base}/chi-guarda?{urlencode({'dopo': dopo})}", status_code=303)
     # "Continua a guardare" e i consigli seguono l'utente di Jellyfin scelto
     segno = utente_corrente.set(utente if utente and ID_UTENTE_JELLYFIN.match(utente["id"]) else None)

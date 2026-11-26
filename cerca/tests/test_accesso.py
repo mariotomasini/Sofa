@@ -181,3 +181,15 @@ def test_continua_a_guardare_segue_chi_guarda(tmp_path):
     percorsi = [r.url.path for r in richieste if r.url.path.endswith("/Items/Resume")]
     # prima Anna, poi senza nessuno l'utente di Cerca (l'amministratore)
     assert percorsi == [f"/Users/{ANNA}/Items/Resume", f"/Users/{ADMIN}/Items/Resume"]
+
+
+def test_niente_giri_infiniti_con_il_root_path_di_uvicorn(tmp_path):
+    """Nel container uvicorn parte con --root-path /cerca: "Chi guarda?" deve aprirsi lo stesso."""
+    app.state.servizi = servizi_finti(tmp_path, [])
+    c = TestClient(app, follow_redirects=False, root_path="/cerca")
+    r = c.get("/chi-guarda")
+    assert r.status_code == 200 and "Chi guarda?" in r.text
+    r = c.get("/serie")
+    assert r.status_code == 303 and r.headers["location"] == "/chi-guarda?dopo=%2Fserie"
+    assert c.get("/static/style.css").status_code not in (303, 401)  # gli statici non chiedono chi guarda
+    assert c.get("/api/home").status_code == 401
