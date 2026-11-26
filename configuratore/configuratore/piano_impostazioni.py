@@ -38,6 +38,7 @@ SERVIZI: dict[str, tuple[str, ...]] = {
     "TG_API_HASH": ("tgarr",),
     "TG_PHONE": ("tgarr",),
     "NTFY_TOPIC": ("beszel",),
+    "UTENTI_CASA": ("jellyfin",),
     # solo nelle variabili dei servizi (Cerca e altri): basta ricrearli, lo fa Docker
     "TMDB_API_KEY": (),
     "PULIZIA_VISTI": (),

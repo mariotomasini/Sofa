@@ -53,6 +53,10 @@ async function chiama(percorso, opzioni = {}) {
   }
   let dati = {};
   try { dati = await risposta.json(); } catch (e) { /* risposta non JSON */ }
+  if (risposta.status === 401 && dati.accesso) {
+    // l'accesso non vale più (cookie tolto o cambiato): si torna a "Chi guarda?"
+    location.href = BASE + "/chi-guarda?dopo=" + encodeURIComponent(location.pathname + location.search);
+  }
   if (!risposta.ok) {
     throw dati.errore ? dati : { errore: "Qualcosa è andato storto (" + risposta.status + ").", cosa_fare: "Riprova tra poco." };
   }

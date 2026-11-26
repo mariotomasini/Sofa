@@ -133,7 +133,9 @@
 		redir http://{host}{{ porta_principale }}{uri} 302
 	}
 
+	# il Pannello è solo per l'amministratore (in Cerca gli altri utenti non lo vedono)
 	handle {
+		import pannello
 		reverse_proxy homepage:3000 {
 			header_up Host localhost:3000
 		}

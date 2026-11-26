@@ -75,6 +75,7 @@ function datiModulo() {
     dimensione_max_gb: $("dimensione-max").value,
     telegram: { api_id: $("tg-api-id").value, api_hash: $("tg-api-hash").value, telefono: $("tg-telefono").value },
     ntfy: $("usa-ntfy").checked ? $("ntfy").value.trim() : "",
+    utenti_casa: $("utenti-casa").value,
     cartella: cartellaScelta(),
   };
 }
@@ -167,6 +168,7 @@ function riempiRiepilogo() {
   const righe = [
     ["Utente", "admin, con la password che hai scelto"],
     ["Attivi", ["Film", ...voci].join(", ")],
+    ["Utenti di casa", d.utenti_casa.trim() || "Nessuno (puoi aggiungerli dopo)"],
     ["Film e musica in", d.cartella],
     ["Avvisi sul telefono", d.ntfy ? `ntfy, nome "${d.ntfy}"` : "No"],
   ];
@@ -186,7 +188,7 @@ $("modulo").addEventListener("submit", async (ev) => {
     avviaAvanzamento();
   } catch (e) {
     avviso(e.message);
-    const indice = passi.indexOf({ tmdb: "tmdb", password: "password", password2: "password", lingue: "scelte", lingue_audio: "scelte", dimensione_max_gb: "scelte", telegram: "scelte", cartella: "cartella" }[e.campo]);
+    const indice = passi.indexOf({ tmdb: "tmdb", password: "password", password2: "password", lingue: "scelte", lingue_audio: "scelte", dimensione_max_gb: "scelte", telegram: "scelte", utenti_casa: "scelte", cartella: "cartella" }[e.campo]);
     if (indice >= 0) { mostraPasso(indice); messaggio(`msg-${passi[indice]}`, e.message); }
   } finally { $("avanti").disabled = false; }
 });
@@ -343,7 +345,7 @@ async function salvaImpostazioni() {
   } catch (e) {
     if (e.stato === 401) { location.reload(); return; }
     avviso(e.message);
-    if (e.campo) messaggio(`msg-${{ lingue: "scelte", cartella: "cartella" }[e.campo] || e.campo}`, e.message);
+    if (e.campo) messaggio(`msg-${{ lingue: "scelte", utenti_casa: "scelte", lingue_audio: "scelte", dimensione_max_gb: "scelte", telegram: "scelte", cartella: "cartella" }[e.campo] || e.campo}`, e.message);
   } finally { controllaModifiche(); }
 }
 

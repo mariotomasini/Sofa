@@ -139,8 +139,8 @@ Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato a
 
 | Pagina | Indirizzo | Password? |
 |---|---|---|
-| Cerca *(la pagina principale)* | `/` | no |
-| Pannello *(tessere dei servizi e stato del PC)* | `:8081`, cioè `http://mediabox.local:8081` | no |
+| Cerca *(la pagina principale)* | `/` | scegli chi guarda (vedi sotto) |
+| Pannello *(tessere dei servizi e stato del PC)* | `:8081`, cioè `http://mediabox.local:8081` | sì (solo amministratore) |
 | Jellyfin | `/jellyfin` | utente e password di Jellyfin |
 | qBittorrent | `/qbit` | sì (amministrazione) |
 | Radarr | `/radarr` | sì |
@@ -151,15 +151,25 @@ Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato a
 | Beszel *(grafici del PC)* | `/beszel` | il suo accesso: admin@mediabox.local |
 | TVHeadend *(se c'è un tuner USB)* | `/tv` | sì |
 
-L'utente è sempre **admin** e la password è quella che hai scelto durante l'installazione.
+L'utente è sempre **admin** e la password è quella che hai scelto durante l'installazione. **admin** serve solo per configurare: per guardare, ognuno usa il suo utente di casa.
 
-In Cerca il **Pannello** è l'ultima voce in alto (sul telefono: **Altro → Pannello**); nel Pannello la prima tessera, **Torna a Cerca**, ti riporta indietro. I vecchi indirizzi `http://mediabox.local/cerca/...` continuano a funzionare: portano alla stessa pagina di Cerca.
+In Cerca il **Pannello** è una delle ultime voci in alto, solo per l'amministratore (sul telefono: **Altro → Pannello**); nel Pannello la prima tessera, **Torna a Cerca**, ti riporta indietro. I vecchi indirizzi `http://mediabox.local/cerca/...` continuano a funzionare: portano alla stessa pagina di Cerca.
 
 ### 1. Aggiungi i tuoi indexer (una volta sola)
 
 Apri **Prowlarr** dal Pannello, vai su *Indexer → Aggiungi indexer* e aggiungi quelli che usi. Prowlarr li passa da solo a Radarr e a Cerca. Senza indexer, Cerca mostra comunque la disponibilità legale e Internet Archive.
 
-### 2. Collega la TV
+### 2. Crea gli utenti di casa
+
+Apri le **impostazioni** (`/impostazioni`) e scrivi in *Utenti di casa* chi guarda, separati da virgole (es. `Mario, Anna, Bimbi`), poi **Salva e applica**. mediabox crea in Jellyfin un utente per ognuno:
+
+- **senza password** e **visibile sulla TV**: nell'app Jellyfin si sceglie la propria faccia, senza scrivere niente;
+- **non amministratore**, con tutte le librerie;
+- ognuno ha i suoi "già visto", "Continua a guardare" e consigli.
+
+L'utente **admin** sparisce dalla schermata della TV: resta solo per la configurazione (sulla TV si usa *Accesso manuale* se serve). Un utente tolto dall'elenco non viene cancellato da Jellyfin, perché dentro ci sono i suoi "già visto": se vuoi, toglilo da Jellyfin (*Pannello di controllo → Utenti*). Se vuoi una password per qualcuno, mettila da Jellyfin (*Impostazioni → Profilo*): in Cerca e sulla TV la chiederà.
+
+### 3. Collega la TV
 
 Installa l'app **Jellyfin** sulla TV (Android TV, Fire TV, LG, Samsung...). Come server scrivi:
 
@@ -173,13 +183,15 @@ Se la TV non lo trova, usa l'IP: `http://192.168.1.50/jellyfin`. Molte TV non ri
 
 ## Come si usa Cerca
 
+La prima volta Cerca chiede **Chi guarda?**: tocca la tua faccia (gli utenti di casa di Jellyfin). Il PC, il telefono o la TV se lo ricordano; per cambiare tocca il tuo nome in alto (sul telefono **Altro → Cambia utente**). L'**amministratore** entra dal riquadro in basso con la password di mediabox: solo lui vede il **Pannello**, gli altri utenti no.
+
 In alto scegli il **mondo**: **Film**, **Serie TV**, **Kids** o **Musica**. Ogni mondo ha il suo colore, la sua ricerca e le sue novità:
 
 - **Film** e **Serie TV**: una pagina come quella di Netflix (vedi sotto). Nelle Serie TV c'è anche la riga dei nuovi episodi delle serie che segui in Sonarr; scegliendo una serie si apre Sonarr, dove decidi cosa scaricare;
 - **Kids**: solo cartoni e film per famiglie, con locandine più grandi e generi adatti ai bambini. In Kids non si scarica nulla e il menu sparisce: si esce solo con **"Esci da Kids"** in alto a destra. Il PC o la TV restano in Kids finché non premi quel pulsante;
 - **Musica**: suggerimenti di artisti e tendenze.
 
-Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Controllo servizi, Kids, Pannello). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
+Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Controllo servizi, Kids, Cambia utente e, per l'amministratore, Pannello). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
 
 ### Come è fatta
 
@@ -209,7 +221,7 @@ Poi, riga per riga:
 4. **Su Netflix, Su Prime Video, Su Disney+…**: una riga per ogni piattaforma che hai, con i titoli più visti in Italia inclusi nell'abbonamento (o gratis). Le scegli con il pulsante **Scegli le tue piattaforme** in fondo alla home, fino a 6: Netflix, Prime Video, Disney+, NOW, Apple TV+, Crunchyroll, RaiPlay e le altre disponibili in Italia. *Vedi tutti* apre la pagina della piattaforma. Sono titoli da guardare nell'app della piattaforma: mediabox non li scarica. Senza chiave TMDB le righe dei film diventano *Originali Netflix*, *Originali Prime Video*… (i film prodotti o distribuiti dalla piattaforma negli ultimi 3 anni) e quelle delle serie mostrano le serie con episodi usciti in questi giorni;
 5. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
 
-I consigli e "Continua a guardare" usano l'utente amministratore di Jellyfin creato all'installazione: se in famiglia usate utenti diversi, i consigli seguono quello.
+I consigli, "Continua a guardare" e le piattaforme scelte sono di chi sta guardando: ognuno vede i suoi.
 
 ![Scheda di un film](docs/cerca-film.png)
 
@@ -279,7 +291,7 @@ Attivale dalle **impostazioni** (`/impostazioni`, voce *Serie TV*): viene instal
 - **Puntate nuove con il titolo italiano**: Sonarr cerca i torrent solo con il titolo inglese, quindi molte serie italiane non le trova da solo (*Mare fuori* per lui è *The Sea Beyond*). Per questo ogni 3 ore Cerca prende le puntate già uscite che Sonarr non ha ancora trovato e le cerca da sola con il titolo italiano, quello originale e quelli di Sonarr. Scarica la versione nella tua lingua preferita (la puntata singola, o la stagione intera se ne mancano più di una), solo se ha abbastanza fonti, e a download finito la consegna a Sonarr: la puntata compare in Jellyfin. Il titolo italiano Cerca lo impara quando apri la serie dalla sua finestra: per le serie aggiunte prima di questa versione basta aprirla una volta.
 - Le puntate finiscono in `Serie/Nome serie (Anno)/Stagione 01/`. Puoi sempre usare anche Sonarr direttamente ("Apri in Sonarr"), per esempio per scaricare solo una stagione.
 - In Jellyfin ogni serie è **una sola scheda**, divisa in **stagioni** ed **episodi**.
-- Jellyfin ricorda per ogni utente **gli episodi già visti** e **dove ti sei fermato**: in home trovi "Continua a guardare" e "Prossimi episodi". Se in casa siete in più, crea un utente per ciascuno (*Pannello di controllo → Utenti*).
+- Jellyfin ricorda per ogni utente **gli episodi già visti** e **dove ti sei fermato**: in home trovi "Continua a guardare" e "Prossimi episodi". Se in casa siete in più, scrivili in *Utenti di casa* nelle impostazioni (vedi [Primi passi](#primi-passi)).
 - Il plugin Intro Skipper aggiunge i pulsanti **"Salta intro"** e **"Salta titoli di coda"**.
 
 
