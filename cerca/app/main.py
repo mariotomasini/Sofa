@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import hmac
 import json
 import logging
 import mimetypes
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -23,6 +26,9 @@ from starlette.background import BackgroundTask
 
 from . import diagnosi
 from . import home as home_netflix
+from .accesso import COOKIE as COOKIE_UTENTE
+from .accesso import DURATA as DURATA_ACCESSO
+from .accesso import Accesso, destinazione_sicura, iniziali, percorso_libero, utente_corrente
 from .archive import InternetArchive
 from .automatici import Automatici
 from .avvisami import Avvisami
@@ -74,6 +80,7 @@ class Servizi:
         self.config = config
         self.client = client
         self.archivio = Archivio(config.cartella_dati / "cerca.db")
+        self.accesso = Accesso(config.cartella_dati)
         # con la chiave TMDB il catalogo completo, senza le fonti gratuite (Radarr, Wikidata, TVmaze)
         self.tmdb = TMDB(config, self.archivio, client) if config.con_tmdb else CatalogoLibero(config, self.archivio, client)
         # le vecchie risposte complete (diversi MB) occupavano l'archivio: si riscaricano snellite
@@ -177,6 +184,30 @@ def regole_cache(percorso: str, versionato: bool) -> str:
 modelli.env.globals["v"] = impronta_statici(CARTELLA / "static")
 
 
+ID_UTENTE_JELLYFIN = re.compile(r"^[0-9a-f]{32}$")
+
+
+@app.middleware("http")
+async def chi_guarda(request: Request, call_next):
+    """Ogni pagina sa chi sta guardando; chi non ha ancora scelto va a "Chi guarda?"."""
+    s = request.app.state.servizi
+    base = s.config.root_path
+    utente = s.accesso.leggi(request.cookies.get(COOKIE_UTENTE))
+    request.state.utente = utente
+    if utente is None and not percorso_libero(request.url.path, base):
+        if request.url.path.startswith(f"{base}/api/"):
+            return JSONResponse({"errore": "Scegli prima chi sta guardando.", "cosa_fare": "Ricarica la pagina.",
+                                 "accesso": True}, status_code=401)
+        dopo = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"{base}/chi-guarda?{urlencode({'dopo': dopo})}", status_code=303)
+    # "Continua a guardare" e i consigli seguono l'utente di Jellyfin scelto
+    segno = utente_corrente.set(utente if utente and ID_UTENTE_JELLYFIN.match(utente["id"]) else None)
+    try:
+        return await call_next(request)
+    finally:
+        utente_corrente.reset(segno)
+
+
 @app.middleware("http")
 async def intestazioni_cache(request: Request, call_next):
     risposta = await call_next(request)
@@ -224,8 +255,18 @@ def indirizzo_pannello(request: Request, config: Config) -> str:
     return f"//{request.url.hostname or 'mediabox.local'}:{config.pannello_porta}/"
 
 
+def utente_di(request: Request) -> dict | None:
+    return getattr(request.state, "utente", None)
+
+
+def e_admin(request: Request) -> bool:
+    utente = utente_di(request)
+    return bool(utente and utente["admin"])
+
+
 def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     s = servizi(request)
+    utente = utente_di(request)
     contesto.setdefault("errore", None)
     contesto.setdefault("mondo", "kids" if in_kids(request) else "film")
     contesto.setdefault("sezione", "cerca")
@@ -236,7 +277,9 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
         request,
         nome,
         {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), "disco": s.disco.stato(),
-         "pannello": indirizzo_pannello(request, s.config),
+         # il Pannello è solo per l'amministratore: gli altri non lo vedono
+         "pannello": indirizzo_pannello(request, s.config) if e_admin(request) else "",
+         "utente": utente, "iniziali_utente": iniziali(utente["nome"]) if utente else "",
          "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
          "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
     )
@@ -406,6 +449,71 @@ async def pagina_spazio(request: Request):
     return solo_adulti(request) or pagina(request, "spazio.html", sezione="spazio")
 
 
+@app.get("/chi-guarda", response_class=HTMLResponse)
+async def pagina_chi_guarda(request: Request, dopo: str = ""):
+    return await _chi_guarda(request, dopo)
+
+
+async def _chi_guarda(request: Request, dopo: str, errore: str = "", scelto: str = "", status: int = 200):
+    s = servizi(request)
+    try:
+        profili = await s.jellyfin.profili()
+        problema = None
+    except ErroreServizio as exc:
+        profili, problema = None, exc
+    di_casa = [{**p, "iniziali": iniziali(p["nome"])} for p in profili or [] if not p["admin"]]
+    amministratori = [p for p in profili or [] if p["admin"]]
+    risposta = pagina(
+        request, "chi_guarda.html", senza_menu=True, indietro=False, profili=di_casa,
+        amministratori=amministratori, jellyfin_spento=problema is not None, errore=problema,
+        errore_accesso=errore, scelto=scelto, nome_admin=s.config.utente,
+        dopo=destinazione_sicura(dopo, s.config.root_path),
+    )
+    risposta.status_code = status
+    return risposta
+
+
+@app.post("/chi-guarda")
+async def entra(request: Request, id: str = Form(""), nome: str = Form(""), password: str = Form(""),
+                dopo: str = Form("")):
+    s = servizi(request)
+    utente = None
+    if id:
+        try:
+            trovato = next((p for p in await s.jellyfin.profili() if p["id"] == id), None)
+        except ErroreServizio:
+            trovato = None
+        if trovato is None:
+            return await _chi_guarda(request, dopo, "Questo utente non c'è più: scegline un altro.", status=400)
+        nome = trovato["nome"]
+    nome = nome.strip()
+    if not nome:
+        return await _chi_guarda(request, dopo, "Scegli chi sta guardando.", status=400)
+    try:
+        utente = await s.jellyfin.verifica(nome, password)
+    except ErroreServizio:
+        # Jellyfin spento: l'amministratore entra lo stesso con la password di mediabox
+        if (nome == s.config.utente and password and s.config.password
+                and hmac.compare_digest(password.encode(), s.config.password.encode())):
+            utente = {"id": "amministratore", "nome": nome, "admin": True}
+        else:
+            return await _chi_guarda(request, dopo, "Jellyfin non risponde: riprova tra poco.", id or nome, 503)
+    if utente is None or not utente.get("id"):
+        return await _chi_guarda(request, dopo, "Password sbagliata: riprova.", id or nome, 401)
+    risposta = RedirectResponse(destinazione_sicura(dopo, s.config.root_path), status_code=303)
+    risposta.set_cookie(COOKIE_UTENTE, s.accesso.cookie(utente), max_age=DURATA_ACCESSO, httponly=True,
+                        samesite="lax", path="/")
+    return risposta
+
+
+@app.get("/esci")
+async def esci(request: Request):
+    """Cambia utente: si torna a "Chi guarda?"."""
+    risposta = RedirectResponse(f"{servizi(request).config.root_path}/chi-guarda", status_code=303)
+    risposta.delete_cookie(COOKIE_UTENTE, path="/")
+    return risposta
+
+
 @app.get("/salute")
 async def salute():
     return {"stato": "ok"}
@@ -455,11 +563,12 @@ async def api_home(request: Request, mondo: str = "film"):
     s = servizi(request)
     if in_kids(request) or mondo not in ("film", "serie"):
         return {"righe": []}
-    chiave = (mondo, tuple(piattaforme_scelte(s) or ()))
+    scelte = piattaforme_scelte(s, utente_di(request))
+    chiave = ((utente_di(request) or {}).get("id", ""), mondo, tuple(scelte or ()))
     pronta = HOME_PRONTE.get(chiave)
     if pronta and pronta[0] > time.monotonic():
         return pronta[1]
-    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo), piattaforme_scelte(s))
+    risposta = await home_netflix.righe(s.tmdb, s.jellyfin, tipo_tmdb(mondo), scelte)
     if mondo == "serie" and s.config.sonarr_url:
         try:
             episodi = await s.serie.nuovi_episodi()
@@ -487,10 +596,17 @@ async def api_vista(request: Request, piattaforma: int, mondo: str = "film"):
             "righe": [{"tipo": "genere", "titolo": f"I più visti su {nome}", "elementi": elenco}] if elenco else []}
 
 
-def piattaforme_scelte(s: Servizi) -> list[int] | None:
-    """Le piattaforme scelte nella home (None = quelle di partenza)."""
+def chiave_piattaforme(utente: dict | None) -> str:
+    return f"piattaforme:{utente['id']}" if utente else "piattaforme"
+
+
+def piattaforme_scelte(s: Servizi, utente: dict | None = None) -> list[int] | None:
+    """Le piattaforme scelte nella home da questo utente (None = quelle di partenza).
+
+    Chi non ha ancora scelto le sue vede quelle scelte prima che ci fossero gli utenti."""
     try:
-        valore = json.loads(s.archivio.stato_leggi("piattaforme") or "null")
+        valore = json.loads(s.archivio.stato_leggi(chiave_piattaforme(utente))
+                            or s.archivio.stato_leggi("piattaforme") or "null")
     except ValueError:
         return None
     return [int(x) for x in valore if str(x).isdigit()] if isinstance(valore, list) else None
@@ -500,7 +616,7 @@ def piattaforme_scelte(s: Servizi) -> list[int] | None:
 async def api_piattaforme(request: Request, mondo: str = "film"):
     s = servizi(request)
     tutte = await s.tmdb.piattaforme(tipo_tmdb(mondo))
-    scelte = piattaforme_scelte(s)
+    scelte = piattaforme_scelte(s, utente_di(request))
     if scelte is None:
         scelte = list(home_netflix.PIATTAFORME_INIZIALI)
     # il codice (nfx, prv…) dà a ogni piattaforma i suoi colori quando la apri
@@ -518,7 +634,7 @@ async def api_piattaforme_salva(request: Request, dati: SceltaPiattaforme):
     if in_kids(request):
         return JSONResponse({"errore": "In Kids non si cambiano le piattaforme."}, status_code=403)
     scelte = list(dict.fromkeys(dati.scelte))[: home_netflix.MASSIMO_PIATTAFORME]
-    s.archivio.stato_scrivi("piattaforme", json.dumps(scelte))
+    s.archivio.stato_scrivi(chiave_piattaforme(utente_di(request)), json.dumps(scelte))
     return {"scelte": scelte, "messaggio": "Fatto: la home mostra le tue piattaforme."}
 
 

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import httpx
 from fastapi.testclient import TestClient
 
+from app.accesso import COOKIE, Accesso
 from app.config import Config
 from app.jellyfin import Jellyfin
 from app.main import app
@@ -50,10 +51,12 @@ def test_brani_dal_piu_recente_con_la_copertina_dell_album():
     assert brani[1]["artista"] == "Qualcuno" and brani[1]["copertina_jf"] == ""
 
 
-def test_ascolto_intero_con_i_salti():
+def test_ascolto_intero_con_i_salti(tmp_path):
     richieste = []
-    app.state.servizi = SimpleNamespace(jellyfin=nuovo_jellyfin(richieste))
+    accesso = Accesso(tmp_path)
+    app.state.servizi = SimpleNamespace(jellyfin=nuovo_jellyfin(richieste), accesso=accesso, config=Config())
     client = TestClient(app)
+    client.cookies.set(COOKIE, accesso.cookie({"id": "u1", "nome": "Mario", "admin": False}))
     tutto = client.get(f"/api/musica/ascolta/{ID}")
     assert tutto.status_code == 200 and tutto.content == AUDIO and tutto.headers["accept-ranges"] == "bytes"
     # il salto in avanti dell'iPhone: chiede un pezzo con "Range" e Jellyfin risponde 206

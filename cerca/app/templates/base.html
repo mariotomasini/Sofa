@@ -36,7 +36,8 @@
     <a class="logo{% if indietro %} logo-con-indietro{% endif %}" href="{{ base }}{{ '/kids' if kids else '/' }}" aria-label="Cerca, pagina iniziale">
       <span class="logo-segno">{{ icona_logo }}</span><span>Cerca</span>
     </a>
-    {% if kids %}
+    {% if senza_menu %}
+    {% elif kids %}
     <nav class="nav" aria-label="Kids">
       <a class="nav-voce esci-kids" href="{{ base }}/kids/esci">
         <svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
@@ -51,7 +52,14 @@
       <a class="nav-voce" href="{{ base }}/spazio"{% if sezione == 'spazio' %} aria-current="page"{% endif %}>Spazio</a>
       <a class="nav-voce" href="{{ base }}/torrent"{% if sezione == 'torrent' %} aria-current="page"{% endif %}>Aggiungi torrent</a>
       <a class="nav-voce" href="{{ base }}/diagnosi"{% if sezione == 'diagnosi' %} aria-current="page"{% endif %}>Controllo</a>
+      {% if pannello %}
       <a class="nav-voce esterno" href="{{ pannello }}" title="Tessere dei servizi e stato del PC">Pannello {{ freccia_fuori }}</a>
+      {% endif %}
+      {% if utente %}
+      <a class="nav-voce utente-attivo" href="{{ base }}/esci" title="Cambia utente">
+        <span class="faccia piccola" aria-hidden="true">{{ iniziali_utente }}</span>{{ utente.nome }}
+      </a>
+      {% endif %}
     </nav>
     {% endif %}
   </header>
@@ -72,7 +80,7 @@
     {% block contenuto %}{% endblock %}
   </main>
 
-  {% if not kids %}
+  {% if not kids and not senza_menu %}
   <nav class="barra-basso" aria-label="Menu">
     <a href="{{ base }}/"{% if sezione == 'cerca' %} aria-current="page"{% endif %}>
       <span class="pillola"><svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg></span>Home
@@ -91,7 +99,8 @@
         <a href="{{ base }}/torrent">Aggiungi torrent</a>
         <a href="{{ base }}/diagnosi">Controllo servizi</a>
         <a href="{{ base }}/kids">Modalità Kids</a>
-        <a href="{{ pannello }}">Pannello {{ freccia_fuori }}</a>
+        {% if pannello %}<a href="{{ pannello }}">Pannello {{ freccia_fuori }}</a>{% endif %}
+        {% if utente %}<a href="{{ base }}/esci">Cambia utente ({{ utente.nome }})</a>{% endif %}
       </div>
     </details>
   </nav>
