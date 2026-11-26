@@ -131,8 +131,10 @@ if ("MutationObserver" in window) {
 // --- una sola entrata per pagina: titolo a maschera e poi il resto (OpenMotion: title reveal) ---
 function entrataPagina() {
   if (FERMO) return;
-  const titolo = document.querySelector("main .rivela > span");
-  if (titolo) G.from(titolo, { yPercent: 105, duration: 0.6, ease: CURVA });
+  // il titolo della vetrina ha la sua entrata (entraVetrina): due "from" sullo stesso titolo
+  // lo lasciavano fermo a metà, tagliato dalla maschera
+  const titolo = document.querySelector("main .rivela:not(.vetrina .rivela) > span");
+  if (titolo) G.fromTo(titolo, { yPercent: 105 }, { yPercent: 0, duration: 0.6, ease: CURVA });
   const resto = [...document.querySelectorAll("main > .entra, main > section.entra")].slice(0, 6);
   if (resto.length) G.from(resto, { opacity: 0, y: 10, duration: 0.45, ease: CURVA, stagger: 0.05, clearProps: "transform,opacity" });
 }
@@ -505,8 +507,11 @@ document.addEventListener("focusout", (ev) => {
 document.addEventListener("visibilitychange", () => { if (document.hidden) fermaTrailer(); });
 
 // La vetrina in cima: dopo qualche secondo parte il trailer muto, con il tasto dell'audio
+// Sul telefono no: YouTube sopra il video mette i suoi comandi (indietro, pausa, avanti) che coprono
+// il titolo, e si risparmiano i dati. Il trailer si apre col tasto "Trailer".
+const SOLO_TOCCO = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 function trailerVetrina(vetrina) {
-  if (!vetrina || !vetrina.dataset.trailer || document.hidden) return;
+  if (!vetrina || !vetrina.dataset.trailer || document.hidden || SOLO_TOCCO) return;
   setTimeout(async () => {
     const id = await trovaTrailer(vetrina.dataset.trailer);
     if (!id || !vetrina.isConnected) return;

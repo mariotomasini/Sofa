@@ -140,6 +140,15 @@ def gruppo_serie(serie: dict | None, id_serie: int | None, voce: str) -> dict:
             "poster": copertina(serie), "voce": voce}
 
 
+def per_stagione(coppie) -> dict[str, list[int]]:
+    """Le puntate di una voce divise per stagione, per "Annulla stagione" nella pagina Download."""
+    stagioni: dict[str, list[int]] = {}
+    for stagione, id_puntata in coppie:
+        if id_puntata is not None:
+            stagioni.setdefault(str(stagione or 0), []).append(id_puntata)
+    return stagioni
+
+
 def percentuale(totale: float, mancante: float) -> float:
     return round(100 * (1 - mancante / totale), 1) if totale else 0.0
 
@@ -294,14 +303,18 @@ class Automatici:
                     titolo = f"{(r.get('series') or {}).get('title', '')} · {quali}"
                     ids = [x.get("episodeId") for x in gruppo]
                     voci.append({**self._da_coda(r, titolo, "serie", ids),
-                                 **gruppo_serie(r.get("series"), r.get("seriesId"), quali)})
+                                 **gruppo_serie(r.get("series"), r.get("seriesId"), quali),
+                                 "per_stagione": per_stagione(
+                                     ((x.get("episode") or {}).get("seasonNumber", 0), x.get("episodeId")) for x in gruppo)})
                 mancanti = await tutte_le_pagine(self.serie._api, "wanted/missing", {
                     "monitored": "true", "includeSeries": "true"})
                 per_serie: dict[int, tuple[dict, list[int]]] = {}
+                stagione_di: dict[int, int] = {}
                 for e in mancanti:
                     if e.get("id") not in in_coda_puntate:
                         serie = e.get("series") or {}
                         per_serie.setdefault(e.get("seriesId") or serie.get("id") or 0, (serie, []))[1].append(e["id"])
+                        stagione_di[e["id"]] = e.get("seasonNumber", 0)
                 for id_serie, (serie, ids) in per_serie.items():
                     quante = "1 puntata" if len(ids) == 1 else f"{len(ids)} puntate"
                     nome = serie.get("title") or "Serie"
@@ -309,6 +322,7 @@ class Automatici:
                         f"{nome} · {quante} da trovare", "", "", tipo="serie", ids=ids, stato="cerco",
                         stato_testo="Cerco una fonte: riprovo da solo appena escono e ogni notte",
                         percentuale=0, dimensione=0, annullabile=True, ricercabile=True, senza_lingua=True,
+                        per_stagione=per_stagione((stagione_di.get(i, 0), i) for i in ids),
                         **gruppo_serie(serie, id_serie, f"{quante} da trovare")))
             except Exception:  # noqa: BLE001
                 log.warning("Coda di Sonarr non disponibile", exc_info=True)

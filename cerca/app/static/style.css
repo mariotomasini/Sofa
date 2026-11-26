@@ -318,6 +318,7 @@ body[data-mondo="kids"] .scheda > .titolo { font-size: 1.05rem; }
 .vetrina-top { display: flex; align-items: center; gap: 8px; color: var(--testo-2); font-size: .92rem; margin: 0 0 14px; }
 .vetrina-top .num { color: var(--lampada); white-space: nowrap; }
 .vetrina h2 { font: 400 clamp(2.6rem, 5.6vw, 4.6rem)/1 var(--serif); letter-spacing: -.02em; margin: 0 0 14px; }
+.vetrina h2 .rivela { padding-bottom: .14em; margin-bottom: -.06em; }  /* la coda della "g" non si taglia */
 .vetrina-generi { font: .8rem var(--mono); color: var(--tenue); margin: 0; }
 .vetrina-trama { color: var(--testo-2); max-width: 34rem; margin: 16px 0 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .vetrina-azioni { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
@@ -342,6 +343,7 @@ body[data-mondo="kids"] .scheda > .titolo { font-size: 1.05rem; }
 .vetrina-video iframe { position: absolute; top: 50%; left: 50%; width: max(100%, calc(100vh * 1.78)); height: max(100%, 56.25vw); transform: translate(-50%, -50%); border: 0; }
 .vetrina.scena.con-trailer > .sfondo { opacity: 0; transition: opacity 1.2s var(--curva) .8s; }
 .audio-trailer { position: absolute; right: 16px; bottom: 16px; z-index: 2; width: 44px; padding: 0; background: rgb(18 17 15 / .6); color: var(--testo); border-color: var(--linea-2); box-shadow: none; }
+.vetrina.scena .audio-trailer { top: 16px; bottom: auto; }  /* in basso coprirebbe il tasto Trailer */
 .audio-trailer:hover:not(:disabled) { background: rgb(18 17 15 / .85); }
 .audio-trailer .acceso { display: none; }
 .audio-trailer[aria-pressed="true"] .acceso { display: block; }
@@ -529,6 +531,16 @@ div.errore p, .nota p { margin: 2px 0 0; color: var(--testo-2); }
 .dettaglio-testa h2 { font: 400 1.6rem/1.1 var(--serif); margin: 0 0 4px; }
 .dettaglio-voci .download { background: var(--rialzo); }
 .dettaglio-voci .download > img, .dettaglio-voci .download > .senza-poster { display: none; }
+/* la X resta in alto mentre si scorre l'elenco: non serve arrivare in fondo per chiudere */
+.chiudi-x {
+  position: sticky; top: 0; z-index: 3; align-self: flex-end; margin: -8px -8px -52px 0;
+  width: 44px; min-height: 44px; padding: 0; border-radius: 50%;
+  background: var(--rialzo-2); color: var(--testo); border: 1px solid var(--linea-2); box-shadow: 0 4px 16px rgb(0 0 0 / .4);
+}
+.chiudi-x:hover:not(:disabled) { background: var(--rialzo); }
+.chiudi-x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.dettaglio-testa, .serie-testa { padding-right: 48px; }
+.dettaglio-azioni { margin-top: 0; }
 #dettaglio-download { width: min(680px, 94vw); max-height: 90vh; max-height: 90dvh; overflow: auto; }
 .salotto-vuoto { display: grid; justify-items: center; text-align: center; padding: 32px 16px 8px; }
 .salotto { width: min(360px, 100%); height: auto; overflow: visible; }

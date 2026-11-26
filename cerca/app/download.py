@@ -163,29 +163,60 @@ class GestoreDownload:
         poster: str = "",
         cartella: str | None = None,
         solo_brano: str = "",
+        id_download: int | None = None,
     ) -> int:
-        id_download = self.archivio.nuovo_download(
-            tmdb_id=film["id"] if film else None,
-            titolo=film["titolo"] if film else (titolo or "Torrent"),
-            anno=film["anno"] if film else "",
-            poster=film.get("poster", "") if film else poster,
-            serie=serie,
-            fonte=fonte,
-            tipo="torrent",
-            url=magnet or "",
-            categoria=categoria,
-        )
+        """Aggiunge il torrent a qBittorrent. Con id_download usa una voce già in elenco
+        (la musica, che compare subito mentre la cerco sugli indexer)."""
+        gia_in_elenco = id_download is not None
+        if id_download is None:
+            id_download = self.archivio.nuovo_download(
+                tmdb_id=film["id"] if film else None,
+                titolo=film["titolo"] if film else (titolo or "Torrent"),
+                anno=film["anno"] if film else "",
+                poster=film.get("poster", "") if film else poster,
+                serie=serie,
+                fonte=fonte,
+                tipo="torrent",
+                url=magnet or "",
+                categoria=categoria,
+            )
         try:
             await self.qbit.aggiungi(
                 categoria=categoria, etichetta=etichetta(id_download), magnet_o_url=magnet, file_torrent=file_torrent,
                 cartella=cartella,
             )
         except ErroreServizio:
-            self.archivio.elimina_download(id_download)
+            if not gia_in_elenco:
+                self.archivio.elimina_download(id_download)
             raise
+        if gia_in_elenco:
+            # "creato" riparte da adesso: il controllo dà a qBittorrent i soliti 2 minuti per mostrarlo
+            self.archivio.aggiorna_download(id_download, stato="in_corso", url=magnet or "", messaggio="",
+                                            creato=time.time())
         if solo_brano:
             self._sottofondo(self._solo_brano(id_download, solo_brano))
         return id_download
+
+    def cerca_in_sottofondo(self, id_download: int, coro) -> None:
+        """Una ricerca lunga che finisce con un torrent (la musica sugli indexer). La voce è già
+        nell'elenco: se non trova niente mostra il perché, e "Annulla" la ferma."""
+        async def esegui() -> None:
+            try:
+                await coro
+            except asyncio.CancelledError:
+                raise
+            except ErroreServizio as exc:
+                self.archivio.aggiorna_download(id_download, stato="errore", messaggio=f"{exc.cosa} {exc.cosa_fare}".strip())
+            except Exception:  # noqa: BLE001 - la voce non deve restare "cerco" per sempre
+                log.exception("Errore inatteso nella ricerca %s", id_download)
+                self.archivio.aggiorna_download(
+                    id_download, stato="errore",
+                    messaggio="La ricerca si è fermata per un errore inatteso. Premi \"Riprova\".")
+            finally:
+                if self._compiti.get(id_download) is asyncio.current_task():
+                    self._compiti.pop(id_download, None)
+
+        self._compiti[id_download] = asyncio.create_task(esegui())
 
     async def _solo_brano(self, id_download: int, titolo: str) -> None:
         """Da un album intero scarica solo il brano scelto (appena qBittorrent conosce i file)."""
@@ -228,9 +259,14 @@ class GestoreDownload:
         compito = self._compiti.pop(id_download, None)
         if compito:
             compito.cancel()
-        if voce["tipo"] == "torrent" and voce.get("hash") and voce["stato"] != "importato":
+        if voce["tipo"] == "torrent" and voce["stato"] != "importato":
             with contextlib.suppress(ErroreServizio):
-                await self.qbit.elimina(voce["hash"], con_file=True)
+                hash_torrent = voce.get("hash")
+                if not hash_torrent:  # appena aggiunto: qBittorrent lo conosce già, l'elenco non ancora
+                    torrent = await self.qbit.per_etichetta(etichetta(id_download))
+                    hash_torrent = torrent["hash"] if torrent else ""
+                if hash_torrent:
+                    await self.qbit.elimina(hash_torrent, con_file=True)
         elif voce["tipo"] == "http" and voce["stato"] != "importato" and voce.get("percorso"):
             for p in (Path(voce["percorso"]), Path(voce["percorso"] + ".part")):
                 with contextlib.suppress(OSError):
@@ -482,6 +518,9 @@ class GestoreDownload:
     # --- ciclo di controllo ------------------------------------------------------------
     async def riprendi_all_avvio(self) -> None:
         """Dopo un riavvio riprende i download HTTP e le importazioni a metà."""
+        for voce in self.archivio.download_per_stato("ricerca"):
+            self.archivio.aggiorna_download(
+                voce["id"], stato="errore", messaggio="La ricerca si è interrotta (Cerca è ripartita). Premi \"Riprova\".")
         for voce in self.archivio.download_per_stato("in_corso", "importazione", "completato"):
             if voce["stato"] == "in_corso" and voce["tipo"] == "http":
                 self._avvia_http(voce["id"])

@@ -10,6 +10,7 @@
 
 <dialog id="dettaglio-download" aria-labelledby="dettaglio-titolo">
   <div class="modulo">
+    <button type="button" class="chiudi-x" id="dettaglio-x" aria-label="Chiudi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
     <div class="dettaglio-testa">
       <span id="dettaglio-copertina" class="dettaglio-copertina"></span>
       <div>
@@ -17,6 +18,7 @@
         <p id="dettaglio-stato" class="sottotitolo"></p>
       </div>
     </div>
+    <div id="dettaglio-azioni" class="azioni-riga dettaglio-azioni" hidden></div>
     <div id="dettaglio-voci" class="elenco-download dettaglio-voci"></div>
     <div class="azioni-riga"><button type="button" class="secondario" id="dettaglio-chiudi">Chiudi</button></div>
   </div>

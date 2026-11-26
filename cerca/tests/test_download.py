@@ -105,3 +105,43 @@ def test_torrent_in_italiano_prima():
     tutti = [riassunto({"title": "Matrix 1999 1080p", "seeders": 900, "protocol": "torrent"}),
              riassunto({"title": "Matrix 1999 iTA", "seeders": 5, "protocol": "torrent"})]
     assert [r["titolo"] for r in ordina(tutti)] == ["Matrix 1999 iTA", "Matrix 1999 1080p"]
+
+
+def test_ricerca_in_sottofondo_poi_torrent_sulla_stessa_voce(tmp_path):
+    """La musica: la voce compare subito ("ricerca"), poi diventa il torrent o un errore con il perché."""
+    import asyncio
+
+    from app.download import GestoreDownload as Download
+    from app.rete import ErroreServizio
+
+    class QbitFinto:
+        def __init__(self):
+            self.aggiunti = []
+
+        async def aggiungi(self, **kw):
+            self.aggiunti.append(kw)
+
+    a = Archivio(tmp_path / "prova.db")
+    qbit = QbitFinto()
+    d = Download(None, a, None, qbit, None, None, None)
+
+    async def trovato(id_download):
+        await d.da_torrent(fonte="prowlarr", categoria="musica", film=None, titolo="A · B",
+                           magnet="magnet:?xt=urn:btih:" + "a" * 40, id_download=id_download)
+
+    async def non_trovato():
+        raise ErroreServizio("Non trovo B di A sui tuoi indexer.", "Riprova tra qualche giorno.")
+
+    async def prova():
+        uno = a.nuovo_download(titolo="A · B", fonte="prowlarr", tipo="torrent", categoria="musica", stato="ricerca")
+        due = a.nuovo_download(titolo="A · C", fonte="prowlarr", tipo="torrent", categoria="musica", stato="ricerca")
+        d.cerca_in_sottofondo(uno, trovato(uno))
+        d.cerca_in_sottofondo(due, non_trovato())
+        await asyncio.gather(*d._compiti.values())
+        return uno, due
+
+    uno, due = asyncio.run(prova())
+    assert a.download(uno)["stato"] == "in_corso" and a.download(uno)["url"].startswith("magnet:")
+    assert qbit.aggiunti[0]["etichetta"] == etichetta(uno)
+    assert a.download(due)["stato"] == "errore" and "Non trovo" in a.download(due)["messaggio"]
+    assert len(a.elenco_download()) == 2 and not d._compiti
