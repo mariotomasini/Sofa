@@ -110,8 +110,16 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         gateway=gateway(imp.get("SUBNET", "172.28.64.0/24")),
         tv=imp.dvb or bool(imp.hdhomerun),
         hash_password=_hash_password(imp.password, cartella_generato / "Caddyfile"),
+        # ":8080" se il sito non è sulla porta 80: serve ai link che dal Pannello tornano a Cerca
+        porta_principale=porta_nell_indirizzo(imp.get("HTTP_PORT", "80")),
     )
     return valori
+
+
+def porta_nell_indirizzo(porta: str) -> str:
+    """La porta da scrivere negli indirizzi: niente per la 80, ":8080" per le altre."""
+    porta = str(porta or "80").strip()
+    return "" if porta == "80" else f":{porta}"
 
 
 def genera(imp: Impostazioni, cartella_mediabox: Path) -> list[str]:

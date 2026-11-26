@@ -65,12 +65,13 @@ x-custodito: &custodito
 x-sottofondo: &sottofondo 512
 
 services:
-  # Unico punto di ingresso: http://{{ NOME_HOST }}
+  # Unico punto di ingresso: http://{{ NOME_HOST }} (Cerca) e la porta del Pannello
   caddy:
     image: "{{ IMG_CADDY }}"
     restart: unless-stopped
     ports:
       - "{{ HTTP_PORT }}:80"
+      - "{{ PANNELLO_PORT | default('8081') }}:8081"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -81,7 +82,7 @@ services:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/.salute"]
       start_period: 30s
 
-  # Pagina iniziale con le tessere dei servizi
+  # Pannello: le tessere dei servizi e lo stato del PC (http://{{ NOME_HOST }}:{{ PANNELLO_PORT | default('8081') }})
   homepage:
     image: "{{ IMG_HOMEPAGE }}"
     restart: unless-stopped
@@ -96,7 +97,7 @@ services:
       HOMEPAGE_VAR_LIDARR: "{{ LIDARR_API_KEY if lidarr else '' }}"
     volumes:
       - ./homepage:/app/config
-      # solo per mostrare lo spazio libero nella pagina iniziale
+      # solo per mostrare lo spazio libero nel Pannello
       - "{{ MEDIA_DIR }}:/dati-media:ro"
     labels: *custodito
 
@@ -407,7 +408,8 @@ services:
       JELLYFIN_URL: http://jellyfin:8096/jellyfin
       ADMIN_USER: "{{ ADMIN_USER }}"
       ADMIN_PASSWORD: "{{ ADMIN_PASSWORD }}"
-      INDIRIZZO_PUBBLICO: "http://{{ NOME_HOST }}"
+      INDIRIZZO_PUBBLICO: "http://{{ NOME_HOST }}{{ porta_principale }}"
+      PANNELLO_PORT: "{{ PANNELLO_PORT | default('8081') }}"
       SOGLIA_DISCO_LIBERO: "{{ SOGLIA_DISCO_LIBERO }}"
       PULIZIA_VISTI: "{{ PULIZIA_VISTI }}"
       PULIZIA_GIORNI: "{{ PULIZIA_GIORNI }}"

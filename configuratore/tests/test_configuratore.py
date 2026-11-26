@@ -644,7 +644,10 @@ def test_pagina_iniziale_con_i_numeri_dei_download(cartella):
     genera(Impostazioni.carica(cartella), cartella)
     testo = (cartella / "generato" / "homepage" / "services.yaml").read_text()
     gruppi = {nome: voci for g in yaml.safe_load(testo) for nome, voci in g.items()}
-    assert list(gruppi) == ["Guarda", "Download", "Manutenzione"]
+    # in cima al Pannello il ritorno a Cerca, che è la pagina principale
+    assert list(gruppi) == ["Cerca", "Guarda", "Download", "Manutenzione"]
+    torna = {n: v for voce in gruppi["Cerca"] for n, v in voce.items()}
+    assert torna["Torna a Cerca"]["href"] == "/cerca/"
     download = {n: v for voce in gruppi["Download"] for n, v in voce.items()}
     assert download["Radarr"]["widget"]["key"] == "{{HOMEPAGE_VAR_RADARR}}"
     assert download["Sonarr"]["widget"]["url"] == "http://sonarr:8989/sonarr"
@@ -652,3 +655,33 @@ def test_pagina_iniziale_con_i_numeri_dei_download(cartella):
     compose = (cartella / "generato" / "docker-compose.yml").read_text()
     assert "HOMEPAGE_VAR_RADARR:" in compose
     assert "Lidarr" not in download
+
+
+def test_cerca_e_la_pagina_principale_e_il_pannello_ha_la_sua_porta(cartella):
+    genera(Impostazioni.carica(cartella), cartella)
+    caddy = (cartella / "generato" / "Caddyfile").read_text()
+    principale, pannello = caddy.split(":8081 {")
+    # tutto quello che non è un servizio va a Cerca; i vecchi indirizzi /cerca/... tornano alla radice
+    assert "reverse_proxy cerca:8000" in principale.split("# --- Cerca: la pagina principale")[1]
+    assert "homepage:3000" not in principale
+    assert "redir /cerca " not in principale  # /cerca?q=... sono i risultati di ricerca di Cerca
+    assert "redir {re.vecchia_cerca.1}?{query} 301" in principale
+    # i servizi restano dove sono, prima della radice
+    assert principale.index("handle /jellyfin/*") < principale.index("# --- Cerca: la pagina principale")
+    # il Pannello: Homepage, e i link ai servizi tornano all'indirizzo principale (porta 80: senza porta)
+    assert "reverse_proxy homepage:3000" in pannello
+    assert "redir http://{host}{uri} 302" in pannello
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert '"8081:8081"' in compose
+    assert 'PANNELLO_PORT: "8081"' in compose
+
+
+def test_pannello_con_un_altra_porta_principale(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("HTTP_PORT=8080\nPANNELLO_PORT=9090\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    caddy = (cartella / "generato" / "Caddyfile").read_text()
+    assert "redir http://{host}:8080{uri} 302" in caddy
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert '"9090:8081"' in compose
+    assert 'INDIRIZZO_PUBBLICO: "http://mediabox.local:8080"' in compose

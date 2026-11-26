@@ -1,15 +1,18 @@
 # FILE GENERATO DA MEDIABOX — non modificarlo a mano.
-# Tre righe, dalla più usata: guardare, i download (con i numeri dal vivo), la manutenzione.
+# Il Pannello: in cima il ritorno a Cerca (la pagina principale), poi guardare, i download
+# (con i numeri dal vivo) e la manutenzione.
 # Le chiavi dei servizi non stanno qui: Homepage le prende dalle variabili HOMEPAGE_VAR_*.
+- Cerca:
+    - Torna a Cerca:
+        href: /cerca/
+        icon: /cerca/static/logo.svg
+        description: La pagina principale di mediabox, per trovare e scaricare film, serie e musica
+
 - Guarda:
     - Jellyfin:
         href: /jellyfin/
         icon: jellyfin.png
         description: Film, serie{% if anime %}, anime{% endif %}{% if tv %}, TV in diretta{% endif %} e musica
-    - Cerca:
-        href: /cerca/
-        icon: /cerca/static/logo.svg
-        description: Trova un film o una serie, guarda dove vederlo e scaricalo
     - Kids:
         href: /cerca/kids
         icon: mdi-teddy-bear

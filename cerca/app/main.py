@@ -46,6 +46,7 @@ from .sentinella import Sentinella, ultimo_blocco
 from .serie import Serie
 from .stato import ControlloDisco
 from .tmdb import TMDB, tipo_tmdb
+from .trailer import trova as trova_trailer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("cerca")
@@ -200,10 +201,10 @@ def servizi(request: Request) -> Servizi:
 
 
 MONDI = {
-    "film": {"nome": "Film", "segnaposto": "Cerca un film…", "url": "/"},
-    "serie": {"nome": "Serie TV", "segnaposto": "Cerca una serie…", "url": "/serie"},
-    "kids": {"nome": "Kids", "segnaposto": "Cerca un cartone…", "url": "/kids"},
-    "musica": {"nome": "Musica", "segnaposto": "Cerca un artista…", "url": "/musica"},
+    "film": {"nome": "Film", "segnaposto": "Titolo del film", "url": "/"},
+    "serie": {"nome": "Serie TV", "segnaposto": "Titolo della serie", "url": "/serie"},
+    "kids": {"nome": "Kids", "segnaposto": "Titolo del cartone", "url": "/kids"},
+    "musica": {"nome": "Musica", "segnaposto": "Artista, album o brano", "url": "/musica"},
 }
 COOKIE_KIDS = "mediabox_kids"
 
@@ -213,6 +214,11 @@ def in_kids(request: Request) -> bool:
 
 
 PAGINE_INIZIALI = {"home.html", "mondo.html", "musica.html"}
+
+
+def indirizzo_pannello(request: Request, config: Config) -> str:
+    """Il Pannello (la vecchia pagina iniziale) sta sullo stesso PC, sulla sua porta."""
+    return f"//{request.url.hostname or 'mediabox.local'}:{config.pannello_porta}/"
 
 
 def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
@@ -227,6 +233,7 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
         request,
         nome,
         {"base": s.config.root_path, "ntfy": bool(s.config.ntfy_topic), "disco": s.disco.stato(),
+         "pannello": indirizzo_pannello(request, s.config),
          "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
          "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
     )
@@ -408,6 +415,12 @@ async def api_tmdb(request: Request, q: str):
     return {"film": await servizi(request).tmdb.cerca(q)}
 
 
+@app.get("/api/trailer")
+async def api_trailer(request: Request, id: int, tipo: str = "movie"):
+    """Il trailer YouTube per l'anteprima al passaggio sulle locandine ("" se non c'è)."""
+    return {"youtube": await trova_trailer(servizi(request), tipo, id)}
+
+
 @app.get("/api/novita")
 async def api_novita(request: Request, mondo: str = "film"):
     """Le due strisce della pagina iniziale di un mondo. Se una fallisce, l'altra si vede lo stesso."""
@@ -487,7 +500,9 @@ async def api_piattaforme(request: Request, mondo: str = "film"):
     scelte = piattaforme_scelte(s)
     if scelte is None:
         scelte = list(home_netflix.PIATTAFORME_INIZIALI)
-    return {"tutte": tutte[:40], "scelte": scelte, "massimo": home_netflix.MASSIMO_PIATTAFORME}
+    # il codice (nfx, prv…) dà a ogni piattaforma i suoi colori quando la apri
+    tutte = [{**p, "codice": CODICI_PIATTAFORME.get(p["id"], "")} for p in tutte[:40]]
+    return {"tutte": tutte, "scelte": scelte, "massimo": home_netflix.MASSIMO_PIATTAFORME}
 
 
 class SceltaPiattaforme(BaseModel):

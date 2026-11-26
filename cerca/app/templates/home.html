@@ -1,20 +1,22 @@
 {% extends "base.html" %}
 {% from "_mondi.html" import selettore, ricerca, generi, dialogo_piattaforme %}
 {% block contenuto %}
-{{ selettore(mondo, base, mondi, kids) }}
-{{ ricerca(mondo, base, mondi) }}
+<div class="capo">
+  {{ selettore(mondo, base, mondi, kids) }}
+  {{ ricerca(mondo, base, mondi) }}
+</div>
 {{ generi(mondo) }}
 
 <div id="righe" class="righe" aria-busy="true"></div>
 {{ dialogo_piattaforme("film") }}
 
 {% if scaricati %}
-<section>
-  <h2>Pronti da guardare</h2>
+<section class="riga">
+  <div class="riga-testa"><h2>Pronti da guardare</h2><a class="link-accento" href="/jellyfin/">Apri Jellyfin</a></div>
   <div class="striscia">
     {% for d in scaricati %}
     <a class="scheda" href="/jellyfin/">
-      {% if d.poster %}<img src="{{ d.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ d.titolo }}</span><span class="anno">{{ d.anno }}</span></span>{% endif %}
+      <span class="poster">{% if d.poster %}<img src="{{ d.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ d.titolo }}</span><span class="anno">{{ d.anno }}</span></span>{% endif %}</span>
       <span class="titolo">{{ d.titolo }}</span>
       <span class="anno pronto">Pronto in Jellyfin</span>
     </a>
@@ -24,8 +26,8 @@
 {% endif %}
 
 {% if ricerche %}
-<section>
-  <h2 class="h2-tenue">Ultime ricerche</h2>
+<section class="riga">
+  <div class="riga-testa"><h2 class="h2-tenue">Ultime ricerche</h2></div>
   <div class="etichette">
     {% for r in ricerche %}<a class="etichetta" href="{{ base }}/cerca?q={{ r.testo | urlencode }}">{{ r.testo }}</a>{% endfor %}
   </div>
@@ -33,13 +35,13 @@
 {% endif %}
 
 {% if in_attesa %}
-<section>
-  <h2>La tua lista "avvisami"</h2>
-  <p class="sottotitolo">Controllo ogni giorno se diventano gratis{% if ntfy %} e ti mando una notifica sul telefono{% endif %}.</p>
+<section class="riga">
+  <div class="riga-testa"><h2>Ti avviso se diventano gratis</h2></div>
+  <p class="sottotitolo" style="margin:-4px 0 12px">Controllo ogni giorno{% if ntfy %} e ti mando una notifica sul telefono{% endif %}</p>
   <div class="striscia">
     {% for f in in_attesa %}
-    <a class="scheda" href="{{ base }}/film/{{ f.tmdb_id }}">
-      {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
+    <a class="scheda" href="{{ base }}/film/{{ f.tmdb_id }}" data-trailer="movie:{{ f.tmdb_id }}">
+      <span class="poster">{% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}</span>
       <span class="titolo">{{ f.titolo }}</span>
       <span class="anno">{{ f.anno }}</span>
     </a>

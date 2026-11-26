@@ -2,20 +2,20 @@
 {% from "_mondi.html" import selettore %}
 {% block titolo %}Musica{% endblock %}
 {% block contenuto %}
-{{ selettore(mondo, base, mondi, kids) }}
+<div class="capo">{{ selettore(mondo, base, mondi, kids) }}</div>
 <div class="musica">
+  <h1 class="saluto"><span class="rivela"><span>Musica</span></span></h1>
   <form class="ricerca-musica" action="{{ base }}/musica/cerca" method="get" role="search">
     <label for="q-musica" class="nascosto">Cerca musica</label>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
-    <input id="q-musica" name="q" type="search" placeholder="Cosa vuoi ascoltare?" autocomplete="off" required>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>
+    <input id="q-musica" name="q" type="search" placeholder="Artista, album o brano" autocomplete="off" required>
   </form>
-  <h1 class="saluto" id="saluto">Ciao</h1>
   <div id="scorciatoie" class="scorciatoie"></div>
-  <div id="righe-musica" class="righe-musica" aria-busy="true"><p class="caricamento">Carico la tua musica…</p></div>
-<div class="nota">
-  <strong>Vuoi la canzone intera?</strong>
-  <p>Tocca l'icona di download accanto a un brano (o "Scarica l'album"): quando è pronta la trovi in "Brani preferiti".</p>
-</div>
+  <div id="righe-musica" class="righe-musica" aria-busy="true"><p class="caricamento">Carico la tua musica</p></div>
+  <div class="nota">
+    <strong>Vuoi la canzone intera?</strong>
+    <p>Tocca la freccia accanto a un brano, o "Scarica l'album": quando è pronta la trovi in Brani preferiti.</p>
+  </div>
 </div>
 {% endblock %}
 {% block script %}<script>window.LIDARR = {{ 'true' if lidarr else 'false' }}; avviaMusica();</script>{% endblock %}

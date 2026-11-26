@@ -232,7 +232,7 @@ function htmlFine(a, ind, bene) {
   return (bene ? "" : `<div class="riquadro errore"><h2>Cosa non è andato</h2><ul class="problemi">${problemi ||
       "<li>Qualcosa si è fermato. Sul PC scrivi <code>mediabox configura</code> per riprovare.</li>"}</ul></div>`) +
     `<div class="azioni-fine"><a class="bottone grande" href="/">Apri mediabox</a>` +
-    `<a class="bottone contorno" href="/cerca/">Cerca un film</a></div>` +
+    `<a class="bottone contorno" href="${esc(ind.pannello)}">Pannello</a></div>` +
     `<div class="riquadro"><h2>Indirizzi</h2><p>Da telefono, PC o TV di casa apri:</p><ul class="indirizzi">` +
     ind.tutti.map((u) => `<li><code>${esc(u)}</code></li>`).join("") + `</ul>` +
     `<p>Nell'app Jellyfin della TV scrivi come server <code>${esc(ind.jellyfin_tv)}</code><br>Utente <strong>admin</strong>, con la tua password.</p></div>` +

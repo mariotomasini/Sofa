@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from . import justwatch
 from .catalogo_libero import solo_pronti
 from .rete import ErroreServizio
 from .tmdb import GENERI_INIZIALI
@@ -144,7 +145,8 @@ async def _righe(tmdb, jellyfin, tipo: str, piattaforme: list[int] | None) -> di
         risposta["righe"].append({
             "tipo": "piattaforma", "titolo": piattaforma.get("titolo_riga") or f"Su {piattaforma['nome']}",
             "piattaforma": piattaforma["id"],
-            "logo": piattaforma["logo"], "elementi": elementi[:MASSIMO_PER_RIGA],
+            "logo": piattaforma["logo"], "codice": justwatch.CODICI.get(piattaforma["id"], ""),
+            "elementi": elementi[:MASSIMO_PER_RIGA],
         })
     if isinstance(continua, list):
         risposta["righe"].append({"tipo": "continua", "titolo": "Continua a guardare", "elementi": continua})
