@@ -168,8 +168,11 @@ if ($occupata) {
 Scrivi-Env "NOME_HOST" "$($env:COMPUTERNAME.ToLower()).local" $script:EnvFile
 
 # Firewall: solo reti private (casa), mai reti pubbliche
+$portaPannello = Leggi-Env "PANNELLO_PORT" $script:EnvFile
+if (-not $portaPannello) { $portaPannello = "8081" }
 $regole = @(
     @{ Nome = "mediabox (sito)"; Porta = $porta; Protocollo = "TCP" },
+    @{ Nome = "mediabox (pannello)"; Porta = $portaPannello; Protocollo = "TCP" },
     @{ Nome = "mediabox (torrent TCP)"; Porta = (Leggi-Env "TORRENT_PORT" $script:EnvFile); Protocollo = "TCP" },
     @{ Nome = "mediabox (torrent UDP)"; Porta = (Leggi-Env "TORRENT_PORT" $script:EnvFile); Protocollo = "UDP" }
 )

@@ -3,17 +3,17 @@
 {% block contenuto %}
 {% if piattaforma %}
 <div class="vista-testa">
-  <h1>{% if piattaforma.logo %}<img class="logo-piattaforma grande" src="{{ piattaforma.logo }}" alt="" width="64" height="64" onerror="this.remove()">{% endif %}{{ piattaforma.nome }}</h1>
+  <h1>{% if piattaforma.logo %}<img class="logo-piattaforma grande" src="{{ piattaforma.logo }}" alt="" width="52" height="52" onerror="this.remove()">{% endif %}{{ piattaforma.nome }}</h1>
+  <nav class="chip-vista" aria-label="Cosa guardare su {{ piattaforma.nome }}">
+    <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=film"{% if mondo == "film" %} aria-current="page"{% endif %}>Film</a>
+    <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=serie"{% if mondo == "serie" %} aria-current="page"{% endif %}>Serie</a>
+    <details class="chip-menu">
+      <summary>Categorie <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
+      <div class="menu-categorie" id="menu-categorie"></div>
+    </details>
+  </nav>
 </div>
-<nav class="chip-vista" aria-label="Cosa guardare su {{ piattaforma.nome }}">
-  <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=serie"{% if mondo == "serie" %} aria-current="page"{% endif %}>Serie</a>
-  <a class="chip" href="{{ base }}/piattaforma/{{ piattaforma.id }}?mondo=film"{% if mondo == "film" %} aria-current="page"{% endif %}>Film</a>
-  <details class="chip chip-menu">
-    <summary>Categorie <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
-    <div class="menu-categorie" id="menu-categorie"></div>
-  </details>
-</nav>
-<div id="vista" class="righe vista" aria-busy="true"><p class="caricamento">Carico {{ piattaforma.nome }}…</p></div>
+<div id="vista" class="righe vista" aria-busy="true"><p class="caricamento">Carico {{ piattaforma.nome }}</p></div>
 {% endif %}
 {% endblock %}
 {% block script %}{% if piattaforma %}<script>avviaVista({{ piattaforma.id }}, "{{ mondo }}");</script>{% endif %}{% endblock %}

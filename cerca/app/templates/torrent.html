@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block titolo %}Aggiungi torrent{% endblock %}
 {% block contenuto %}
-<h1 class="titolo-pagina">Aggiungi un torrent</h1>
-<p class="sottotitolo">Il torrent va in qBittorrent con l'upload ridotto al minimo. Quando è finito lo metto in Jellyfin.</p>
+<h1 class="titolo-pagina"><span class="rivela"><span>Aggiungi un torrent</span></span></h1>
+<p class="sottotitolo">Il torrent va in qBittorrent con l'upload ridotto al minimo. Quando è finito lo metto in Jellyfin</p>
 
 <form id="form-torrent" class="modulo largo" enctype="multipart/form-data">
   <div class="blocco">
@@ -24,7 +24,7 @@
       Se non lo indichi provo a capirlo da solo, altrimenti te lo chiedo dopo.</p>
     <div class="cerca-film">
       <label for="cerca-film" class="nascosto">Titolo del film</label>
-      <input id="cerca-film" type="search" placeholder="Titolo del film…" autocomplete="off">
+      <input id="cerca-film" type="search" placeholder="Titolo del film" autocomplete="off">
       <button type="button" id="bottone-cerca-film" class="secondario">Cerca</button>
     </div>
     <div id="scelte-film" class="scelte"></div>

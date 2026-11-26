@@ -1,6 +1,6 @@
 # mediabox
 
-**mediabox** trasforma un PC in un media server per tutta la casa. Lo installi con un solo comando e poi apri un solo indirizzo nel browser: **http://mediabox.local**.
+**mediabox** trasforma un PC in un media server per tutta la casa. Lo installi con un solo comando e poi apri un solo indirizzo nel browser: **http://mediabox.local**. Lì trovi **Cerca**, l'app principale di mediabox; le tessere di tutti i servizi e lo stato del PC stanno nel **Pannello** (`http://mediabox.local:8081`).
 
 Con mediabox puoi:
 
@@ -60,9 +60,9 @@ Con mediabox puoi:
 | Righe della home: Top 10, appena usciti, per genere, Kids, *Di tendenza su Netflix / Prime Video / Disney+ / NOW…* (film e serie, in italiano) | [JustWatch](https://www.justwatch.com/it): quello che si guarda adesso sulle piattaforme in Italia |
 | Se JustWatch non risponde: film del momento, generi, originali delle piattaforme | la pagina *Scopri* di Radarr e [Wikidata](https://www.wikidata.org) |
 | Serie: ricerca e schede | [TVmaze](https://www.tvmaze.com) (titoli e trame in inglese) |
-| Dove vederlo in Italia | un link alla ricerca di [JustWatch](https://www.justwatch.com/it) |
+| Trailer delle anteprime | Radarr (solo i film) |
 
-**Chiave TMDB facoltativa.** Se la metti nelle impostazioni (`/impostazioni`, in fondo alla pagina), Cerca usa TMDB: ogni scheda mostra direttamente su quali servizi si guarda il film in Italia, le righe "Su Netflix" mostrano il catalogo italiano vero, le serie hanno titoli e trame in italiano e torna il pulsante "Avvisami se diventa gratis". La chiave è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*: vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se la togli, Cerca torna alle fonti gratuite.
+**Chiave TMDB facoltativa.** Se la metti nelle impostazioni (`/impostazioni`, in fondo alla pagina), Cerca usa TMDB: le righe "Su Netflix" mostrano il catalogo italiano vero, le serie hanno titoli e trame in italiano, i trailer arrivano anche per le serie (prima in italiano) e torna il pulsante "Avvisami se diventa gratis". La chiave è gratuita su [themoviedb.org](https://www.themoviedb.org/signup) → *Impostazioni → API*: vanno bene sia la **API Key** corta sia il **Read Access Token** lungo. Se la togli, Cerca torna alle fonti gratuite.
 
 ---
 
@@ -133,14 +133,14 @@ Per guardare film sulla TV di casa la transcodifica di solito non serve, perché
 
 ## Primi passi
 
-Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato alla rete di casa. Se non si apre, usa l'indirizzo IP mostrato nel riepilogo, ad esempio `http://192.168.1.50`.
+Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato alla rete di casa: si apre **Cerca**, la pagina principale di mediabox. Se non si apre, usa l'indirizzo IP mostrato nel riepilogo, ad esempio `http://192.168.1.50`.
 
-![Pagina iniziale](docs/pagina-iniziale.png)
+![Cerca, la pagina principale di mediabox](docs/cerca-home.png)
 
 | Pagina | Indirizzo | Password? |
 |---|---|---|
-| Pagina iniziale | `/` | no |
-| Cerca un film | `/cerca` | no |
+| Cerca *(la pagina principale)* | `/` | no |
+| Pannello *(tessere dei servizi e stato del PC)* | `:8081`, cioè `http://mediabox.local:8081` | no |
 | Jellyfin | `/jellyfin` | utente e password di Jellyfin |
 | qBittorrent | `/qbit` | sì (amministrazione) |
 | Radarr | `/radarr` | sì |
@@ -153,9 +153,11 @@ Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato a
 
 L'utente è sempre **admin** e la password è quella che hai scelto durante l'installazione.
 
+In Cerca il **Pannello** è l'ultima voce in alto (sul telefono: **Altro → Pannello**); nel Pannello la prima tessera, **Torna a Cerca**, ti riporta indietro. I vecchi indirizzi `http://mediabox.local/cerca/...` continuano a funzionare: portano alla stessa pagina di Cerca.
+
 ### 1. Aggiungi i tuoi indexer (una volta sola)
 
-Apri **Prowlarr** dalla pagina iniziale, vai su *Indexer → Aggiungi indexer* e aggiungi quelli che usi. Prowlarr li passa da solo a Radarr e a Cerca. Senza indexer, Cerca mostra comunque la disponibilità legale e Internet Archive.
+Apri **Prowlarr** dal Pannello, vai su *Indexer → Aggiungi indexer* e aggiungi quelli che usi. Prowlarr li passa da solo a Radarr e a Cerca. Senza indexer, Cerca mostra comunque la disponibilità legale e Internet Archive.
 
 ### 2. Collega la TV
 
@@ -177,7 +179,21 @@ In alto scegli il **mondo**: **Film**, **Serie TV**, **Kids** o **Musica**. Ogni
 - **Kids**: solo cartoni e film per famiglie, con locandine più grandi e generi adatti ai bambini. In Kids non si scarica nulla e il menu sparisce: si esce solo con **"Esci da Kids"** in alto a destra. Il PC o la TV restano in Kids finché non premi quel pulsante;
 - **Musica**: suggerimenti di artisti e tendenze.
 
-Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Kids, mediabox). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
+Sul telefono il menu è in basso: Home, Download, Spazio e Altro (Aggiungi torrent, Controllo servizi, Kids, Pannello). Con il telecomando della TV ti sposti con le frecce: l'elemento scelto ha un bordo bianco ben visibile.
+
+### Come è fatta
+
+Cerca ha un aspetto suo, "il salotto la sera": sfondo scuro caldo, un solo colore d'accento (il giallo della lampada) per **Scarica**, l'avanzamento e il N° 1, e le locandine che portano tutto il resto del colore. I caratteri sono Atkinson Hyperlegible, scelto perché si legge bene anche dal divano, e Instrument Serif per i titoli grandi.
+
+Al posto delle emoji ogni stato ha una **piccola animazione** che spiega cosa succede: la freccia che scende nel vassoio mentre scarica, la clessidra che si gira in coda, la lente che cerca, il quadro che entra in Jellyfin, il segno di spunta che si disegna quando è pronto. Si muovono di continuo solo le cose vive (un download che scarica); conferme ed errori si disegnano una volta. La barra di avanzamento dei download è una **pellicola** che scorre. Se nel telefono o nel PC hai attivato *Riduci movimento*, Cerca resta ferma e mostra subito lo stato finale.
+
+I tasti che tolgono qualcosa (**Annulla** un download, **Libera spazio**, annullare una stagione) si confermano **tenendoli premuti**: il tasto si riempie e, se lasci prima, non succede niente. Funziona anche col telecomando: tieni premuto OK.
+
+### Anteprime dei trailer
+
+Come nelle app di streaming: se ti fermi un attimo su una locandina, col mouse o col telecomando, la scheda si allarga e parte il **trailer senza audio**; spostandoti si ferma. Anche il titolo in evidenza in cima alla home e alle piattaforme fa partire il suo trailer dopo qualche secondo, con un tasto per l'audio. Sul telefono, dove non si "passa sopra", c'è il tasto **Trailer** nella vetrina e nella scheda del film, che apre il trailer grande con l'audio.
+
+I trailer sono video di YouTube (in modalità senza cookie) e partono uno alla volta, solo quando servono. Con la chiave TMDB ci sono per film e serie, prima in italiano; senza chiave li fornisce Radarr, solo per i film. Se un titolo non ha un trailer, la locandina resta com'è.
 
 ![Pagina iniziale di Cerca](docs/cerca-home.png)
 
@@ -188,7 +204,7 @@ Sotto la ricerca c'è la **fila dei generi** (Azione, Commedia, Horror…): tocc
 Poi, riga per riga:
 
 1. **Perché ti piace: …** — due righe di consigli scelti in base ai generi di quello che hai visto (o messo tra i preferiti) in Jellyfin. I titoli che hai già non te li ripropone. Finché non hai visto nulla trovi "Da non perdere: Commedia / Azione" (per le serie: Dramma / Crime);
-2. **Top 10 della settimana**, con i numeri grandi;
+2. **Top 10 della settimana**, con il posto in un piccolo numero sulla locandina;
 3. **Appena usciti**: i 10 titoli più visti usciti negli ultimi due mesi (film nei cinema italiani, serie nuove);
 4. **Su Netflix, Su Prime Video, Su Disney+…**: una riga per ogni piattaforma che hai, con i titoli più visti in Italia inclusi nell'abbonamento (o gratis). Le scegli con il pulsante **Scegli le tue piattaforme** in fondo alla home, fino a 6: Netflix, Prime Video, Disney+, NOW, Apple TV+, Crunchyroll, RaiPlay e le altre disponibili in Italia. *Vedi tutti* apre la pagina della piattaforma. Sono titoli da guardare nell'app della piattaforma: mediabox non li scarica. Senza chiave TMDB le righe dei film diventano *Originali Netflix*, *Originali Prime Video*… (i film prodotti o distribuiti dalla piattaforma negli ultimi 3 anni) e quelle delle serie mostrano le serie con episodi usciti in questi giorni;
 5. **Continua a guardare**: quello che hai lasciato a metà in Jellyfin, con la barra di quanto hai visto (per le serie anche il prossimo episodio). Toccalo e riparte in Jellyfin.
@@ -199,20 +215,17 @@ I consigli e "Continua a guardare" usano l'utente amministratore di Jellyfin cre
 
 1. Scrivi il titolo e premi **Cerca**.
 2. Scegli il film giusto dalle locandine.
-3. Nella scheda del film compaiono tre sezioni, che si caricano insieme:
-   - **Dove vederlo legalmente in Italia**: servizi gratis con pubblicità, abbonamenti, noleggio e acquisto. I dati vengono da JustWatch.
-   - **Internet Archive**: le versioni trovate, con la **migliore** in cima. Viene scelta la risoluzione più alta e il file originale invece delle copie compresse. **Scarica** salva il file direttamente; **Via torrent** usa il torrent ufficiale di Archive. Molti film su Archive sono di pubblico dominio: controlla sempre la licenza nella pagina dell'item.
-   - **Indexer (Prowlarr)**: i risultati dei tuoi indexer, con dimensione, seed e peer. **Scarica** manda il torrent a qBittorrent.
-4. Segui l'avanzamento nella pagina **Download**. A download finito mediabox passa il film a Radarr, che lo rinomina e lo mette nella libreria **Film** di Jellyfin con la locandina. Lo stato diventa **"Pronto in Jellyfin"**.
+3. Nella scheda del film premi **Scarica**: mediabox sceglie da solo la versione migliore (prima in italiano), la scarica e la mette in Jellyfin con i sottotitoli. Il tasto lascia il posto allo stato: cerco, in coda, in download con la pellicola che avanza, pronto. Nella stessa scheda ci sono **Trailer** e, con la chiave TMDB, **Avvisami se diventa gratis**.
+4. Segui l'avanzamento nella pagina **Download**: in cima c'è quello che sta scaricando adesso, con la velocità dal vivo; sotto, una locandina per ogni film o serie con il suo stato. Tocca una locandina per vedere i singoli file. A download finito mediabox passa il film a Radarr, che lo rinomina e lo mette nella libreria **Film** di Jellyfin con la locandina. Lo stato diventa **"Pronto in Jellyfin"**.
 
 ### Cerca come app sul telefono
 
 Puoi mettere Cerca nella schermata Home del telefono: si apre a tutto schermo, con la sua icona, come un'app.
 
-- **iPhone (Safari)**: apri `http://mediabox.local/cerca`, premi **Condividi** (il quadrato con la freccia) e poi **Aggiungi alla schermata Home**.
+- **iPhone (Safari)**: apri `http://mediabox.local`, premi **Condividi** (il quadrato con la freccia) e poi **Aggiungi alla schermata Home**.
 - **Android (Chrome)**: apri lo stesso indirizzo, premi **⋮** e poi **Aggiungi a schermata Home** (oppure **Installa app**).
 
-Se `mediabox.local` sul telefono non funziona, usa l'indirizzo IP (es. `http://192.168.1.50/cerca`), oppure quello di Tailscale per usarla anche fuori casa.
+Se `mediabox.local` sul telefono non funziona, usa l'indirizzo IP (es. `http://192.168.1.50`), oppure quello di Tailscale per usarla anche fuori casa.
 
 Su Android, con un indirizzo `http://` la scorciatoia si apre nel browser. Si apre a tutto schermo solo con un indirizzo `https://`, per esempio quello HTTPS di Tailscale. Su iPhone si apre a tutto schermo in entrambi i casi.
 
@@ -220,7 +233,7 @@ Su Android, con un indirizzo `http://` la scorciatoia si apre nel browser. Si ap
 
 Serve la chiave TMDB facoltativa: senza, il pulsante non compare.
 
-Nella scheda di un film premi **"Avvisami se diventa disponibile gratis"**. Ogni giorno mediabox controlla se il film è comparso tra i servizi gratuiti con pubblicità, come Pluto TV o Rakuten TV:
+Nella scheda di un film premi **"Avvisami se diventa gratis"** (la campanella suona). Ogni giorno mediabox controlla se il film è comparso tra i servizi gratuiti con pubblicità, come Pluto TV o Rakuten TV:
 
 - appena succede, lo trovi in evidenza nella pagina di Cerca;
 - se hai configurato ntfy, ricevi anche una notifica sul telefono.
@@ -252,7 +265,7 @@ qBittorrent è impostato in modo fisso così:
 
 ### Le piattaforme (Netflix, Prime Video, Disney+, NOW…)
 
-Sotto la ricerca trovi una fila con le piattaforme. Toccane una: si apre la sua "home", con in alto il titolo più visto di oggi, la **Top 10** con i numeri grandi, le **novità** e una riga per genere (drammatici, azione, commedia, famiglie…). In alto scegli **Serie** o **Film**, e da **Categorie** salti direttamente a un genere. Le etichette **TOP 10** e **Aggiunto di recente** dicono cosa è in classifica e cosa è appena arrivato. I titoli vengono da JustWatch e sono quelli che si guardano adesso in Italia su quella piattaforma.
+Sotto la ricerca trovi una fila con le piattaforme, ognuna col suo logo. Toccane una: un cerchio del suo colore si apre dal tasto e Cerca **prende i colori di quella piattaforma** (il nero e rosso di Netflix, il blu di Prime Video, di Disney+ e di RaiPlay…): cambiano solo i colori e il logo, il resto resta Cerca. Si apre la sua "home", con in alto il titolo più visto di oggi su tutta la larghezza, la **Top 10**, le **novità** e una riga per genere (drammatici, azione, commedia, famiglie…). In alto scegli **Film** o **Serie**, e da **Categorie** salti direttamente a un genere. L'etichetta **Aggiunto di recente** dice cosa è appena arrivato. Per tornare ai colori di Cerca premi **Indietro** o il logo. I titoli vengono da JustWatch e sono quelli che si guardano adesso in Italia su quella piattaforma.
 
 Cerca si ricorda l'ultima home che hai visto: quando la riapri compare subito, e si aggiorna in sottofondo solo se nel frattempo è cambiato qualcosa (al massimo ogni 10 minuti).
 
@@ -327,7 +340,7 @@ Se il PC ha meno di 6 GB di memoria, l'installer spegne da solo i programmi più
 
 ## Cambiare le scelte dopo l'installazione
 
-Apri **`http://mediabox.local/impostazioni`**: la trovi anche nella pagina iniziale, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Il tasto **Salva e applica** si accende solo quando cambi qualcosa. mediabox rifà solo quello che usa le voci cambiate (per esempio le lingue dell'audio aggiornano solo Radarr e Sonarr, la chiave TMDB riavvia solo Cerca); gli altri programmi non si toccano. La pagina dice cosa rifà e mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.
+Apri **`http://mediabox.local/impostazioni`**: la trovi anche nel Pannello, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Il tasto **Salva e applica** si accende solo quando cambi qualcosa. mediabox rifà solo quello che usa le voci cambiate (per esempio le lingue dell'audio aggiornano solo Radarr e Sonarr, la chiave TMDB riavvia solo Cerca); gli altri programmi non si toccano. La pagina dice cosa rifà e mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.
 
 Le modifiche le applica un servizio di sistema (su Linux `mediabox-impostazioni.path`, su Windows l'attività pianificata *mediabox - impostazioni dal browser*). Su un sistema senza systemd scrivi `mediabox applica-impostazioni` dopo aver salvato.
 
@@ -364,13 +377,13 @@ Se disattivi un servizio, le sue impostazioni restano salvate: riattivandolo rit
 
 Ogni programma ha un **controllo di salute**: ogni 30 secondi dice se risponde. Se non risponde per un minuto e mezzo, il **custode** (un servizio minuscolo: 1 MB di memoria) lo riavvia da solo, e in circa due minuti torna a funzionare. Per Jellyfin, che all'accensione è lento, il controllo aspetta 10 minuti prima di cominciare.
 
-Quando il PC è al massimo, i programmi che usi tu (Cerca, Jellyfin, la pagina iniziale) hanno la precedenza sui lavori in sottofondo (Radarr, Sonarr, Prowlarr, qBittorrent, Bazarr, FlareSolverr). Con il PC libero non cambia niente.
+Quando il PC è al massimo, i programmi che usi tu (Cerca, Jellyfin, il Pannello) hanno la precedenza sui lavori in sottofondo (Radarr, Sonarr, Prowlarr, qBittorrent, Bazarr, FlareSolverr). Con il PC libero non cambia niente.
 
-### Nella pagina iniziale
+### Nel Pannello
 
-In alto trovi sempre processore, memoria, temperatura e **spazio libero sul disco dei film**.
+Il **Pannello** (`http://mediabox.local:8081`, da Cerca: voce *Pannello*) è la vecchia pagina iniziale: le tessere di tutti i servizi, con i numeri dal vivo dei download, e in alto processore, memoria e **spazio libero sul disco dei film**.
 
-![Pagina iniziale con lo stato del PC](docs/pagina-iniziale.png)
+![Il Pannello con lo stato del PC](docs/pagina-iniziale.png)
 
 ### Avviso e pulizia automatica
 
@@ -390,7 +403,7 @@ I film e gli episodi tolti non vengono riscaricati: Radarr e Sonarr smettono di 
 
 Se dopo la pulizia lo spazio è ancora poco, ricevi un avviso sul telefono (ntfy) e in Cerca compare un riquadro rosso.
 
-Nella pagina **Spazio** di Cerca vedi cosa si potrebbe liberare, puoi lanciare la pulizia a mano con **"Libera spazio adesso"** e trovi l'elenco di tutto quello che è stato tolto.
+Nella pagina **Spazio** di Cerca una lancetta mostra quanto disco è usato, con in rosso la zona in cui parte la pulizia automatica. Sotto vedi cosa si potrebbe liberare, puoi lanciare la pulizia a mano tenendo premuto **"Libera"** e trovi l'elenco di tutto quello che è stato tolto. La pagina **Controllo servizi** ricorda, in questo browser, gli ultimi controlli di ogni servizio con una fila di barrette: si vede subito se un servizio "va e viene".
 
 ![Pagina Spazio](docs/cerca-spazio.png)
 
@@ -663,7 +676,8 @@ lib/                          funzioni comuni bash e PowerShell, servizio avahi
 configuratore/                container Python che fa il lavoro vero:
   configuratore/templates/      modelli di docker-compose, Caddyfile, Homepage
   configuratore/servizi/        configurazione via API di ogni servizio
-cerca/                        il servizio Cerca (FastAPI) + test
+cerca/                        il servizio Cerca (FastAPI) + test, la pagina principale
+  cerca/app/static/movimento.js animazioni e componenti animati (GSAP, in vendor/)
 .env.example                  tutte le impostazioni, con spiegazioni
 ```
 
@@ -684,6 +698,8 @@ I test di `cerca/tests/test_scelta_archive.py` usano metadati reali di Internet 
 ### Componenti usati
 
 Alcune idee (Bazarr, FlareSolverr, anime, menu delle scelte) vengono dal progetto [media-server-setup](https://github.com/Hikki-dev/media-server-setup).
+
+L'aspetto di Cerca è stato ridisegnato con il metodo [unslop](https://github.com/heydamir/unslop) di Damir Sokolovsky ([@heydamir](https://x.com/heydamir), CC BY 4.0). Le animazioni seguono il modo di lavorare di [OpenMotion](https://github.com/nexu-io/openmotion) (timeline [GSAP](https://gsap.com), linee che si disegnano, titoli che compaiono da una maschera); alcuni componenti sono rifatti senza React a partire da [kokonutui](https://github.com/kokonut-labs/kokonutui) (tieni premuto per confermare, campanella, schede con l'indicatore che scorre, avvisi, barre dei controlli) e da [bklit-ui](https://github.com/bklit/bklit-ui) (la lancetta del disco e la linea della velocità). I dettagli e le licenze sono in `cerca/app/static/vendor/CREDITI.md`.
 
 [Jellyfin](https://jellyfin.org), [qBittorrent](https://www.qbittorrent.org), [Radarr](https://radarr.video), [Prowlarr](https://prowlarr.com), [Sonarr](https://sonarr.tv), [Lidarr](https://lidarr.audio), [Bazarr](https://www.bazarr.media), [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr), [TVHeadend](https://tvheadend.org), [Caddy](https://caddyserver.com), [Homepage](https://gethomepage.dev), [Intro Skipper](https://github.com/intro-skipper/intro-skipper). I dati dei film vengono da [TMDB](https://www.themoviedb.org) e quelli sulla disponibilità da [JustWatch](https://www.justwatch.com). Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
 

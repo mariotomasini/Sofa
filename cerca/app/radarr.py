@@ -53,6 +53,11 @@ class Radarr:
         elenco = await self._r("GET", "movie", params={"tmdbId": tmdb_id})
         return elenco[0] if elenco else None
 
+    async def trailer(self, tmdb_id: int) -> str:
+        """Il trailer su YouTube che Radarr conosce per il film (funziona anche senza chiave TMDB)."""
+        dati = await self._r("GET", "movie/lookup/tmdb", params={"tmdbId": tmdb_id})
+        return (dati or {}).get("youTubeTrailerId") or ""
+
     async def aggiungi_film(self, tmdb_id: int) -> dict:
         esistente = await self.film(tmdb_id)
         if esistente:

@@ -63,7 +63,7 @@ class Avvisami:
                 log.info("Controllo di %s saltato: %s", voce["titolo"], exc.cosa)
                 continue
             gratis = provider["gratis"]
-            link = f"{self.config.indirizzo_pubblico}/cerca/film/{voce['tmdb_id']}"
+            link = f"{self.config.indirizzo_pubblico}{self.config.root_path}/film/{voce['tmdb_id']}"
             if gratis and not voce["gratis_dal"]:
                 nuovi += 1
                 inviata = await self.notifica(

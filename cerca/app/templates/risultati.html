@@ -12,7 +12,7 @@
 {% endif %}
 
 {% if film %}
-<h1 class="titolo-pagina">{{ "Quale serie intendi?" if mondo == "serie" else "Quale film intendi?" }}</h1>
+<h1 class="titolo-pagina" style="margin-top:24px"><span class="rivela"><span>{{ "Quale serie intendi?" if mondo == "serie" else "Quale film intendi?" }}</span></span></h1>
 <div class="griglia">
   {% for f in film %}
   {% if mondo == "serie" %}
@@ -23,8 +23,9 @@
   {% else %}
   {% set link = base ~ "/film/" ~ f.id %}
   {% endif %}
-  <{{ 'a' if link else 'div' }} class="scheda"{% if link %} href="{{ link }}"{% endif %}{% if link and mondo == "serie" %} data-serie="{{ dati_serie | tojson | forceescape }}"{% endif %}{% if not link %} tabindex="0"{% endif %}>
-    {% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}
+  {% set trailer = ("tv:" ~ f.id if f.generi_tvmaze is not defined else "") if mondo == "serie" else "movie:" ~ f.id %}
+  <{{ 'a' if link else 'div' }} class="scheda"{% if link %} href="{{ link }}"{% endif %}{% if link and mondo == "serie" %} data-serie="{{ dati_serie | tojson | forceescape }}"{% endif %}{% if trailer %} data-trailer="{{ trailer }}"{% endif %}{% if not link %} tabindex="0"{% endif %}>
+    <span class="poster">{% if f.poster %}<img src="{{ f.poster }}" alt="" loading="lazy">{% else %}<span class="senza-poster"><span class="titolo">{{ f.titolo }}</span><span class="anno">{{ f.anno }}</span></span>{% endif %}</span>
     <span class="titolo">{{ f.titolo }}</span>
     <span class="anno">{{ f.anno or "anno sconosciuto" }}{% if f.titolo_originale and f.titolo_originale != f.titolo %} · {{ f.titolo_originale }}{% endif %}</span>
   </{{ 'a' if link else 'div' }}>
