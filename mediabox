@@ -123,7 +123,8 @@ restore() {
 
 remote() {
   titolo "Accesso da fuori casa con Tailscale"
-  local ip link
+  # link vuoto all'inizio: con "set -u" una variabile mai assegnata fermerebbe lo script
+  local ip="" link="" indirizzo porta
   if ! tailscale_sul_pc; then
     # Tailscale è un servizio di mediabox: si installa e si aggiorna da solo
     aggiorna_ip
@@ -161,10 +162,13 @@ remote() {
   fi
   impedisci_sospensione
   scrivi_env TAILSCALE_IP "$ip" "$ENV_FILE"
-  ok "Tailscale attivo. Indirizzo di mediabox da fuori casa: http://$ip"
+  porta="$(leggi_env HTTP_PORT "$ENV_FILE")"
+  indirizzo="http://$ip"
+  [[ -z "$porta" || "$porta" == 80 ]] || indirizzo="$indirizzo:$porta"
+  ok "Tailscale attivo. Indirizzo di mediabox da fuori casa: $indirizzo"
   echo
   echo "  Sul telefono installa l'app Tailscale, accedi con lo stesso account,"
-  echo "  poi apri http://$ip nel browser (o http://$ip/jellyfin nell'app Jellyfin)."
+  echo "  poi apri $indirizzo nel browser (o $indirizzo/jellyfin nell'app Jellyfin)."
   echo "  Non serve aprire nessuna porta sul router."
 }
 

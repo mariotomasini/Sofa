@@ -460,15 +460,20 @@ services:
     image: "{{ IMG_TAILSCALE | default('ghcr.io/tailscale/tailscale:v1.104.4') }}"
     restart: unless-stopped
     network_mode: host
+    init: true
     cap_add: [NET_ADMIN, NET_RAW]
     devices:
       - /dev/net/tun:/dev/net/tun
-    environment:
-      TS_HOSTNAME: mediabox
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_USERSPACE: "false"
-      TS_SOCKET: /var/run/tailscale/tailscaled.sock
-      TS_AUTH_ONCE: "true"
+    # tailscaled avviato direttamente: l'avvio standard dell'immagine (containerboot) aspetta
+    # l'accesso solo 60 secondi, poi si spegne e riparte con un link nuovo, e quello aperto nel
+    # browser non vale più. Così il link resta valido finché non accedi. "tailscale up" riprova
+    # finché tailscaled non risponde; con l'accesso già fatto torna subito.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        (until tailscale --socket=/var/run/tailscale/tailscaled.sock up --reset --timeout=0 \
+            --hostname=mediabox --accept-dns=false; do sleep 5; done) &
+        exec tailscaled --statedir=/var/lib/tailscale --socket=/var/run/tailscale/tailscaled.sock
     volumes:
       - tailscale_stato:/var/lib/tailscale
       - /var/run/tailscale:/var/run/tailscale
