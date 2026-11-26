@@ -696,6 +696,7 @@ class JellyfinFinto:
     def __init__(self, utenti):
         self.utenti = utenti
         self.politiche = {}
+        self.password_tolte = []
 
     def get(self, percorso, cosa, **kw):
         from types import SimpleNamespace
@@ -709,6 +710,9 @@ class JellyfinFinto:
             self.utenti.append(nuovo)
             return SimpleNamespace(json=lambda: dict(nuovo, Policy=dict(nuovo["Policy"])))
         id_utente = percorso.split("/")[2]
+        if percorso.endswith("/Password"):
+            self.password_tolte.append(id_utente)
+            return SimpleNamespace(json=lambda: {})
         self.politiche[id_utente] = kw["json"]
         return SimpleNamespace(json=lambda: {})
 
@@ -718,7 +722,7 @@ def test_utenti_di_casa_jellyfin():
 
     jf = JellyfinFinto([
         {"Id": "a1", "Name": "admin", "Policy": {"IsAdministrator": True, "IsHidden": False}},
-        {"Id": "m1", "Name": "mario", "Policy": {"IsAdministrator": False, "IsHidden": True}},
+        {"Id": "m1", "Name": "mario", "HasPassword": True, "Policy": {"IsAdministrator": False, "IsHidden": True}},
     ])
     imp = Impostazioni({"UTENTI_CASA": "Mario, Anna,anna, admin ,"})
     assert imp.utenti_casa == ["Mario", "Anna"]
@@ -726,10 +730,12 @@ def test_utenti_di_casa_jellyfin():
     # Anna creata, visibile sulla TV, non amministratrice; Mario (già c'era) reso visibile
     assert jf.politiche["id-Anna"]["IsHidden"] is False and jf.politiche["id-Anna"]["IsAdministrator"] is False
     assert jf.politiche["m1"]["IsHidden"] is False
+    # Mario aveva una password: tolta, gli utenti di casa entrano senza
+    assert jf.password_tolte == ["m1"]
     # l'amministratore sparisce dalla schermata della TV
     assert jf.politiche["a1"]["IsHidden"] is True and jf.politiche["a1"]["IsAdministrator"] is True
     # la seconda volta non cambia niente
-    jf.utenti = [dict(u, Policy={**u["Policy"], **jf.politiche.get(u["Id"], {})}) for u in jf.utenti]
+    jf.utenti = [dict(u, HasPassword=False, Policy={**u["Policy"], **jf.politiche.get(u["Id"], {})}) for u in jf.utenti]
     jf.politiche = {}
     utenti_di_casa(jf, imp)
     assert jf.politiche == {}

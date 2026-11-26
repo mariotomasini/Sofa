@@ -111,13 +111,20 @@ def test_utente_senza_password_entra_e_non_vede_il_pannello(tmp_path):
     assert ":8081" not in pagina
 
 
-def test_password_sbagliata_e_giusta(tmp_path):
+def test_utenti_di_casa_sempre_senza_password_solo_admin_la_chiede(tmp_path):
     c = cliente(tmp_path)
-    r = c.post("/chi-guarda", data={"id": ANNA, "password": "no"})
-    assert r.status_code == 401 and "Password sbagliata" in r.text and COOKIE not in r.cookies
-    r = c.post("/chi-guarda", data={"id": ANNA, "password": "anna1234"})
+    # Anna in Jellyfin ha una password, ma in Cerca gli utenti di casa entrano senza
+    assert "Password di Anna" not in c.get("/chi-guarda").text
+    r = c.post("/chi-guarda", data={"id": ANNA})
     assert r.status_code == 303
     assert app.state.servizi.accesso.leggi(r.cookies[COOKIE])["nome"] == "Anna"
+    # l'amministratore invece sì
+    r = c.post("/chi-guarda", data={"id": ADMIN, "password": "no"})
+    assert r.status_code == 401 and "Password sbagliata" in r.text and COOKIE not in r.cookies
+    r = c.post("/chi-guarda", data={"id": ADMIN, "password": "no"}, headers={"X-Cerca": "accesso"})
+    assert r.status_code == 401 and r.json()["errore"].startswith("Password sbagliata")
+    r = c.post("/chi-guarda", data={"id": MARIO}, headers={"X-Cerca": "accesso"})
+    assert r.json() == {"vai": "/"} and COOKIE in r.cookies
 
 
 def test_admin_vede_il_pannello(tmp_path):
@@ -174,3 +181,15 @@ def test_continua_a_guardare_segue_chi_guarda(tmp_path):
     percorsi = [r.url.path for r in richieste if r.url.path.endswith("/Items/Resume")]
     # prima Anna, poi senza nessuno l'utente di Cerca (l'amministratore)
     assert percorsi == [f"/Users/{ANNA}/Items/Resume", f"/Users/{ADMIN}/Items/Resume"]
+
+
+def test_niente_giri_infiniti_con_il_root_path_di_uvicorn(tmp_path):
+    """Nel container uvicorn parte con --root-path /cerca: "Chi guarda?" deve aprirsi lo stesso."""
+    app.state.servizi = servizi_finti(tmp_path, [])
+    c = TestClient(app, follow_redirects=False, root_path="/cerca")
+    r = c.get("/chi-guarda")
+    assert r.status_code == 200 and "Chi guarda?" in r.text
+    r = c.get("/serie")
+    assert r.status_code == 303 and r.headers["location"] == "/chi-guarda?dopo=%2Fserie"
+    assert c.get("/static/style.css").status_code not in (303, 401)  # gli statici non chiedono chi guarda
+    assert c.get("/api/home").status_code == 401

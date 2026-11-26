@@ -1,7 +1,7 @@
 """Chi guarda: ogni persona di casa entra in Cerca con il suo utente di Jellyfin.
 
-- Gli utenti di casa (non amministratori) scelgono la loro faccia; se hanno una
-  password, la scrivono. "Continua a guardare" e i consigli seguono quell'utente.
+- Gli utenti di casa (non amministratori) scelgono la loro faccia, senza password.
+  "Continua a guardare" e i consigli seguono quell'utente.
 - L'amministratore serve per la configurazione: entra con la password e solo lui
   vede il Pannello.
 

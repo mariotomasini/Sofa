@@ -876,10 +876,17 @@ body[data-tema] .logo-segno { color: var(--lampada); }
   .scheda:hover .poster > img, .in-anteprima > .poster, .in-anteprima > .poster-top { transform: none; }
 }
 
-/* --- Chi guarda? ------------------------------------------------------------------ */
-.chi-guarda { max-width: 900px; margin: clamp(24px, 6vh, 72px) auto 0; text-align: center; }
+/* --- Chi guarda? ------------------------------------------------------------------
+   Le facce come cuscini del divano sotto la lampada: una luce calda dietro, l'anello che si
+   disegna intorno a quella scelta (OpenMotion: linee che si disegnano), il nome che si accende. */
+.chi-guarda { position: relative; max-width: 900px; margin: clamp(24px, 6vh, 72px) auto 0; text-align: center; isolation: isolate; }
 .chi-guarda .titolo-pagina { margin-bottom: 32px; }
 .chi-guarda .errore { text-align: left; max-width: 480px; margin: 0 auto 24px; }
+.luce-salotto {
+  position: absolute; z-index: -1; left: 50%; top: -60px; width: min(760px, 120vw); aspect-ratio: 1.6;
+  transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(closest-side, rgb(242 180 90 / .16), rgb(242 180 90 / .05) 55%, transparent);
+}
 .profili { list-style: none; padding: 0; margin: 0 0 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(16px, 3vw, 32px); }
 .profilo { margin: 0; }
 .profilo > summary, .tasto-profilo {
@@ -889,25 +896,78 @@ body[data-tema] .logo-segno { color: var(--lampada); }
 }
 .profilo > summary::-webkit-details-marker { display: none; }
 .tasto-profilo:hover:not(:disabled) { background: transparent; }
+.tasto-profilo:active:not(:disabled) { transform: none; }
 .faccia {
-  display: grid; place-items: center; width: clamp(96px, 14vw, 132px); aspect-ratio: 1; border-radius: var(--r-l);
-  background: var(--rialzo); border: 1px solid var(--linea-2); color: var(--lampada);
-  font: 400 clamp(2.4rem, 5vw, 3.2rem)/1 var(--serif); transition: transform .2s var(--curva), border-color .2s;
+  position: relative; display: grid; place-items: center; width: clamp(96px, 14vw, 132px); aspect-ratio: 1; border-radius: var(--r-l);
+  background: linear-gradient(160deg, var(--rialzo-2), var(--rialzo) 60%, var(--carta));
+  border: 1px solid var(--linea-2); color: var(--lampada);
+  font: 400 clamp(2.4rem, 5vw, 3.2rem)/1 var(--serif);
+  box-shadow: 0 1px 0 rgb(255 255 255 / .05) inset, 0 14px 30px -18px rgb(0 0 0 / .8);
+  transition: transform .35s var(--curva), box-shadow .35s var(--curva), border-color .25s;
+}
+.faccia .lettere { position: relative; transition: transform .35s var(--curva), text-shadow .35s; }
+/* l'anello: un tratto della lampada che si disegna intorno alla faccia */
+.faccia .anello { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); overflow: visible; pointer-events: none; }
+.faccia .anello rect {
+  fill: none; stroke: var(--lampada); stroke-width: 1.6;
+  stroke-dasharray: 1 2; stroke-dashoffset: 1; transition: stroke-dashoffset .55s var(--curva);
 }
 .profilo > summary:hover .faccia, .tasto-profilo:hover .faccia,
-.profilo > summary:focus-visible .faccia, .tasto-profilo:focus-visible .faccia,
-.profilo[open] .faccia { border-color: var(--testo); transform: scale(1.05); }
+.profilo > summary:focus-visible .faccia, .tasto-profilo:focus-visible .faccia, .profilo[open] .faccia {
+  transform: translateY(-4px) scale(1.05); border-color: transparent;
+  box-shadow: 0 1px 0 rgb(255 255 255 / .06) inset, 0 22px 40px -18px rgb(242 180 90 / .45);
+}
+.profilo > summary:hover .lettere, .tasto-profilo:hover .lettere,
+.profilo > summary:focus-visible .lettere, .tasto-profilo:focus-visible .lettere, .profilo[open] .lettere {
+  transform: scale(1.08); text-shadow: 0 0 24px rgb(242 180 90 / .55);
+}
+.profilo > summary:hover .anello rect, .tasto-profilo:hover .anello rect,
+.profilo > summary:focus-visible .anello rect, .tasto-profilo:focus-visible .anello rect, .profilo[open] .anello rect { stroke-dashoffset: 0; }
+/* col telecomando il fuoco si vede sempre: l'anello è il fuoco */
 .profilo > summary:focus-visible, .tasto-profilo:focus-visible { outline: none; }
-.profilo > summary:focus-visible .faccia, .tasto-profilo:focus-visible .faccia { outline: var(--focus); outline-offset: 4px; }
-.nome-profilo { font-size: 1.05rem; }
-.profilo > summary:hover .nome-profilo, .tasto-profilo:hover .nome-profilo, .profilo[open] .nome-profilo { color: var(--testo); }
+.nome-profilo { font-size: 1.05rem; transition: color .25s; }
+.profilo > summary:hover .nome-profilo, .tasto-profilo:hover .nome-profilo,
+.profilo > summary:focus-visible .nome-profilo, .tasto-profilo:focus-visible .nome-profilo, .profilo[open] .nome-profilo { color: var(--testo); }
 .password-profilo { display: flex; gap: 8px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
 .password-profilo input { width: min(220px, 100%); }
+.password-profilo input.sbagliata { border-color: var(--rosso); }
+.msg-profilo { flex-basis: 100%; margin: 0; min-height: 1.2em; font-size: .88rem; color: var(--rosso); display: flex; gap: 6px; align-items: center; justify-content: center; }
+.msg-profilo:empty { display: none; }
+.msg-profilo .ia { width: 18px; height: 18px; }
 .senza-profili { max-width: 560px; margin: 0 auto 40px; text-align: left; }
 .accesso-admin { max-width: 420px; margin: 0 auto; text-align: left; border-top: 1px solid var(--linea); padding-top: 16px; }
 .accesso-admin > summary { cursor: pointer; color: var(--testo-2); padding: 8px 0; }
 .accesso-admin .modulo { gap: 10px; margin-top: 8px; }
 .accesso-admin .password-profilo { flex-direction: column; justify-content: flex-start; }
 .accesso-admin .password-profilo input, .accesso-admin select { width: 100%; }
-.faccia.piccola { display: inline-grid; width: 26px; border-radius: 8px; font-size: 1rem; margin-right: 8px; vertical-align: middle; transition: none; }
+.accesso-admin .msg-profilo { justify-content: flex-start; }
+
+/* passaggio dopo la scelta: la faccia resta sotto la lampada e saluta */
+.benvenuto {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-content: center; justify-items: center; gap: 18px;
+  background: rgb(22 21 19); pointer-events: none;
+}
+.benvenuto .luce {
+  position: absolute; left: 50%; top: 50%; width: min(720px, 130vw); aspect-ratio: 1.4;
+  translate: -50% -62%; background: radial-gradient(closest-side, rgb(242 180 90 / .2), transparent);
+}
+.benvenuto .faccia { width: 132px; font-size: 3.4rem; transform: none; }
+.benvenuto .faccia .anello rect { stroke-dashoffset: 0; transition: none; }
+.benvenuto .saluto { position: relative; font: 400 clamp(1.8rem, 4vw, 2.4rem)/1.1 var(--serif); overflow: hidden; padding-bottom: .08em; }
+.benvenuto .saluto > span { display: block; }
+
+/* chi sta guardando, in alto */
+.faccia.piccola {
+  display: inline-grid; width: 26px; border-radius: 8px; font-size: 1rem; margin-right: 8px; vertical-align: middle;
+  box-shadow: none; transition: none;
+}
 .nav-voce.utente-attivo { display: inline-flex; align-items: center; }
+.utente-testata { display: none; margin-left: auto; padding: 6px; border-radius: var(--r); }
+.utente-testata .faccia.piccola { width: 32px; margin: 0; font-size: 1.15rem; }
+
+@media (max-width: 760px) {
+  .utente-testata { display: inline-flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .faccia, .faccia .lettere, .faccia .anello rect, .nome-profilo { transition: none; }
+}
