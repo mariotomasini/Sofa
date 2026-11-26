@@ -85,6 +85,12 @@
           <input id="lingue" name="lingue" type="text" value="{{ s.lingue or 'it,en' }}" autocomplete="off" spellcheck="false">
           <p class="aiuto">Codici di due lettere: it italiano, en inglese, ja giapponese, es spagnolo, fr francese.</p>
         </div>
+        <h2>Utenti di casa</h2>
+        <div class="lingue">
+          <label class="campo" for="utenti-casa">Chi guarda, separati da virgole</label>
+          <input id="utenti-casa" type="text" value="{{ s.utenti_casa or '' }}" placeholder="Mario, Anna, Bimbi" autocomplete="off" spellcheck="false">
+          <p class="aiuto">Ognuno ha il suo utente, senza password: sulla TV e in Cerca sceglie la sua faccia e ritrova i suoi "già visto" e "Continua a guardare". L'utente admin resta solo per la configurazione e solo lui vede il Pannello.</p>
+        </div>
         <h2>Download</h2>
         <div class="lingue">
           <label class="campo" for="lingue-audio">Lingue dell'audio, in ordine di preferenza</label>

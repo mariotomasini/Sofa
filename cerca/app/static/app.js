@@ -53,6 +53,10 @@ async function chiama(percorso, opzioni = {}) {
   }
   let dati = {};
   try { dati = await risposta.json(); } catch (e) { /* risposta non JSON */ }
+  if (risposta.status === 401 && dati.accesso) {
+    // l'accesso non vale più (cookie tolto o cambiato): si torna a "Chi guarda?"
+    location.href = BASE + "/chi-guarda?dopo=" + encodeURIComponent(location.pathname + location.search);
+  }
   if (!risposta.ok) {
     throw dati.errore ? dati : { errore: "Qualcosa è andato storto (" + risposta.status + ").", cosa_fare: "Riprova tra poco." };
   }
@@ -1366,7 +1370,7 @@ async function apriSerie(dati) {
   document.getElementById("serie-annulla-tutte").hidden = true;
   d.showModal();
   try {
-    const r = await inviaJSON("/api/serie/apri", { titolo: dati.titolo, imdb: dati.imdb, tvdb: dati.tvdb, tmdb: dati.tmdb });
+    const r = await inviaJSON("/api/serie/apri", { titolo: dati.titolo, nome: dati.nome || "", imdb: dati.imdb, tvdb: dati.tvdb, tmdb: dati.tmdb });
     d.dataset.serieId = r.serie_id;
     box.innerHTML = htmlPuntate(r.stagioni);
     preparaTieni(box, d._azione);

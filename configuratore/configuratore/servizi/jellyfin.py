@@ -1,8 +1,8 @@
 """Configurazione di Jellyfin via API.
 
 Passi: wizard iniziale, lingua e paese, base URL /jellyfin, librerie,
-transcodifica VAAPI, plugin Intro Skipper, TV in diretta, chiave API per
-Radarr e Cerca.
+utenti di casa, transcodifica VAAPI, plugin Intro Skipper, TV in diretta,
+chiave API per Radarr e Cerca.
 """
 
 from __future__ import annotations
@@ -178,6 +178,48 @@ def assicura_amministratore(jf: Jellyfin) -> None:
     politica["IsAdministrator"] = True
     jf.post(f"/Users/{io['Id']}/Policy", "rendere amministratore l'utente di Jellyfin", json=politica)
     ok("Utente promosso ad amministratore")
+
+
+def _salva_politica(jf: Jellyfin, utente: dict, cosa: str, **cambi) -> bool:
+    """Cambia solo le voci indicate della politica di un utente. True se è cambiato qualcosa."""
+    politica = utente.get("Policy") or jf.get(f"/Users/{utente['Id']}", "leggere un utente di Jellyfin").json()["Policy"]
+    if all(politica.get(k) == v for k, v in cambi.items()):
+        return False
+    politica.update(cambi)
+    jf.post(f"/Users/{utente['Id']}/Policy", cosa, json=politica)
+    return True
+
+
+def utenti_di_casa(jf: Jellyfin, imp: Impostazioni) -> None:
+    """Un utente di Jellyfin per ogni persona di casa: senza password e visibile sulla TV,
+    così si sceglie la propria faccia invece di scrivere nome e password.
+
+    Non sono amministratori e vedono tutte le librerie. L'amministratore sparisce dalla
+    schermata di accesso: serve solo per configurare. Gli utenti tolti dall'elenco non
+    vengono cancellati (dentro ci sono i loro "già visto"): si tolgono da Jellyfin."""
+    nomi = imp.utenti_casa
+    if not nomi:
+        return
+    utenti = jf.get("/Users", "leggere gli utenti di Jellyfin").json()
+    per_nome = {u.get("Name", "").lower(): u for u in utenti}
+    for nome in nomi:
+        utente = per_nome.get(nome.lower())
+        if utente is None:
+            utente = jf.post("/Users/New", f"creare l'utente {nome}", json={"Name": nome}).json()
+            _salva_politica(jf, utente, f"impostare l'utente {nome}", IsAdministrator=False, IsHidden=False,
+                            EnableAllFolders=True, IsDisabled=False)
+            ok(f"Utente di casa \"{nome}\" creato (senza password, visibile sulla TV)")
+            continue
+        if (utente.get("Policy") or {}).get("IsAdministrator"):
+            avviso(f"\"{nome}\" in Jellyfin è un amministratore: lo lascio com'è.")
+            continue
+        if _salva_politica(jf, utente, f"mostrare l'utente {nome} sulla TV", IsHidden=False):
+            ok(f"Utente di casa \"{nome}\" ora visibile sulla TV")
+        else:
+            info(f"Utente di casa \"{nome}\" già presente")
+    admin = per_nome.get(imp.utente.lower())
+    if admin and _salva_politica(jf, admin, "nascondere l'amministratore dalla TV", IsHidden=True):
+        ok(f"L'utente \"{imp.utente}\" non compare più sulla TV: serve solo per configurare")
 
 
 def imposta_sistema(jf: Jellyfin, imp: Impostazioni) -> None:
@@ -453,6 +495,7 @@ def configura(imp: Impostazioni, esito) -> None:
     imposta_sistema(jf, imp)
     ok("Jellyfin risponde su /jellyfin")
     crea_librerie(jf, imp)
+    utenti_di_casa(jf, imp)
     imposta_transcodifica(jf, imp)
     if not imp.vaapi:
         if imp.windows:

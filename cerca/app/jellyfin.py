@@ -11,12 +11,16 @@ import time
 
 import httpx
 
+from .accesso import utente_corrente
 from .config import Config
 from .rete import non_raggiungibile
 
 log = logging.getLogger("cerca.jellyfin")
 
 INTESTAZIONE = 'MediaBrowser Client="mediabox-cerca", Device="cerca", DeviceId="mediabox-cerca", Version="1.0"'
+# per controllare la password di chi entra: un altro "dispositivo", così Jellyfin non
+# annulla il gettone che Cerca usa per tutto il resto
+INTESTAZIONE_ACCESSO = INTESTAZIONE.replace('DeviceId="mediabox-cerca"', 'DeviceId="mediabox-cerca-accesso"')
 
 
 def percorso_per_jellyfin(percorso_radarr: str) -> str:
@@ -96,9 +100,8 @@ class Jellyfin:
     async def artisti(self, limite: int = 2000) -> list[dict]:
         """Tutti gli artisti presenti nella libreria Musica."""
         try:
-            if not self._utente:
-                await self._accedi()
-            dati = await self._get("/Artists", {"UserId": self._utente, "Limit": limite, "Fields": "ProviderIds"})
+            utente = await self._id_utente()
+            dati = await self._get("/Artists", {"UserId": utente, "Limit": limite, "Fields": "ProviderIds"})
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise non_raggiungibile("Jellyfin", "/jellyfin") from exc
         return [self._artista(v) for v in dati.get("Items", []) if v.get("Name")]
@@ -106,10 +109,9 @@ class Jellyfin:
     async def artisti_piu_ascoltati(self, limite: int = 8) -> list[dict]:
         """Gli artisti che ascolti di più; se non hai ancora ascoltato nulla, alcuni della libreria."""
         try:
-            if not self._utente:
-                await self._accedi()
+            utente = await self._id_utente()
             brani = await self._get(
-                f"/Users/{self._utente}/Items",
+                f"/Users/{utente}/Items",
                 {"IncludeItemTypes": "Audio", "Recursive": "true", "Filters": "IsPlayed",
                  "SortBy": "PlayCount", "SortOrder": "Descending", "Limit": 300, "Fields": "ProviderIds"},
             )
@@ -168,9 +170,11 @@ class Jellyfin:
 
     # --- home in stile Netflix ----------------------------------------------------------
     async def _id_utente(self) -> str:
+        """L'utente di chi sta guardando (scelto in "Chi guarda?"); senza, l'amministratore."""
         if not self._utente:
             await self._accedi()
-        return self._utente
+        corrente = utente_corrente.get()
+        return corrente["id"] if corrente else self._utente
 
     async def generi_preferiti(self, tipo: str) -> list[str]:
         """I generi di quello che hai visto o messo tra i preferiti, dal più frequente.
@@ -219,9 +223,10 @@ class Jellyfin:
     async def tmdb_in_libreria(self, tipo: str) -> set[int]:
         """Gli id TMDB dei film (o delle serie) che hai già: non ha senso consigliarteli."""
         adesso = time.monotonic()
-        if tipo in self._in_libreria and adesso - self._in_libreria[tipo][0] < 600:
-            return self._in_libreria[tipo][1]
         utente = await self._id_utente()
+        chiave = f"{utente}:{tipo}"
+        if chiave in self._in_libreria and adesso - self._in_libreria[chiave][0] < 600:
+            return self._in_libreria[chiave][1]
         dati = await self._get(
             f"/Users/{utente}/Items",
             {"IncludeItemTypes": "Series" if tipo == "tv" else "Movie", "Recursive": "true",
@@ -232,7 +237,7 @@ class Jellyfin:
             valore = str((v.get("ProviderIds") or {}).get("Tmdb") or "")
             if valore.isdigit():
                 ids.add(int(valore))
-        self._in_libreria[tipo] = (adesso, ids)
+        self._in_libreria[chiave] = (adesso, ids)
         return ids
 
     @staticmethod
@@ -274,6 +279,44 @@ class Jellyfin:
                     gia.add(e["titolo"])
                     elementi.append(e)
         return elementi[:limite]
+
+    # --- chi guarda ------------------------------------------------------------------
+    async def profili(self) -> list[dict]:
+        """Gli utenti di Jellyfin, per la pagina "Chi guarda?" (i disattivati non ci sono)."""
+        try:
+            elenco = await self._get("/Users", {})
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise non_raggiungibile("Jellyfin", "/jellyfin") from exc
+        profili = []
+        for u in elenco if isinstance(elenco, list) else []:
+            politica = u.get("Policy") or {}
+            if not u.get("Id") or not u.get("Name") or politica.get("IsDisabled"):
+                continue
+            profili.append({
+                "id": u["Id"], "nome": u["Name"], "admin": bool(politica.get("IsAdministrator")),
+                "password": bool(u.get("HasPassword") or u.get("HasConfiguredPassword")),
+            })
+        return sorted(profili, key=lambda p: p["nome"].lower())
+
+    async def verifica(self, nome: str, password: str) -> dict | None:
+        """Controlla nome e password con Jellyfin: l'utente se vanno bene, None se no."""
+        try:
+            r = await self.client.post(
+                f"{self.config.jellyfin_url}/Users/AuthenticateByName",
+                json={"Username": nome, "Pw": password},
+                headers={"Authorization": INTESTAZIONE_ACCESSO},
+                timeout=20,
+            )
+        except httpx.HTTPError as exc:
+            raise non_raggiungibile("Jellyfin", "/jellyfin") from exc
+        if r.status_code in (401, 403):
+            return None
+        if r.status_code >= 400:
+            raise non_raggiungibile("Jellyfin", "/jellyfin")
+        utente = r.json().get("User") or {}
+        politica = utente.get("Policy") or {}
+        return {"id": utente.get("Id", ""), "nome": utente.get("Name", nome),
+                "admin": bool(politica.get("IsAdministrator"))}
 
     # --- pulizia ---------------------------------------------------------------------
     async def utenti(self) -> list[str]:
