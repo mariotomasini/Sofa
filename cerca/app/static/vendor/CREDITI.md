@@ -12,6 +12,11 @@
 
 Tutti con la SIL Open Font License 1.1 (testo in `fonts/OFL.txt`).
 
+## Foto degli utenti
+
+- Le foto date agli utenti di casa (`foto_profili.py`) sono di **Unsplash** (licenza Unsplash, uso libero),
+  scaricate da https://picsum.photos al momento di assegnarle. Non sono incluse nel codice.
+
 ## Metodo e idee
 
 - **unslop**, di Damir Sokolovsky ([@heydamir](https://x.com/heydamir)), https://github.com/heydamir/unslop,

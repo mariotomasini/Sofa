@@ -37,6 +37,7 @@ from .config import Config
 from .db import Archivio
 from .deezer import Deezer
 from .download import GestoreDownload, e_magnet, nome_da_magnet
+from .foto_profili import FotoProfili
 from .gruppi_download import con_coda_qbit, raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
@@ -106,6 +107,7 @@ class Servizi:
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
+        self.foto_profili = FotoProfili(self.archivio, client, self.jellyfin)
 
 
 async def manutenzione_cache(archivio: Archivio) -> None:
@@ -150,6 +152,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
             asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
             asyncio.create_task(dopo(600, servizi.puntate_italiane.ciclo())),
+            asyncio.create_task(dopo(30, servizi.foto_profili.assegna())),
         ]
         log.info("Cerca è pronto")
         yield
@@ -292,6 +295,7 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
          # il Pannello è solo per l'amministratore: gli altri non lo vedono
          "pannello": indirizzo_pannello(request, s.config) if e_admin(request) else "",
          "utente": utente, "iniziali_utente": iniziali(utente["nome"]) if utente else "",
+         "foto_utente": foto_utente(utente.get("id", ""), larghezza=96) if utente else "",
          "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
          "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
     )
@@ -461,6 +465,16 @@ async def pagina_spazio(request: Request):
     return solo_adulti(request) or pagina(request, "spazio.html", sezione="spazio")
 
 
+def foto_utente(id_utente: str, etichetta: str | None = None, larghezza: int = 264) -> str:
+    """L'immagine dell'utente presa da Jellyfin (che la serve a tutti, come le locandine)."""
+    if not id_utente or id_utente == "amministratore":
+        return ""
+    if etichetta is not None and not etichetta:
+        return ""
+    extra = f"&tag={etichetta}" if etichetta else ""
+    return f"/jellyfin/Users/{id_utente}/Images/Primary?width={larghezza}&quality=90{extra}"
+
+
 @app.get("/chi-guarda", response_class=HTMLResponse)
 async def pagina_chi_guarda(request: Request, dopo: str = ""):
     return await _chi_guarda(request, dopo)
@@ -473,7 +487,10 @@ async def _chi_guarda(request: Request, dopo: str, errore: str = "", scelto: str
         problema = None
     except ErroreServizio as exc:
         profili, problema = None, exc
-    di_casa = [{**p, "iniziali": iniziali(p["nome"])} for p in profili or [] if not p["admin"]]
+    if profili and any(not p.get("immagine") for p in profili):
+        s.foto_profili.in_sottofondo()  # a chi è nuovo una foto: si vede alla prossima apertura
+    di_casa = [{**p, "iniziali": iniziali(p["nome"]), "foto": foto_utente(p["id"], p.get("immagine"))}
+               for p in profili or [] if not p["admin"]]
     amministratori = [p for p in profili or [] if p["admin"]]
     risposta = pagina(
         request, "chi_guarda.html", senza_menu=True, indietro=False, profili=di_casa,

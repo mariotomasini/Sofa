@@ -558,7 +558,9 @@ function apriTrailer(chiave) {
 // password sbagliata che scuote il campo, e un saluto che accompagna fino in Cerca: la faccia
 // vola nell'angolo in alto, dove resta a dire chi sta guardando.
 const ANELLO = '<svg class="anello" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
-  '<rect x="1.5" y="1.5" width="97" height="97" rx="15" pathLength="1"/></svg>';
+  // un <path> e non un <rect rx>: Safari sbaglia la lunghezza dei rettangoli arrotondati e
+  // l'anello restava aperto sugli angoli, come un'animazione mai finita
+  '<path d="M16.5 1.5H83.5A15 15 0 0 1 98.5 16.5V83.5A15 15 0 0 1 83.5 98.5H16.5A15 15 0 0 1 1.5 83.5V16.5A15 15 0 0 1 16.5 1.5Z" pathLength="1"/></svg>';
 const FONDO_SALOTTO = "rgba(22, 21, 19, 1)";
 
 function avviaChiGuarda() {
@@ -569,7 +571,7 @@ function avviaChiGuarda() {
     tl.from(".luce-salotto", { opacity: 0, scale: 0.5, duration: 1.2, ease: "power2.out" }, 0)
       .from(".profili > li", { opacity: 0, y: 28, scale: 0.88, duration: 0.65, ease: CURVA, stagger: 0.09,
         clearProps: "transform,opacity" }, 0.25)
-      .fromTo(".profili .anello rect", { strokeDashoffset: 1 }, { keyframes: [{ strokeDashoffset: 0, duration: 0.45, ease: "power2.inOut" },
+      .fromTo(".profili .anello path", { strokeDashoffset: 1 }, { keyframes: [{ strokeDashoffset: 0, duration: 0.45, ease: "power2.inOut" },
         { strokeDashoffset: 1, duration: 0.4, ease: "power2.in", delay: 0.15 }], stagger: 0.09, clearProps: "strokeDashoffset" }, 0.45)
       .from(".accesso-admin, .senza-profili", { opacity: 0, y: 10, duration: 0.4, ease: CURVA, clearProps: "transform,opacity" }, "-=.35");
     // la lampada respira piano, come una luce vera
@@ -614,7 +616,7 @@ async function entraCome(form, ev) {
   const sorgente = (form.closest("details") && form.closest("details").querySelector("summary")) ||
     form.querySelector(".tasto-profilo") || form;
   salutaEVai(sorgente.querySelector(".faccia"), sorgente.dataset.nome || form.dataset.nome || "",
-    sorgente.dataset.iniziali || form.dataset.iniziali || "", dati.vai);
+    sorgente.dataset.iniziali || form.dataset.iniziali || "", dati.vai, sorgente.dataset.foto || "");
 }
 
 function accessoNegato(form, testo) {
@@ -628,11 +630,12 @@ function accessoNegato(form, testo) {
   if (!FERMO) G.fromTo(campo, { x: 0 }, { keyframes: [{ x: -9 }, { x: 8 }, { x: -6 }, { x: 4 }, { x: -2 }, { x: 0 }], duration: 0.42, ease: "power1.out" });
 }
 
-function htmlBenvenuto(nome, iniziali) {
+function htmlBenvenuto(nome, iniziali, foto = "") {
   const v = document.createElement("div");
   v.className = "benvenuto";
   v.setAttribute("aria-hidden", "true");
-  v.innerHTML = `<div class="luce"></div><span class="faccia">${ANELLO}<span class="lettere">${esc(iniziali)}</span></span>` +
+  const img = foto ? `<img class="foto" src="${esc(foto)}" alt="" onerror="this.remove()">` : "";
+  v.innerHTML = `<div class="luce"></div><span class="faccia">${img}${ANELLO}<span class="lettere">${esc(iniziali)}</span></span>` +
     `<span class="saluto"><span>Ciao, ${esc(nome)}</span></span>`;
   document.body.append(v);
   return v;
@@ -640,12 +643,12 @@ function htmlBenvenuto(nome, iniziali) {
 
 function centro(r) { return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
 
-function salutaEVai(faccia, nome, iniziali, vai) {
-  try { sessionStorage.setItem("cerca:benvenuto", JSON.stringify({ nome, iniziali })); } catch (e) { /* niente */ }
+function salutaEVai(faccia, nome, iniziali, vai, foto = "") {
+  try { sessionStorage.setItem("cerca:benvenuto", JSON.stringify({ nome, iniziali, foto })); } catch (e) { /* niente */ }
   if (FERMO) { window.location.href = vai; return; }
   const pagina = document.querySelector(".chi-guarda");
   const altre = [...pagina.querySelectorAll(".profili > li")].filter((li) => !faccia || !li.contains(faccia));
-  const v = htmlBenvenuto(nome, iniziali);
+  const v = htmlBenvenuto(nome, iniziali, foto);
   const nuova = v.querySelector(".faccia");
   const arrivo = centro(nuova.getBoundingClientRect());
   const da = faccia ? faccia.getBoundingClientRect() : null;
@@ -659,7 +662,7 @@ function salutaEVai(faccia, nome, iniziali, vai) {
       { clipPath: `circle(${Math.hypot(innerWidth, innerHeight)}px at ${partenza.x}px ${partenza.y}px)`, duration: 0.6, ease: "power3.inOut" }, 0.1)
     .fromTo(nuova, { x: partenza.x - arrivo.x, y: partenza.y - arrivo.y, scale: da ? da.width / nuova.offsetWidth : 0.8 },
       { x: 0, y: 0, scale: 1, duration: 0.7, ease: "power3.inOut" }, 0.1)
-    .fromTo(nuova.querySelector(".anello rect"), { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.55, ease: "power2.inOut" }, 0.45)
+    .fromTo(nuova.querySelector(".anello path"), { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.55, ease: "power2.inOut" }, 0.45)
     .fromTo(nuova.querySelector(".lettere"), { textShadow: "0 0 0px rgba(242,180,90,0)" },
       { textShadow: "0 0 28px rgba(242,180,90,.6)", duration: 0.5 }, 0.55)
     .from(v.querySelector(".luce"), { opacity: 0, scale: 0.6, duration: 0.8, ease: "power2.out" }, 0.4)
@@ -672,7 +675,7 @@ function benvenuto() {
   let dati = null;
   try { dati = JSON.parse(sessionStorage.getItem("cerca:benvenuto") || "null"); sessionStorage.removeItem("cerca:benvenuto"); } catch (e) { /* niente */ }
   if (!dati || FERMO || document.querySelector(".chi-guarda")) return;
-  const v = htmlBenvenuto(dati.nome, dati.iniziali);
+  const v = htmlBenvenuto(dati.nome, dati.iniziali, dati.foto);
   v.style.backgroundColor = FONDO_SALOTTO;
   const faccia = v.querySelector(".faccia");
   const meta = [...document.querySelectorAll(".testata .faccia.piccola")].find((f) => f.getBoundingClientRect().width > 0);

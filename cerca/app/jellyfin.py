@@ -6,6 +6,7 @@ va tradotto prima di avvisare Jellyfin.
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
 
@@ -295,8 +296,31 @@ class Jellyfin:
             profili.append({
                 "id": u["Id"], "nome": u["Name"], "admin": bool(politica.get("IsAdministrator")),
                 "password": bool(u.get("HasPassword") or u.get("HasConfiguredPassword")),
+                "immagine": u.get("PrimaryImageTag") or "",
             })
         return sorted(profili, key=lambda p: p["nome"].lower())
+
+    async def imposta_immagine(self, id_utente: str, contenuto: bytes, tipo: str = "image/jpeg") -> None:
+        """L'immagine dell'utente in Jellyfin (si vede sulla TV, nell'app e in "Chi guarda?").
+        Jellyfin la vuole in base64; le versioni vecchie hanno solo l'indirizzo /Users/…/Images."""
+        corpo = base64.b64encode(contenuto)
+        try:
+            if not self._token:
+                await self._accedi()
+            for indirizzo, parametri in ((f"{self.config.jellyfin_url}/UserImage", {"userId": id_utente}),
+                                         (f"{self.config.jellyfin_url}/Users/{id_utente}/Images/Primary", {})):
+                for _ in range(2):
+                    r = await self.client.post(
+                        indirizzo, params=parametri, content=corpo, timeout=30,
+                        headers={"Authorization": f'{INTESTAZIONE}, Token="{self._token}"', "Content-Type": tipo})
+                    if r.status_code != 401:
+                        break
+                    await self._accedi()
+                if r.status_code not in (404, 405):
+                    break
+            r.raise_for_status()
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise non_raggiungibile("Jellyfin", "/jellyfin") from exc
 
     async def verifica(self, nome: str, password: str) -> dict | None:
         """Controlla nome e password con Jellyfin: l'utente se vanno bene, None se no."""

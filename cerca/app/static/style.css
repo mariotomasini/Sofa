@@ -905,6 +905,7 @@ body[data-tema] .logo-segno { color: var(--lampada); }
   list-style: none; display: flex; flex-direction: column; align-items: center; gap: 12px;
   background: transparent; color: var(--testo-2); border: 0; box-shadow: none; padding: 8px;
   min-height: 0; height: auto; cursor: pointer; font: inherit; border-radius: var(--r-c);
+  overflow: visible;  /* i tasti tagliano ciò che sporge: l'anello, alzato dalla scelta, restava aperto in alto */
 }
 .profilo > summary::-webkit-details-marker { display: none; }
 .tasto-profilo:hover:not(:disabled) { background: transparent; }
@@ -917,10 +918,15 @@ body[data-tema] .logo-segno { color: var(--lampada); }
   box-shadow: 0 1px 0 rgb(255 255 255 / .05) inset, 0 14px 30px -18px rgb(0 0 0 / .8);
   transition: transform .35s var(--curva), box-shadow .35s var(--curva), border-color .25s;
 }
+/* la foto dell'utente (da Jellyfin) copre la faccia; se non si carica restano le iniziali */
+.faccia .foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.faccia:has(.foto) { color: transparent; border-color: transparent; }
+.faccia:has(.foto) .lettere { visibility: hidden; }
+.faccia.piccola .foto { border-radius: inherit; }
 .faccia .lettere { position: relative; transition: transform .35s var(--curva), text-shadow .35s; }
 /* l'anello: un tratto della lampada che si disegna intorno alla faccia */
 .faccia .anello { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); overflow: visible; pointer-events: none; }
-.faccia .anello rect {
+.faccia .anello path {
   fill: none; stroke: var(--lampada); stroke-width: 1.6;
   stroke-dasharray: 1 2; stroke-dashoffset: 1; transition: stroke-dashoffset .55s var(--curva);
 }
@@ -933,8 +939,8 @@ body[data-tema] .logo-segno { color: var(--lampada); }
 .profilo > summary:focus-visible .lettere, .tasto-profilo:focus-visible .lettere, .profilo[open] .lettere {
   transform: scale(1.08); text-shadow: 0 0 24px rgb(242 180 90 / .55);
 }
-.profilo > summary:hover .anello rect, .tasto-profilo:hover .anello rect,
-.profilo > summary:focus-visible .anello rect, .tasto-profilo:focus-visible .anello rect, .profilo[open] .anello rect { stroke-dashoffset: 0; }
+.profilo > summary:hover .anello path, .tasto-profilo:hover .anello path,
+.profilo > summary:focus-visible .anello path, .tasto-profilo:focus-visible .anello path, .profilo[open] .anello path { stroke-dashoffset: 0; }
 /* col telecomando il fuoco si vede sempre: l'anello è il fuoco */
 .profilo > summary:focus-visible, .tasto-profilo:focus-visible { outline: none; }
 .nome-profilo { font-size: 1.05rem; transition: color .25s; }
@@ -964,7 +970,7 @@ body[data-tema] .logo-segno { color: var(--lampada); }
   translate: -50% -62%; background: radial-gradient(closest-side, rgb(242 180 90 / .2), transparent);
 }
 .benvenuto .faccia { width: 132px; font-size: 3.4rem; transform: none; }
-.benvenuto .faccia .anello rect { stroke-dashoffset: 0; transition: none; }
+.benvenuto .faccia .anello path { stroke-dashoffset: 0; transition: none; }
 .benvenuto .saluto { position: relative; font: 400 clamp(1.8rem, 4vw, 2.4rem)/1.1 var(--serif); overflow: hidden; padding-bottom: .08em; }
 .benvenuto .saluto > span { display: block; }
 
@@ -981,5 +987,5 @@ body[data-tema] .logo-segno { color: var(--lampada); }
   .utente-testata { display: inline-flex; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .faccia, .faccia .lettere, .faccia .anello rect, .nome-profilo { transition: none; }
+  .faccia, .faccia .lettere, .faccia .anello path, .nome-profilo { transition: none; }
 }

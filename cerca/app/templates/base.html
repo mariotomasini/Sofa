@@ -38,7 +38,7 @@
     </a>
     {% if utente and not senza_menu and not kids %}
     <a class="utente-testata" href="{{ base }}/esci" aria-label="{{ utente.nome }}: cambia utente">
-      <span class="faccia piccola" aria-hidden="true">{{ iniziali_utente }}</span>
+      <span class="faccia piccola" aria-hidden="true">{% if foto_utente %}<img class="foto" src="{{ foto_utente }}" alt="" onerror="this.remove()">{% endif %}{{ iniziali_utente }}</span>
     </a>
     {% endif %}
     {% if senza_menu %}
@@ -62,7 +62,7 @@
       {% endif %}
       {% if utente %}
       <a class="nav-voce utente-attivo" href="{{ base }}/esci" title="Cambia utente">
-        <span class="faccia piccola" aria-hidden="true">{{ iniziali_utente }}</span>{{ utente.nome }}
+        <span class="faccia piccola" aria-hidden="true">{% if foto_utente %}<img class="foto" src="{{ foto_utente }}" alt="" onerror="this.remove()">{% endif %}{{ iniziali_utente }}</span>{{ utente.nome }}
       </a>
       {% endif %}
     </nav>

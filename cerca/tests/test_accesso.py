@@ -50,7 +50,8 @@ def servizi_finti(tmp_path, richieste, spento=False):
     client = httpx.AsyncClient(transport=httpx.MockTransport(jellyfin_finto(richieste, spento)))
     archivio = SimpleNamespace(elenco_download=lambda n: [])
     return SimpleNamespace(config=config, accesso=Accesso(tmp_path), jellyfin=Jellyfin(config, client),
-                           archivio=archivio, disco=SimpleNamespace(stato=lambda: {}))
+                           archivio=archivio, disco=SimpleNamespace(stato=lambda: {}),
+                           foto_profili=SimpleNamespace(in_sottofondo=lambda: None))
 
 
 def cliente(tmp_path, richieste=None, spento=False):
