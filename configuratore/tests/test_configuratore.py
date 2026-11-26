@@ -578,6 +578,12 @@ def test_tailscale_come_servizio_solo_su_linux_e_se_non_c_e_gia(cartella):
     assert ts["image"].startswith("ghcr.io/tailscale/tailscale:v")
     assert "tailscale_stato" in compose["volumes"]
     assert "/var/run/tailscale:/var/run/tailscale" in compose["services"]["impostazioni"]["volumes"]
+    # niente containerboot: aspetta l'accesso solo 60 secondi e poi riparte con un link nuovo
+    avvio = ts["command"][0]
+    assert ts["entrypoint"] == ["/bin/sh", "-c"] and "TS_AUTH_ONCE" not in (ts.get("environment") or {})
+    assert "exec tailscaled --statedir=/var/lib/tailscale --socket=/var/run/tailscale/tailscaled.sock" in avvio
+    assert "until tailscale --socket=/var/run/tailscale/tailscaled.sock up" in avvio and "--hostname=mediabox" in avvio
+    assert ts["init"] is True
     # già installato sul PC (vecchio "mediabox remote"): niente doppione, ma la pagina lo vede
     with open(cartella / ".env", "a") as f:
         f.write("TAILSCALE_HOST=si\n")
