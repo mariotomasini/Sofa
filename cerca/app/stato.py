@@ -79,8 +79,12 @@ class ControlloDisco:
         if not info.get("quasi_pieno"):
             return
         if self.pulizia is not None:
-            # prima proviamo a liberare spazio da soli
-            await self.pulizia.libera("disco quasi pieno")
+            # prima proviamo a liberare spazio da soli; se non si può (es. qBittorrent spento)
+            # l'avviso sul telefono deve partire lo stesso
+            try:
+                await self.pulizia.libera("disco quasi pieno")
+            except Exception:  # noqa: BLE001
+                log.warning("Pulizia automatica non riuscita", exc_info=True)
             info = await self.aggiorna()
             if not info.get("quasi_pieno"):
                 return

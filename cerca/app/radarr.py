@@ -63,8 +63,10 @@ class Radarr:
         if esistente:
             return esistente
         dati = await self._r("GET", "movie/lookup/tmdb", params={"tmdbId": tmdb_id})
-        profili = await self._r("GET", "qualityprofile")
-        profilo = next((p for p in profili if p["name"] == PROFILO_PREFERITO), profili[0])
+        profili = await self._r("GET", "qualityprofile") or []
+        if not profili:
+            raise ErroreServizio("Radarr non ha nessun profilo di qualità.", "Sul PC scrivi \"mediabox configura\".")
+        profilo = next((p for p in profili if p.get("name") == PROFILO_PREFERITO), profili[0])
         dati.update(
             qualityProfileId=profilo["id"],
             rootFolderPath=self.config.cartella_film_radarr,
@@ -108,7 +110,7 @@ class Radarr:
             "GET",
             "manualimport",
             params={"folder": cartella, "filterExistingFiles": "false"},
-        )
+        ) or []
         if os.path.isfile(percorso):
             candidati = [c for c in candidati if c.get("path") == percorso]
         else:
