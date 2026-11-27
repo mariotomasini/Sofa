@@ -32,6 +32,10 @@ volumes:
 {%- if navidrome %}
   navidrome_dati:
 {%- endif %}
+{%- if immich %}
+  immich_db:
+  immich_modelli:
+{%- endif %}
 {%- if bazarr %}
   bazarr_config:
 {%- endif %}
@@ -75,6 +79,9 @@ services:
     ports:
       - "{{ HTTP_PORT }}:80"
       - "{{ PANNELLO_PORT | default('8081') }}:8081"
+{%- if immich %}
+      - "{{ foto_porta }}:2283"
+{%- endif %}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -269,6 +276,79 @@ services:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4533/ping"]
       start_period: 120s
 {%- endif %}
+{%- if immich %}
+
+  # Foto: i telefoni di casa caricano da soli foto e video (app Immich), i volti si
+  # riconoscono qui sul PC. Ogni persona ha il suo account e vede solo le sue foto.
+  # Le foto stanno in MEDIA_DIR/foto/library/<persona>/<anno>/...; ogni notte Immich salva
+  # anche una copia del suo database in MEDIA_DIR/foto/backups.
+  immich-server:
+    image: "{{ IMG_IMMICH }}"
+    restart: unless-stopped
+    environment:
+      TZ: "{{ TZ }}"
+      DB_HOSTNAME: immich-db
+      DB_USERNAME: postgres
+      DB_PASSWORD: "{{ IMMICH_DB_PASSWORD }}"
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: immich-redis
+      IMMICH_LOG_LEVEL: warn
+    volumes:
+      - "{{ MEDIA_DIR }}/foto:/data"
+    depends_on:
+      immich-db:
+        condition: service_healthy
+      immich-redis:
+        condition: service_started
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "immich-healthcheck"]
+      start_period: 300s
+
+  # Riconoscimento dei volti e ricerca per contenuto ("spiaggia", "torta"): tutto sul PC,
+  # nessuna foto esce di casa. Lavora in sottofondo e libera la memoria quando ha finito.
+  immich-machine-learning:
+    image: "{{ IMG_IMMICH_ML }}"
+    restart: unless-stopped
+    environment:
+      TZ: "{{ TZ }}"
+      MACHINE_LEARNING_MODEL_REVISION: v2
+      IMMICH_LOG_LEVEL: warn
+    volumes:
+      - immich_modelli:/cache
+    cpu_shares: *sottofondo
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "python3", "healthcheck.py"]
+      start_period: 300s
+
+  immich-redis:
+    image: "{{ IMG_IMMICH_REDIS }}"
+    restart: unless-stopped
+    healthcheck:
+      <<: *controllo
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+
+  immich-db:
+    image: "{{ IMG_IMMICH_DB }}"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_PASSWORD: "{{ IMMICH_DB_PASSWORD }}"
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    # nel volume di Docker, non nella cartella dei media: il database non funziona
+    # bene sui dischi di rete o di Windows
+    volumes:
+      - immich_db:/var/lib/postgresql/data
+    shm_size: 128mb
+    healthcheck:
+      <<: *controllo
+      test: ["CMD-SHELL", "pg_isready -U postgres -d immich"]
+      start_period: 120s
+{%- endif %}
 {%- if bazarr %}
 
   # Sottotitoli automatici per film{% if sonarr %} e serie{% endif %}
@@ -451,9 +531,15 @@ services:
       LIDARR_URL: "{{ 'http://lidarr:8686/lidarr' if lidarr else '' }}"
       LIDARR_API_KEY: "{{ LIDARR_API_KEY if lidarr else '' }}"
       NAVIDROME_URL: "{{ 'http://navidrome:4533' if navidrome else '' }}"
+      IMMICH_URL: "{{ 'http://immich-server:2283' if immich else '' }}"
+      FOTO_COPIA: "{{ 'si' if foto_copia else 'no' }}"
     volumes:
       - cerca_dati:/dati
       - "{{ MEDIA_DIR }}:/data"
+{%- if foto_copia %}
+      # copia di sicurezza notturna delle foto, su un altro disco
+      - "{{ foto_copia }}:/copia-foto"
+{%- endif %}
     labels: *custodito
     healthcheck:
       # sui PC lenti anche solo avviare python per il controllo richiede qualche secondo

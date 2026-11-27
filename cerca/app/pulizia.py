@@ -28,6 +28,7 @@ import httpx
 
 from .config import Config
 from .db import Archivio
+from .foto_protette import controlla as mai_le_foto
 from .rete import ErroreServizio
 from .stato import spazio
 
@@ -70,6 +71,7 @@ def _dimensione_file(p: Path) -> int:
 
 
 def _cancella(percorso: Path) -> None:
+    mai_le_foto(percorso)  # foto e video di Immich: mai, qualunque cosa succeda
     shutil.rmtree(percorso) if percorso.is_dir() else percorso.unlink()
 
 

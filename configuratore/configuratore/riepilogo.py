@@ -106,6 +106,11 @@ def stampa_indirizzi(imp: Impostazioni) -> None:
     if imp.navidrome:
         print("  Nell'app della musica (Amperfy, Symfonium…) scrivi come server:")
         print(f"    {principale}/navidrome")
+    if imp.immich:
+        from .servizi.immich import indirizzo_telefono
+
+        print("  Nell'app Immich (foto) scrivi come server:")
+        print(f"    {indirizzo_telefono(imp)}")
 
 
 def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
@@ -119,6 +124,9 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
         attivi.append("Lidarr (musica)")
     if imp.navidrome:
         attivi.append("Navidrome (musica nelle app: Amperfy, Symfonium, Feishin)")
+    if imp.immich:
+        attivi.append("Foto (Immich: backup dei telefoni e volti, ognuno vede solo le sue"
+                      + (", copia notturna su un altro disco)" if imp.foto_copia else ")"))
     if imp.bazarr:
         attivi.append("Bazarr (sottotitoli: " + ", ".join(imp.lingue_sottotitoli) + ")")
     if imp.flaresolverr:

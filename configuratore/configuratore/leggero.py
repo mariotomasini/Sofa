@@ -24,6 +24,7 @@ MEMORIA_MB = {
     "WITH_BAZARR": 200,
     "WITH_BESZEL": 100,
     "WITH_NAVIDROME": 50,
+    "WITH_IMMICH": 2000,
     "WITH_TGARR": 600,
 }
 # Quelli che la modalità leggera spegne (Serie TV e Anime restano come li hai scelti)
@@ -33,6 +34,7 @@ DA_SPEGNERE = {
     "WITH_BAZARR": "Sottotitoli automatici (Bazarr)",
     "WITH_BESZEL": "Grafici del PC (Beszel)",
     "WITH_TGARR": "Telegram come fonte (tgarr)",
+    "WITH_IMMICH": "Foto dei telefoni (Immich)",
 }
 
 

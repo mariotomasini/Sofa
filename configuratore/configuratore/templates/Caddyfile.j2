@@ -80,6 +80,11 @@
 		reverse_proxy navidrome:4533
 	}
 {%- endif %}
+{%- if immich %}
+	# Foto: Immich non sa stare sotto un percorso, ha la sua porta (anche per l'app)
+	redir /foto http://{host}:{{ foto_porta }}/ 302
+	redir /foto/ http://{host}:{{ foto_porta }}/ 302
+{%- endif %}
 {%- if bazarr %}
 	handle /bazarr* {
 		import pannello
@@ -129,6 +134,11 @@
 
 	encode gzip
 
+{%- if immich %}
+	redir /foto http://{host}:{{ foto_porta }}/ 302
+	redir /foto/ http://{host}:{{ foto_porta }}/ 302
+{%- endif %}
+
 	# caratteri e logo di Cerca, per lo stile del Pannello
 	handle_path /cerca/static/* {
 		rewrite * /static{path}
@@ -148,3 +158,20 @@
 		}
 	}
 }
+{%- if immich %}
+
+# --- Foto (Immich): pagina e app per telefono ----------------------------------
+# Immich chiede da sé email e password (anche all'app): niente password di Caddy qui.
+:2283 {
+	@fuori not remote_ip private_ranges 100.64.0.0/10
+	handle @fuori {
+		respond "mediabox è raggiungibile solo dalla rete di casa o da Tailscale." 403
+	}
+
+	# niente gzip: foto e video sono già compressi, e i caricamenti dall'app sono grandi
+	handle {
+		# Caddy non mette limiti di peso né di tempo: vanno bene anche i video lunghi
+		reverse_proxy immich-server:2283
+	}
+}
+{%- endif %}

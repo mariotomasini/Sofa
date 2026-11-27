@@ -114,6 +114,31 @@ class Impostazioni:
         return _si(self.get("WITH_NAVIDROME", "si"))
 
     @property
+    def immich(self) -> bool:
+        """Immich: le foto dei telefoni di casa, con i volti. Pesante, spento di base."""
+        return _si(self.get("WITH_IMMICH", "no"))
+
+    @property
+    def persone_foto(self) -> list[str]:
+        """Chi ha le foto (FOTO_PERSONE, se no le persone di UTENTI_CASA): un account Immich
+        ciascuno, separato dagli altri."""
+        scritte = [n.strip() for n in self.get("FOTO_PERSONE").split(",") if n.strip()]
+        if not scritte:
+            return self.utenti_casa
+        visti: set[str] = set()
+        risultato = []
+        for nome in scritte:
+            if nome.lower() not in visti:
+                visti.add(nome.lower())
+                risultato.append(nome)
+        return risultato
+
+    @property
+    def foto_copia(self) -> str:
+        """Cartella su un altro disco per la copia notturna delle foto ("" = nessuna)."""
+        return self.get("FOTO_COPIA_DIR").strip() if self.immich else ""
+
+    @property
     def bazarr(self) -> bool:
         return _si(self.get("WITH_BAZARR", "si"))
 

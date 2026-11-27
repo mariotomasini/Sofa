@@ -758,7 +758,7 @@ def test_utenti_casa_dalla_pagina():
     for sbagliato in ("admin", "Mario<script>", "x" * 31, ",".join(f"u{i}" for i in range(13))):
         with pytest.raises(DatiNonValidi):
             utenti_validi(sbagliato)
-    assert piano(["UTENTI_CASA"]).configura == ["jellyfin", "navidrome"]
+    assert piano(["UTENTI_CASA"]).configura == ["jellyfin", "navidrome", "immich"]
 
 
 def test_navidrome_acceso_di_base(cartella):
@@ -786,7 +786,7 @@ def test_navidrome_spento(cartella):
 def test_piano_utenti_casa_rifa_navidrome():
     from configuratore.piano_impostazioni import piano
 
-    assert piano({"UTENTI_CASA"}).configura == ["jellyfin", "navidrome"]
+    assert piano({"UTENTI_CASA"}).configura == ["jellyfin", "navidrome", "immich"]
     assert piano({"WITH_NAVIDROME"}).configura == ["navidrome"]
 
 
@@ -844,4 +844,120 @@ def test_navidrome_password_sbagliata(cartella, monkeypatch):
     monkeypatch.setattr(navidrome, "attendi", lambda *a, **kw: None)
     with pytest.raises(ErroreMediabox) as e:
         navidrome.configura(Impostazioni.carica(cartella), None)
+    assert "ADMIN_PASSWORD" in e.value.cosa_fare
+
+
+def test_immich_spento_di_base(cartella):
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert "immich-server" not in compose and "/copia-foto" not in compose
+    assert ":2283" not in (cartella / "generato" / "Caddyfile").read_text()
+
+
+def test_immich_acceso(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nFOTO_COPIA_DIR=E:\\Copie\\Foto\\\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    for servizio in ("immich-server:", "immich-machine-learning:", "immich-redis:", "immich-db:"):
+        assert f"  {servizio}" in compose
+    assert '"D:/Mediabox/foto:/data"' in compose  # le foto nella cartella dei media
+    assert "immich_db:/var/lib/postgresql/data" in compose  # il database in un volume di Docker
+    assert '"2283:2283"' in compose and 'IMMICH_URL: "http://immich-server:2283"' in compose
+    assert '"E:/Copie/Foto:/copia-foto"' in compose and 'FOTO_COPIA: "si"' in compose
+    # la password del database si crea da sola e resta nel .env
+    password = Impostazioni.carica(cartella).get("IMMICH_DB_PASSWORD")
+    assert len(password) == 48 and compose.count(password) == 2
+    caddy = (cartella / "generato" / "Caddyfile").read_text()
+    blocco = caddy.split(":2283 {", 1)[1]
+    assert "reverse_proxy immich-server:2283" in blocco and "pannello" not in blocco  # l'app non sa la password di Caddy
+    assert "private_ranges 100.64.0.0/10" in blocco  # solo casa e Tailscale
+    assert "redir /foto http://{host}:2283/" in caddy
+    assert "Foto" in (cartella / "generato" / "homepage" / "services.yaml").read_text()
+
+
+def test_persone_delle_foto(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("UTENTI_CASA=Mario,Anna,Bimbi\n")
+    assert Impostazioni.carica(cartella).persone_foto == ["Mario", "Anna", "Bimbi"]
+    with open(cartella / ".env", "a") as f:
+        f.write("FOTO_PERSONE=Mario, anna ,Anna\n")
+    assert Impostazioni.carica(cartella).persone_foto == ["Mario", "anna"]
+
+
+def test_nomi_e_password_delle_foto():
+    from configuratore.servizi import immich
+
+    assert immich.email("Anna Maria") == "anna.maria@mediabox.local"
+    assert immich.nome_breve("Nicolò") == "nicolo"
+    p = immich.password_iniziale()
+    assert len(p) == 14 and p.count("-") == 2 and p != immich.password_iniziale()
+
+
+def test_configura_immich(cartella, monkeypatch):
+    import httpx
+
+    from configuratore.riepilogo import Esito
+    from configuratore.servizi import immich
+
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nUTENTI_CASA=Mario,Anna\n")
+    imp = Impostazioni.carica(cartella)
+    richieste = []
+    salvata = {}
+
+    def gestore(r: httpx.Request) -> httpx.Response:
+        richieste.append(r)
+        percorso = r.url.path
+        if percorso == "/api/server/config":
+            return httpx.Response(200, json={"isInitialized": False})
+        if percorso == "/api/auth/admin-sign-up":
+            return httpx.Response(201, json={})
+        if percorso == "/api/auth/login":
+            return httpx.Response(201, json={"accessToken": "tok"})
+        assert r.headers["authorization"] == "Bearer tok"
+        if percorso == "/api/system-config" and r.method == "GET":
+            return httpx.Response(200, json={"storageTemplate": {"enabled": False, "template": "x"},
+                                             "newVersionCheck": {"enabled": True}, "server": {}})
+        if percorso == "/api/system-config":
+            salvata.update(json.loads(r.content))
+            return httpx.Response(200, json={})
+        if percorso == "/api/admin/users" and r.method == "GET":
+            return httpx.Response(200, json=[{"email": "admin@mediabox.local"}, {"email": "anna@mediabox.local"}])
+        if percorso == "/api/admin/users":
+            return httpx.Response(201, json={})
+        raise AssertionError(percorso)
+
+    vero = httpx.Client
+    monkeypatch.setattr(immich.httpx, "Client", lambda **kw: vero(transport=httpx.MockTransport(gestore), **kw))
+    monkeypatch.setattr(immich, "attendi", lambda *a, **kw: None)
+    esito = Esito()
+    immich.configura(imp, esito)
+
+    amministratore = json.loads(next(r for r in richieste if r.url.path.endswith("admin-sign-up")).content)
+    # l'amministratore è un account a parte, con la password di mediabox: non è il profilo di nessuno
+    assert amministratore == {"email": "admin@mediabox.local", "name": "Amministratore", "password": "Pa$$word123"}
+    creati = [json.loads(r.content) for r in richieste if r.url.path == "/api/admin/users" and r.method == "POST"]
+    assert len(creati) == 1  # Anna c'è già: si crea solo Mario
+    mario = creati[0]
+    assert mario["email"] == "mario@mediabox.local" and mario["storageLabel"] == "mario"
+    assert mario["shouldChangePassword"] is True and mario["isAdmin"] is False
+    assert mario["password"] not in ("mario", "Pa$$word123")  # mai una password che gli altri conoscono
+    assert salvata["storageTemplate"] == {"enabled": True, "template": immich.MODELLO_CARTELLE}
+    assert salvata["newVersionCheck"]["enabled"] is False
+    assert any(mario["password"] in d and "http://192.168.1.10:2283" in d for d in esito.cose_da_fare)
+
+
+def test_immich_password_sbagliata(cartella, monkeypatch):
+    import httpx
+
+    from configuratore.servizi import immich
+
+    risposte = {"/api/server/config": (200, {"isInitialized": True}), "/api/auth/login": (401, {})}
+    vero = httpx.Client
+    monkeypatch.setattr(immich.httpx, "Client", lambda **kw: vero(transport=httpx.MockTransport(
+        lambda r: httpx.Response(risposte[r.url.path][0], json=risposte[r.url.path][1])), **kw))
+    monkeypatch.setattr(immich, "attendi", lambda *a, **kw: None)
+    with pytest.raises(ErroreMediabox) as e:
+        immich.configura(Impostazioni.carica(cartella), None)
     assert "ADMIN_PASSWORD" in e.value.cosa_fare

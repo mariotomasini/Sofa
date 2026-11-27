@@ -35,6 +35,7 @@ ESITO = "generato/esito.json"
 # Come raggruppare le voci nella pagina
 GRUPPI = {
     "WITH_SONARR": "guardi", "WITH_ANIME": "guardi", "WITH_LIDARR": "guardi", "WITH_NAVIDROME": "guardi",
+    "WITH_IMMICH": "guardi",
     "WITH_BAZARR": "guardi", "WITH_TGARR": "guardi",
     "PULIZIA_VISTI": "pc", "AGGIORNAMENTI_AUTOMATICI": "pc", "WITH_BESZEL": "pc", "WITH_FLARESOLVERR": "pc",
 }
@@ -45,6 +46,8 @@ TITOLI_VOCI = {
                     "Lidarr cerca gli album e li ordina per artista. La musica che hai già si ascolta comunque."),
     "WITH_NAVIDROME": ("Musica nelle app per telefono",
                        "Navidrome: la tua musica in Amperfy (iPhone), Symfonium (Android) e Feishin, anche offline."),
+    "WITH_IMMICH": ("Foto dei telefoni",
+                    "Immich: foto e video caricati da soli dall'app, con i volti. Ognuno vede solo le sue."),
     "WITH_BAZARR": ("Sottotitoli automatici", "Bazarr cerca i sottotitoli nelle lingue che scegli."),
     "WITH_TGARR": ("Telegram come fonte",
                    "tgarr cerca film e serie nei canali e nei gruppi del tuo account Telegram, anche privati."),

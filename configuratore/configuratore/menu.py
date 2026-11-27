@@ -28,9 +28,11 @@ VOCI = [
     ("WITH_BESZEL", "Beszel (grafici di processore, memoria, dischi e temperatura, con avvisi)", ""),
     ("AGGIORNAMENTI_AUTOMATICI", "Aggiornamenti automatici di mediabox quando esce una nuova versione", ""),
     ("WITH_NAVIDROME", "Musica nelle app per telefono (Navidrome: Amperfy, Symfonium, Feishin)", ""),
+    ("WITH_IMMICH", "Foto dei telefoni con i volti (Immich: ognuno vede solo le sue)", ""),
 ]
 PREDEFINITI = {
-    "WITH_SONARR": "no", "WITH_ANIME": "no", "WITH_LIDARR": "no", "WITH_NAVIDROME": "si", "WITH_BAZARR": "si",
+    "WITH_SONARR": "no", "WITH_ANIME": "no", "WITH_LIDARR": "no", "WITH_NAVIDROME": "si", "WITH_IMMICH": "no",
+    "WITH_BAZARR": "si",
     "WITH_TGARR": "si",
     "WITH_FLARESOLVERR": "si", "WITH_BESZEL": "no", "AGGIORNAMENTI_AUTOMATICI": "si", "PULIZIA_VISTI": "no",
 }
