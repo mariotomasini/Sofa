@@ -288,6 +288,7 @@ Cerca si ricorda l'ultima home che hai visto: quando la riapri compare subito, e
 Attivale dalle **impostazioni** (`/impostazioni`, voce *Serie TV*): viene installato **Sonarr**.
 
 - **Da Cerca** (mondo *Serie TV*): tocca una serie, nella home o tra i risultati, e premi **Scarica tutte** (oppure scegli una stagione o una puntata). Cerca la aggiunge a Sonarr con la qualità giusta (e nella cartella Anime se è un anime), e Sonarr scarica le puntate già uscite e, con *Scarica tutte*, anche quelle nuove appena escono.
+- **Da questa puntata in avanti**: nella finestra della serie, accanto a ogni puntata non ancora scaricata, c'è il tasto **Da qui**. Scarica quella puntata e tutte quelle dopo (anche delle stagioni successive) già uscite, e poi quelle nuove appena escono. Le puntate prima restano come sono: comodo se hai già visto l'inizio altrove o se vuoi riprendere da metà.
 - **Puntate nuove con il titolo italiano**: Sonarr cerca i torrent solo con il titolo inglese, quindi molte serie italiane non le trova da solo (*Mare fuori* per lui è *The Sea Beyond*). Per questo ogni 3 ore Cerca prende le puntate già uscite che Sonarr non ha ancora trovato e le cerca da sola con il titolo italiano, quello originale e quelli di Sonarr. Scarica la versione nella tua lingua preferita (la puntata singola, o la stagione intera se ne mancano più di una), solo se ha abbastanza fonti, e a download finito la consegna a Sonarr: la puntata compare in Jellyfin. Il titolo italiano Cerca lo impara quando apri la serie dalla sua finestra: per le serie aggiunte prima di questa versione basta aprirla una volta.
 - Le puntate finiscono in `Serie/Nome serie (Anno)/Stagione 01/`. Puoi sempre usare anche Sonarr direttamente ("Apri in Sonarr"), per esempio per scaricare solo una stagione.
 - In Jellyfin ogni serie è **una sola scheda**, divisa in **stagioni** ed **episodi**.
@@ -303,6 +304,18 @@ Attivali dalle **impostazioni** (voce *Anime*). In Jellyfin compare la libreria 
 2. come *Tipo di serie* scegli **Anime**: così Sonarr usa anche la numerazione assoluta degli episodi (es. "One Piece 1071"), che è quella usata da molti rilasci.
 
 Per i sottotitoli degli anime aggiungi l'inglese e, se vuoi, il giapponese alle lingue (voce 6 del menu). Prowlarr passa a Sonarr anche le categorie anime degli indexer.
+
+#### AnimeUnity: link diretti, prima dei torrent
+
+Per gli anime Cerca usa anche [AnimeUnity](https://animeunity.cx) come fonte: le puntate si scaricano direttamente (HTTP), senza torrent.
+
+- **Si collega da solo**: quando apri un anime in Cerca, lo cerca su AnimeUnity e collega a ogni stagione la voce giusta, sia doppiata (ITA) sia sottotitolata. Le serie lunghe con un'unica voce (es. *One Piece*) si collegano con la numerazione assoluta. Le voci collegate le vedi in fondo alla finestra della serie, nella sezione **AnimeUnity**: se ne ha scelta una sbagliata premi **Scollega**, cerca quella giusta, scegli la stagione e premi **Collega**.
+- **I link diretti sono sempre i preferiti**: *Scarica tutte*, *Stagione*, la singola puntata e *Da qui* prendono da AnimeUnity tutto quello che c'è (prima la versione nella tua lingua preferita); solo le puntate che AnimeUnity non ha le cerca Sonarr come torrent. Le puntate prese da AnimeUnity Sonarr non le cerca più, e se le stava già scaricando si fermano.
+- **La versione in italiano sostituisce il resto**: se una puntata c'è già ma non in italiano (per esempio un torrent in giapponese) e su AnimeUnity esiste doppiata, Cerca la scarica e la mette al posto di quella vecchia.
+- **Le puntate nuove**: ogni ora Cerca controlla gli anime collegati e scarica le puntate nuove (con *Scarica tutte* o *Da qui*). Se una puntata è uscita da più di 2 giorni e AnimeUnity non ce l'ha ancora, la cerca Sonarr.
+- Scarica al massimo 2 puntate alla volta; le altre aspettano il loro turno nella pagina **Download**. A download finito la puntata passa a Sonarr e compare in Jellyfin come le altre (`… - S01E05 - ITA.mp4`).
+- Non tutte le puntate su AnimeUnity sono scaricabili: quelle solo in streaming compaiono come problema, e ci pensa Sonarr.
+- AnimeUnity cambia spesso indirizzo: se non risponde più, scrivi quello nuovo in `ANIMEUNITY_URL` nel file `.env` e scrivi `mediabox configura`. Lasciala vuota per spegnere questa fonte.
 
 ### Musica
 

@@ -417,6 +417,7 @@ services:
       MIN_FONTI: "{{ MIN_FONTI | default('3') }}"
       SONARR_URL: "{{ 'http://sonarr:8989/sonarr' if sonarr else '' }}"
       SONARR_API_KEY: "{{ SONARR_API_KEY if sonarr else '' }}"
+      ANIMEUNITY_URL: "{{ ANIMEUNITY_URL | default('https://animeunity.cx') }}"
       LIDARR_URL: "{{ 'http://lidarr:8686/lidarr' if lidarr else '' }}"
       LIDARR_API_KEY: "{{ LIDARR_API_KEY if lidarr else '' }}"
     volumes:

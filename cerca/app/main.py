@@ -29,6 +29,7 @@ from . import home as home_netflix
 from .accesso import COOKIE as COOKIE_UTENTE
 from .accesso import DURATA as DURATA_ACCESSO
 from .accesso import Accesso, destinazione_sicura, iniziali, percorso_libero, utente_corrente
+from .animeunity import AnimeUnity, AnimeUnitySerie, con_download_cerca, indovina_stagione, ordina_risultati
 from .archive import InternetArchive
 from .automatici import Automatici
 from .avvisami import Avvisami
@@ -51,7 +52,7 @@ from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, non_raggiungibile, nuovo_client
 from .sentinella import Sentinella, ultimo_blocco
-from .serie import Serie
+from .serie import Serie, e_anime
 from .stato import ControlloDisco
 from .tmdb import TMDB, tipo_tmdb
 from .trailer import trova as trova_trailer
@@ -102,12 +103,18 @@ class Servizi:
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
         self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.puntate_italiane = PuntateItaliane(config, self.archivio, self.serie, self.prowlarr, self.download)
+        self.animeunity = AnimeUnity(config)
+        self.anime = AnimeUnitySerie(self.animeunity, self.archivio, self.serie, self.download, config)
+        self.download.risolutori["animeunity"] = self._link_animeunity
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.deezer = Deezer(self.archivio, client)
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
         self.foto_profili = FotoProfili(self.archivio, client, self.jellyfin)
+
+    async def _link_animeunity(self, voce: dict) -> tuple[str, dict]:
+        return await self.animeunity.link_video(int(str(voce["url"]).removeprefix("animeunity:")))
 
 
 async def manutenzione_cache(archivio: Archivio) -> None:
@@ -152,6 +159,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
             asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
             asyncio.create_task(dopo(600, servizi.puntate_italiane.ciclo())),
+            asyncio.create_task(dopo(240, servizi.anime.ciclo())),
             asyncio.create_task(dopo(30, servizi.foto_profili.assegna())),
         ]
         log.info("Cerca è pronto")
@@ -162,6 +170,7 @@ async def ciclo_di_vita(app: FastAPI):
         for c in compiti:
             with contextlib.suppress(asyncio.CancelledError):
                 await c
+        await servizi.animeunity.chiudi()
 
 
 app = FastAPI(title="Cerca", lifespan=ciclo_di_vita, docs_url=None, redoc_url=None, openapi_url=None)
@@ -1106,33 +1115,100 @@ async def api_serie_apri(request: Request, dati: RichiestaSerie):
     serie = await s.serie.prepara(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
     # per cercare da soli le puntate nuove anche con il titolo italiano (puntate_italiane.py)
     await asyncio.to_thread(ricorda_titoli, s.archivio, serie["id"], [dati.nome, dati.titolo])
-    return {"serie_id": serie["id"], "stagioni": await s.serie.puntate(serie["id"])}
+    if s.animeunity.attivo:
+        # gli anime si collegano da soli ad AnimeUnity (fonte diretta, preferita ai torrent)
+        try:
+            await asyncio.wait_for(s.anime.collega_da_solo(serie["id"], serie, await s.serie.episodi(serie["id"])), 20)
+        except (TimeoutError, ErroreServizio):
+            pass
+    risposta = await _puntate_e_anime(s, serie["id"])
+    risposta["animeunity"]["anime"] = serie.get("seriesType") == "anime" or e_anime(serie)
+    return risposta
+
+
+async def _puntate_e_anime(s, serie_id: int) -> dict:
+    stagioni = con_download_cerca(await s.serie.puntate(serie_id), s.archivio.download_puntate(serie_id))
+    stato = s.anime.leggi(serie_id)
+    return {"serie_id": serie_id, "stagioni": stagioni,
+            "animeunity": {"attivo": s.animeunity.attivo, "collegamenti": stato["collegamenti"], "da": stato["da"]}}
 
 
 @app.get("/api/serie/{serie_id}/puntate")
 async def api_serie_puntate(request: Request, serie_id: int):
-    return {"serie_id": serie_id, "stagioni": await servizi(request).serie.puntate(serie_id)}
+    return await _puntate_e_anime(servizi(request), serie_id)
 
 
 class SceltaPuntate(BaseModel):
     puntate: list[int] = []
     stagione: int | None = None
     tutte: bool = False
+    da_puntata: int | None = None  # id della puntata di Sonarr: da questa in avanti, anche le nuove
+
+
+def _uscita(e: dict) -> bool:
+    quando = e.get("airDateUtc") or ""
+    return bool(quando) and quando[:19] <= time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
 
 
 @app.post("/api/serie/{serie_id}/scarica")
 async def api_serie_scarica_puntate(request: Request, serie_id: int, dati: SceltaPuntate):
+    """Le puntate scelte: prima da AnimeUnity (link diretti, preferiti), il resto lo cerca Sonarr."""
     s = servizi(request)
-    if dati.tutte:
-        await s.serie.scarica_tutte(serie_id)
-        messaggio = "Scarico tutte le puntate, e anche quelle nuove appena escono."
+    episodi = await s.serie.episodi(serie_id)
+    da = None
+    if dati.da_puntata is not None:
+        scelta = next((e for e in episodi if e["id"] == dati.da_puntata), None)
+        if scelta is None:
+            raise ErroreServizio("Non trovo questa puntata in Sonarr.", "Chiudi e riapri la serie, poi riprova.")
+        da = (scelta.get("seasonNumber", 0), scelta.get("episodeNumber", 0))
+        volute = [e for e in episodi if (e.get("seasonNumber", 0), e.get("episodeNumber", 0)) >= da
+                  and e.get("seasonNumber", 0) > 0]
+    elif dati.tutte:
+        da = (1, 0)
+        volute = [e for e in episodi if e.get("seasonNumber", 0) > 0]
     elif dati.stagione is not None:
-        await s.serie.scarica_tutte(serie_id, dati.stagione)
-        messaggio = f"Scarico la stagione {dati.stagione}."
+        volute = [e for e in episodi if e.get("seasonNumber") == dati.stagione]
     else:
+        volute = [e for e in episodi if e["id"] in set(dati.puntate)]
+
+    avviate: list[int] = []
+    if s.animeunity.attivo:
+        if da is not None:
+            s.anime.segui_da(serie_id, da)
+        try:
+            esito = await s.anime.scarica(serie_id, solo=[e["id"] for e in volute])
+            avviate = esito["avviate"]
+        except ErroreServizio as exc:
+            log.info("AnimeUnity non disponibile: %s", exc.cosa)
+    if not (s.animeunity.attivo and s.anime.collegamenti(serie_id)):
+        # nessuna fonte diretta: come sempre, ci pensa Sonarr
+        if dati.da_puntata is not None:
+            quante = await s.serie.scarica_da(serie_id, dati.da_puntata)
+            return {"messaggio": f"Scarico da questa puntata in avanti ({quante} puntate), e le nuove appena escono."}
+        if dati.tutte:
+            await s.serie.scarica_tutte(serie_id)
+            return {"messaggio": "Scarico tutte le puntate, e anche quelle nuove appena escono."}
+        if dati.stagione is not None:
+            await s.serie.scarica_tutte(serie_id, dati.stagione)
+            return {"messaggio": f"Scarico la stagione {dati.stagione}."}
         await s.serie.scarica_puntate(dati.puntate)
-        messaggio = "Scarico la puntata." if len(dati.puntate) == 1 else f"Scarico {len(dati.puntate)} puntate."
-    return {"messaggio": messaggio}
+        return {"messaggio": "Scarico la puntata." if len(dati.puntate) == 1 else f"Scarico {len(dati.puntate)} puntate."}
+
+    gia = set(avviate) | s.archivio.puntate_in_download(serie_id)
+    resto = [e["id"] for e in volute if e["id"] not in gia and not e.get("hasFile") and _uscita(e)]
+    if resto:
+        await s.serie.scarica_puntate(resto)
+    parti = []
+    if avviate:
+        parti.append(f"{len(avviate)} da AnimeUnity" if len(avviate) > 1 else "1 da AnimeUnity")
+    if resto:
+        parti.append(f"{len(resto)} le cerco come torrent (AnimeUnity non le ha)")
+    if da is not None:
+        parti.append("le nuove le scarico appena escono")
+    if not parti:
+        return {"messaggio": "Niente da scaricare: le puntate scelte ci sono già (o sono già in download)."}
+    testo = "Scarico: " + "; ".join(parti) + "."
+    return {"messaggio": testo}
 
 
 @app.post("/api/serie/{serie_id}/annulla")
@@ -1142,8 +1218,62 @@ async def api_serie_annulla_puntate(request: Request, serie_id: int, dati: Scelt
     if dati.stagione is not None or dati.tutte:
         stagioni = await s.serie.puntate(serie_id)
         puntate = [p["id"] for st in stagioni if dati.tutte or st["numero"] == dati.stagione for p in st["puntate"]]
+    if dati.tutte:
+        s.anime.segui_da(serie_id, None)
     await s.serie.annulla_puntate(puntate)
+    # e i download diretti (AnimeUnity) di quelle puntate
+    per_puntata = s.archivio.download_puntate(serie_id)
+    for id_download in {per_puntata[p]["id"] for p in puntate if p in per_puntata}:
+        await s.download.annulla(id_download)
     return {"messaggio": "Annullato: non le cerco e non le scarico più (quelle già in Jellyfin restano)."}
+
+
+# --- AnimeUnity: le voci collegate a una serie ---------------------------------------
+
+@app.get("/api/serie/{serie_id}/animeunity/cerca")
+async def api_animeunity_cerca(request: Request, serie_id: int, q: str = ""):
+    """Le voci di AnimeUnity per collegarle a mano, con la stagione che sembra giusta."""
+    s = servizi(request)
+    episodi = await s.serie.episodi(serie_id)
+    voci = await s.animeunity.cerca(q.strip() or (await s.serie.dati(serie_id)).get("title", ""))
+    stagioni: dict[int, int] = {}
+    for e in episodi:
+        stagioni[e.get("seasonNumber", 0)] = stagioni.get(e.get("seasonNumber", 0), 0) + 1
+    assoluta = any(e.get("absoluteEpisodeNumber") for e in episodi)
+    voci = ordina_risultati(voci, [q], s.anime.italiano)[:20]
+    return {"risultati": [{**v, "stagione": indovina_stagione(v, voci, stagioni, assoluta)} for v in voci],
+            "stagioni": sorted(n for n in stagioni if n > 0), "assoluta": assoluta}
+
+
+class VoceAnimeUnity(BaseModel):
+    id: int
+    slug: str = ""
+    titolo: str = ""
+    doppiato: bool = False
+    immagine: str = ""
+    anno: str = ""
+    puntate: int = 0
+    stagione: int = 1
+
+
+@app.post("/api/serie/{serie_id}/animeunity/collega")
+async def api_animeunity_collega(request: Request, serie_id: int, voce: VoceAnimeUnity):
+    s = servizi(request)
+    s.anime.collega(serie_id, voce.model_dump(), voce.stagione)
+    esito = await s.anime.scarica(serie_id)
+    quante = len(esito["avviate"])
+    extra = f" Ho messo in coda {quante} puntate." if quante else ""
+    return {"messaggio": f"Collegato \"{voce.titolo}\": da ora le puntate arrivano prima da AnimeUnity.{extra}"}
+
+
+class ScollegaAnimeUnity(BaseModel):
+    id: int
+
+
+@app.post("/api/serie/{serie_id}/animeunity/scollega")
+async def api_animeunity_scollega(request: Request, serie_id: int, dati: ScollegaAnimeUnity):
+    servizi(request).anime.scollega(serie_id, dati.id)
+    return {"messaggio": "Scollegato: quelle puntate le cerca di nuovo Sonarr."}
 
 
 @app.post("/api/download/{id_download}/associa")

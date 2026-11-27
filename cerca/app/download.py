@@ -1,10 +1,11 @@
-"""Gestione dei download: HTTP diretto da Internet Archive, torrent via
-qBittorrent, e passaggio finale a Radarr (che mette il film in Jellyfin)."""
+"""Gestione dei download: HTTP diretto da Internet Archive e AnimeUnity, torrent via
+qBittorrent, e passaggio finale a Radarr (che mette il film in Jellyfin) o a Sonarr."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 import time
@@ -29,6 +30,8 @@ INTERVALLO_CONTROLLO = 15
 PREFISSO_ETICHETTA = "mediabox-"
 CATEGORIE_SORVEGLIATE = ("cerca", "manuale")
 CATEGORIA_MUSICA = "musica"
+# download HTTP contemporanei per fonte: AnimeUnity non ama troppe richieste insieme
+CONTEMPORANEI = {"animeunity": 2}
 
 
 # --- funzioni pure (testate) ---------------------------------------------------
@@ -100,6 +103,10 @@ class GestoreDownload:
         # asyncio tiene solo un riferimento debole ai compiti: senza questo insieme un compito
         # in sottofondo (es. il passaggio a Radarr) poteva sparire a metà senza lasciare traccia
         self._in_sottofondo: set[asyncio.Task] = set()
+        # fonte → funzione che dà il link vero (e le intestazioni) al momento di scaricare:
+        # i link di AnimeUnity scadono, quindi si chiedono a ogni partenza (li imposta main.py)
+        self.risolutori: dict = {}
+        self._turni = {fonte: asyncio.Semaphore(n) for fonte, n in CONTEMPORANEI.items()}
 
     def _sottofondo(self, coro) -> asyncio.Task:
         """Avvia un compito in sottofondo tenendolo in vita fino alla fine, e ne registra gli errori."""
@@ -128,6 +135,21 @@ class GestoreDownload:
             percorso=str(cartella / Path(versione["nome"]).name),
             categoria="cerca",
             totale=versione.get("dimensione") or 0,
+        )
+        self._avvia_http(id_download)
+        return id_download
+
+    async def da_animeunity(self, *, serie_id: int, titolo_serie: str, poster: str, puntata_au: int,
+                            episodio: dict, nome_file: str, doppiato: bool) -> int:
+        """Una puntata da AnimeUnity: HTTP diretto, poi a Sonarr come le altre."""
+        cartella = self.config.cartella_download / "cerca" / "animeunity" / nome_cartella(titolo_serie, "")
+        lingua = "ITA" if doppiato else "SUB ITA"
+        id_download = self.archivio.nuovo_download(
+            tmdb_id=None, titolo=f"{titolo_serie} · Stagione {episodio['seasonNumber']} · "
+                                 f"Episodio {episodio['episodeNumber']} ({lingua})",
+            anno="", poster=poster, fonte="animeunity", tipo="http", url=f"animeunity:{puntata_au}",
+            nome_file=nome_file, percorso=str(cartella / nome_file), categoria="cerca", serie=serie_id,
+            puntate=json.dumps([episodio["id"]]), totale=0,
         )
         self._avvia_http(id_download)
         return id_download
@@ -297,16 +319,32 @@ class GestoreDownload:
         voce = self.archivio.download(id_download)
         if not voce:
             return
+        turno = self._turni.get(voce.get("fonte") or "")
+        if turno is None:
+            await self._scarica_http_ora(id_download, voce)
+            return
+        if turno.locked():
+            self.archivio.aggiorna_download(id_download, messaggio="In coda: parte appena finisce un'altra puntata.")
+        async with turno:
+            self.archivio.aggiorna_download(id_download, messaggio="")
+            await self._scarica_http_ora(id_download, voce)
+
+    async def _link(self, voce: dict) -> tuple[str, dict]:
+        risolvi = self.risolutori.get(voce.get("fonte") or "")
+        return await risolvi(voce) if risolvi else (voce["url"], {})
+
+    async def _scarica_http_ora(self, id_download: int, voce: dict) -> None:
         destinazione = Path(voce["percorso"])
         parziale = destinazione.with_name(destinazione.name + ".part")
         destinazione.parent.mkdir(parents=True, exist_ok=True)
         tentativi = 0
         while True:
             gia_scaricati = parziale.stat().st_size if parziale.exists() else 0
-            intestazioni = {"Range": f"bytes={gia_scaricati}-"} if gia_scaricati else {}
             try:
+                url, intestazioni = await self._link(voce)
+                intestazioni = {**intestazioni, **({"Range": f"bytes={gia_scaricati}-"} if gia_scaricati else {})}
                 async with self.client.stream(
-                    "GET", voce["url"], headers=intestazioni, timeout=httpx.Timeout(60, connect=20)
+                    "GET", url, headers=intestazioni, timeout=httpx.Timeout(60, connect=20)
                 ) as r:
                     if r.status_code == 416:  # già completo
                         break
@@ -334,16 +372,13 @@ class GestoreDownload:
                 break
             except asyncio.CancelledError:
                 raise
-            except (httpx.HTTPError, OSError) as exc:
+            except (httpx.HTTPError, OSError, ErroreServizio) as exc:
                 tentativi += 1
                 log.warning("Download %s interrotto (%s), tentativo %s", id_download, exc, tentativi)
                 if tentativi >= 5:
-                    self.archivio.aggiorna_download(
-                        id_download,
-                        stato="errore",
-                        velocita=0,
-                        messaggio="Il download si è interrotto più volte. Premi \"Riprova\": riparte da dove era.",
-                    )
+                    messaggio = (f"{exc.cosa} {exc.cosa_fare}".strip() if isinstance(exc, ErroreServizio) else
+                                 "Il download si è interrotto più volte. Premi \"Riprova\": riparte da dove era.")
+                    self.archivio.aggiorna_download(id_download, stato="errore", velocita=0, messaggio=messaggio)
                     return
                 await asyncio.sleep(10 * tentativi)
         parziale.replace(destinazione)
@@ -450,6 +485,9 @@ class GestoreDownload:
         if voce["tipo"] == "torrent" and voce.get("hash"):
             with contextlib.suppress(ErroreServizio):
                 await self.qbit.elimina(voce["hash"], con_file=True)
+        elif voce["tipo"] == "http":
+            with contextlib.suppress(OSError):
+                Path(voce["percorso"]).parent.rmdir()
         self.archivio.aggiorna_download(id_download, stato="importato", messaggio="")
         if self.notifica:
             puntate = "1 puntata" if quante == 1 else f"{quante} puntate"

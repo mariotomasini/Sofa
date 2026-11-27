@@ -31,6 +31,7 @@ const ICONE = {
   chiudi: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
   info: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>',
   nota: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
+  daQui: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5v11l7-5.5zM12 6.5v11l7-5.5z"/></svg>',
   lente: '<svg class="icona" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>',
   audioSpento: '<svg class="icona spento" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5m0-5-5 5"/></svg>',
   audioAcceso: '<svg class="icona acceso" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
@@ -247,7 +248,7 @@ function avviaTorrent() {
 
 // --- elenco download (pagina Download e home) -----------------------------------------
 function htmlDownload(d, compatto = false) {
-  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale" }[d.fonte] || d.fonte;
+  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", animeunity: "AnimeUnity" }[d.fonte] || d.fonte;
   if (compatto) {
     const riga = d.stato === "in_corso"
       ? `${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}`
@@ -1343,7 +1344,7 @@ function attrSerie(f) {
 
 const STATI_PUNTATA = {
   pronta: "In Jellyfin", download: "In download", cerco: "Cerco una fonte",
-  in_arrivo: "La scarico appena esce", libera: "", non_uscita: "Non ancora uscita",
+  in_arrivo: "La scarico appena esce", libera: "", non_uscita: "Non ancora uscita", problema: "C'è un problema",
 };
 const ICONA_PUNTATA = { pronta: "pronto", download: "download", cerco: "cerco", in_arrivo: "in_arrivo" };
 
@@ -1354,11 +1355,18 @@ function htmlPuntate(stagioni) {
     const seguite = st.puntate.some((p) => p.seguita && p.stato !== "pronta");
     const righe = st.puntate.map((p) => {
       let bottone = "";
-      if (p.stato === "libera") bottone = `<button class="secondario" data-puntata="${p.id}" aria-label="Scarica la puntata ${p.numero}">${ICONE.scarica}</button>`;
-      else if (["download", "cerco", "in_arrivo"].includes(p.stato)) bottone = `<button class="secondario" data-tieni data-annulla-puntata="${p.id}">Annulla</button>`;
-      const stato = p.stato === "download" ? `In download ${Math.round(p.percentuale)}%` : STATI_PUNTATA[p.stato];
+      // "da qui in poi": questa puntata, quelle dopo (anche delle stagioni dopo) e le nuove appena escono
+      const daQui = `<button class="secondario da-qui" data-da-puntata="${p.id}" title="Scarica da questa puntata in avanti" ` +
+        `aria-label="Scarica dalla puntata ${p.numero} in avanti">${ICONE.daQui}<span>Da qui</span></button>`;
+      if (p.stato === "libera") bottone = `<button class="secondario" data-puntata="${p.id}" aria-label="Scarica la puntata ${p.numero}">${ICONE.scarica}</button>${daQui}`;
+      else if (p.stato === "non_uscita") bottone = daQui;
+      else if (["download", "cerco", "in_arrivo", "problema"].includes(p.stato)) bottone = `<button class="secondario" data-tieni data-annulla-puntata="${p.id}">Annulla</button>`;
+      let stato = p.stato === "download" ? `In download ${Math.round(p.percentuale)}%` : STATI_PUNTATA[p.stato];
+      if (p.stato === "problema" && p.messaggio) stato = p.messaggio;
+      if (p.fonte) stato = `${stato} · ${p.fonte}`;
       return `<div class="puntata"><div class="descrizione"><span><strong>${p.numero}.</strong> ${esc(p.titolo || "Puntata " + p.numero)}</span>` +
-        `<span class="stato-puntata">${iconaAnimata(ICONA_PUNTATA[p.stato] || "")}${esc(stato || "")}${p.data ? (stato ? " · " : "") + esc(p.data) : ""}</span></div>${bottone}</div>`;
+        `<span class="stato-puntata">${iconaAnimata(ICONA_PUNTATA[p.stato] || "")}${esc(stato || "")}${p.data ? (stato ? " · " : "") + esc(p.data) : ""}</span></div>` +
+        `<div class="azioni-puntata">${bottone}</div></div>`;
     }).join("");
     const azione = seguite
       ? `<button class="secondario" data-tieni data-annulla-stagione="${st.numero}">Annulla stagione</button>`
@@ -1366,6 +1374,44 @@ function htmlPuntate(stagioni) {
     return `<details class="stagione"${stagioni.length === 1 ? " open" : ""}><summary><span>Stagione ${st.numero} ` +
       `<span class="sottotitolo">${pronte}/${st.puntate.length} in Jellyfin</span></span>${azione}</summary>${righe}</details>`;
   }).join("");
+}
+
+// --- AnimeUnity: link diretti, preferiti ai torrent (e la versione doppiata in italiano sostituisce le altre)
+function nomeStagione(n) { return Number(n) === 0 ? "Numerazione assoluta" : `Stagione ${n}`; }
+
+function htmlCollegati(au) {
+  if (!au.collegamenti.length) {
+    return '<p class="sottotitolo">Nessuna voce collegata: le puntate le cerca Sonarr come torrent. Cerca qui sotto per collegarne una.</p>';
+  }
+  return au.collegamenti.map((c) => `<div class="au-voce">` +
+    (c.immagine ? `<img src="${esc(c.immagine)}" alt="" loading="lazy">` : "") +
+    `<div class="descrizione"><strong>${esc(c.titolo)}</strong><span class="sottotitolo">${esc(nomeStagione(c.stagione))} · ` +
+    `${c.doppiato ? "Doppiato ITA" : "Sub ITA"}${c.auto ? " · trovato da solo" : ""}</span></div>` +
+    `<button class="secondario" data-au-scollega="${c.id}">Scollega</button></div>`).join("");
+}
+
+function htmlRisultatiAU(r) {
+  if (!r.risultati.length) return '<p class="sottotitolo">AnimeUnity non trova niente con questo titolo.</p>';
+  const opzioni = (scelta) => [...r.stagioni, ...(r.assoluta ? [0] : [])]
+    .map((n) => `<option value="${n}"${n === scelta ? " selected" : ""}>${esc(nomeStagione(n))}</option>`).join("");
+  return r.risultati.map((v, i) => `<div class="au-voce">` +
+    (v.immagine ? `<img src="${esc(v.immagine)}" alt="" loading="lazy">` : "") +
+    `<div class="descrizione"><strong>${esc(v.titolo)}</strong><span class="sottotitolo">` +
+    `${esc([v.anno, v.puntate ? v.puntate + " puntate" : "", v.doppiato ? "Doppiato ITA" : "Sub ITA"].filter(Boolean).join(" · "))}</span>` +
+    `<select aria-label="Stagione di Sonarr" data-au-stagione="${i}">${opzioni(v.stagione)}</select></div>` +
+    `<button class="secondario" data-au-collega="${i}">Collega</button></div>`).join("");
+}
+
+function mostraAnimeUnity(d, au) {
+  const sezione = document.getElementById("serie-au");
+  if (!au || !au.attivo || !(au.anime || au.collegamenti.length || d._anime)) { sezione.hidden = true; return; }
+  if (au.anime) d._anime = true;
+  sezione.hidden = false;
+  const box = document.getElementById("au-collegati");
+  const html = htmlCollegati(au);
+  if (box._html !== html) { box.innerHTML = html; box._html = html; }
+  const campo = document.getElementById("au-testo");
+  if (!campo.value) campo.value = (JSON.parse(d.dataset.serie || "{}").titolo) || "";
 }
 
 function dialogoSerie() {
@@ -1382,6 +1428,15 @@ function dialogoSerie() {
       una stagione o una puntata. Prima la versione in italiano.</p>
     <p id="serie-esito" class="messaggio-serie" role="status"></p>
     <div id="serie-puntate" class="serie-puntate"></div>
+    <section id="serie-au" class="serie-au" hidden>
+      <div class="au-testa"><strong>AnimeUnity</strong>
+        <span class="sottotitolo">Link diretti, senza torrent: se ci sono si usano sempre per primi, e la versione
+          doppiata in italiano sostituisce quelle in altre lingue.</span></div>
+      <div id="au-collegati"></div>
+      <form id="au-cerca" class="au-cerca"><input id="au-testo" type="search" placeholder="Cerca su AnimeUnity" aria-label="Cerca su AnimeUnity">
+        <button class="secondario" type="submit">${ICONE.lente}Cerca</button></form>
+      <div id="au-risultati"></div>
+    </section>
     <div class="azioni-riga">
       <button type="button" class="secondario" id="serie-annulla-tutte" data-tieni hidden>Annulla tutte</button>
       <button type="button" class="secondario" id="serie-chiudi">Chiudi</button>
@@ -1416,7 +1471,8 @@ function dialogoSerie() {
   });
   d._azione = (b) => {
     b.disabled = true;
-    if (b.dataset.puntata) invia("scarica", { puntate: [Number(b.dataset.puntata)] });
+    if (b.dataset.daPuntata) invia("scarica", { da_puntata: Number(b.dataset.daPuntata) });
+    else if (b.dataset.puntata) invia("scarica", { puntate: [Number(b.dataset.puntata)] });
     else if (b.dataset.annullaPuntata) invia("annulla", { puntate: [Number(b.dataset.annullaPuntata)] });
     else if (b.dataset.stagione) invia("scarica", { stagione: Number(b.dataset.stagione) });
     else if (b.dataset.annullaStagione) invia("annulla", { stagione: Number(b.dataset.annullaStagione) });
@@ -1426,6 +1482,37 @@ function dialogoSerie() {
     if (!b) return;
     ev.preventDefault();  // il clic sul tasto della stagione non apre/chiude l'elenco
     if (!b.hasAttribute("data-tieni")) d._azione(b);
+  });
+
+  const risultatiAU = document.getElementById("au-risultati");
+  document.getElementById("au-cerca").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!d.dataset.serieId) return;
+    risultatiAU.innerHTML = '<p class="caricamento">Cerco su AnimeUnity</p>';
+    try {
+      const q = encodeURIComponent(document.getElementById("au-testo").value.trim());
+      const r = await chiama(`/api/serie/${d.dataset.serieId}/animeunity/cerca?q=${q}`);
+      risultatiAU._dati = r.risultati;
+      risultatiAU.innerHTML = htmlRisultatiAU(r);
+    } catch (e) {
+      risultatiAU.innerHTML = `<p class="messaggio-serie errore">${esc(e.errore || "AnimeUnity non risponde.")} ${esc(e.cosa_fare || "")}</p>`;
+    }
+  });
+  document.getElementById("serie-au").addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button[data-au-collega], button[data-au-scollega]");
+    if (!b) return;
+    b.disabled = true;
+    if (b.dataset.auScollega) {
+      await invia("animeunity/scollega", { id: Number(b.dataset.auScollega) });
+      return;
+    }
+    const i = Number(b.dataset.auCollega);
+    const voce = risultatiAU._dati[i];
+    const stagione = Number(risultatiAU.querySelector(`[data-au-stagione="${i}"]`).value);
+    esito.className = "messaggio-serie";
+    esito.textContent = "Collego e metto in coda le puntate…";
+    await invia("animeunity/collega", { ...voce, stagione });
+    risultatiAU.innerHTML = "";
   });
   return d;
 }
@@ -1443,6 +1530,7 @@ async function aggiornaPuntate(d) {
     });
     const tutte = r.stagioni.flatMap((st) => st.puntate);
     document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
+    mostraAnimeUnity(d, r.animeunity);
   } catch (e) { /* riprova al prossimo giro */ }
 }
 
@@ -1450,6 +1538,11 @@ async function apriSerie(dati) {
   const d = dialogoSerie();
   d.dataset.serie = JSON.stringify(dati);
   delete d.dataset.serieId;
+  d._anime = false;
+  document.getElementById("serie-au").hidden = true;
+  document.getElementById("au-risultati").innerHTML = "";
+  document.getElementById("au-testo").value = "";
+  document.getElementById("au-collegati")._html = "";
   const poster = document.getElementById("serie-poster");
   poster.hidden = !dati.poster;
   if (dati.poster) poster.src = dati.poster;
@@ -1473,6 +1566,7 @@ async function apriSerie(dati) {
     document.getElementById("serie-tutte").disabled = false;
     const tutte = r.stagioni.flatMap((st) => st.puntate);
     document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
+    mostraAnimeUnity(d, r.animeunity);
     clearInterval(d._aggiorna);
     d._aggiorna = setInterval(() => aggiornaPuntate(d), 8000);
   } catch (e) {
