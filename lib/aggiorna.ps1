@@ -149,7 +149,7 @@ function Installa-AggiornamentiAutomatici {
     if ((Leggi-Env "AGGIORNAMENTI_AUTOMATICI" $script:EnvFile) -eq "no") {
         Scrivi-Info "Aggiornamenti automatici spenti (si accendono dalle impostazioni)"
     } else {
-        Scrivi-Ok "Aggiornamenti automatici attivi (ogni notte verso le 4:30)"
+        Scrivi-Ok "Aggiornamenti automatici attivi (controllo ogni minuto, più uno di riserva ogni notte)"
     }
 }
 

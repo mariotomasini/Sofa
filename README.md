@@ -480,7 +480,7 @@ L'argomento è come una password: chi lo conosce vede le tue notifiche. Non sceg
 
 ## Aggiornamenti
 
-Ogni notte, verso le 4:30, mediabox controlla su GitHub se c'è una **versione nuova**. Se c'è:
+**Ogni minuto** mediabox controlla su GitHub se c'è una **versione nuova** (un cambiamento nel ramo principale o una nuova Release) e, se c'è, l'aggiornamento **parte da solo**, senza aspettare la notte. Il controllo lo fa il servizio delle impostazioni, sempre acceso. Chiede a GitHub solo "è cambiato qualcosa?": finché non cambia niente, la risposta non consuma il limite di richieste di GitHub. Ogni versione nuova si prova una volta sola: se l'aggiornamento non riesce, non riparte ogni minuto, ma ci riprova il controllo di ogni notte (verso le 4:30) o il pulsante *Aggiorna ora*. Quando parte l'aggiornamento:
 
 1. fa un backup;
 2. scarica la versione nuova e installa **solo i file cambiati**;

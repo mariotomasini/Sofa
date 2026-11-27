@@ -136,7 +136,7 @@ def c_e_di_nuovo(attuale: dict, nuova: dict) -> bool:
 
 
 def controlla(cartella: Path, client: httpx.Client | None = None) -> dict:
-    """Per la pagina delle impostazioni e per il controllo di ogni notte."""
+    """Per la pagina delle impostazioni e per i controlli automatici (ogni minuto e ogni notte)."""
     attuale = installata(cartella)
     try:
         nuova = ultima(cartella, client)
@@ -144,6 +144,105 @@ def controlla(cartella: Path, client: httpx.Client | None = None) -> dict:
         return {"attuale": attuale, "errore": str(exc), "disponibile": False}
     nuova.pop("archivio", None)
     return {"attuale": attuale, "ultima": nuova, "disponibile": c_e_di_nuovo(attuale, nuova)}
+
+
+# --- controllo ogni minuto ------------------------------------------------------------------------
+
+OGNI = 60  # secondi tra un controllo e l'altro
+CONTROLLO_COMPLETO_OGNI = 3600  # una volta all'ora anche le Release (non cambiano il ramo main)
+OSSERVATO = "generato/controllo-aggiornamenti.json"
+FASI_IN_CORSO = ("in_attesa", "controllo", "scarico", "installo")
+FLAG_AGGIORNA = ".da-aggiornare"
+FLAG_APPLICA = ".da-applicare"
+
+
+def _leggi_osservato(cartella: Path) -> dict:
+    try:
+        return json.loads((cartella / OSSERVATO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _salva_osservato(cartella: Path, dati: dict) -> None:
+    (cartella / OSSERVATO).parent.mkdir(parents=True, exist_ok=True)
+    _scrivi_sicuro(cartella / OSSERVATO, json.dumps(dati).encode())
+
+
+def automatici_attivi(cartella: Path) -> bool:
+    from .impostazioni import leggi_env
+
+    return leggi_env(cartella / ".env").get("AGGIORNAMENTI_AUTOMATICI", "si") != "no"
+
+
+def avvia_aggiornamento(cartella: Path, motivo: str) -> None:
+    """Come il pulsante "Aggiorna ora": il PC vede la richiesta in pochi secondi e aggiorna."""
+    from .impostazioni import leggi_env
+
+    (cartella / FLAG_AGGIORNA).write_text("", encoding="utf-8")
+    scrivi_stato(cartella, "in_attesa", motivo)
+    # i PC installati prima guardano solo .da-applicare: lo usiamo come segnale
+    if not (cartella / FLAG_APPLICA).exists():
+        (cartella / FLAG_APPLICA).write_text(leggi_env(cartella / ".env").get("MEDIA_DIR", ""), encoding="utf-8")
+
+
+def un_controllo(cartella: Path, client: httpx.Client, adesso: float) -> str:
+    """Un giro del controllo. Restituisce cosa ha fatto: "spento", "occupato", "uguale",
+    "nessuna", "gia_chiesto", "avviato" o "errore".
+
+    Ogni minuto chiede a GitHub solo l'ultimo commit di main, con l'ETag della volta prima:
+    se non è cambiato GitHub risponde 304, che non consuma il limite di 60 richieste all'ora.
+    Solo quando cambia (o una volta all'ora) fa il controllo completo, e se c'è una versione
+    nuova avvia l'aggiornamento. Ogni versione si prova una volta sola: se l'aggiornamento non
+    riesce non riparte ogni minuto (ci riprova il controllo di ogni notte o il pulsante).
+    """
+    if not automatici_attivi(cartella):
+        return "spento"
+    if (cartella / FLAG_AGGIORNA).exists() or leggi_stato(cartella).get("fase") in FASI_IN_CORSO:
+        return "occupato"
+    osservato = _leggi_osservato(cartella)
+    intestazioni = {"If-None-Match": osservato["etag"]} if osservato.get("etag") else {}
+    try:
+        r = client.get(f"{_api(cartella)}/repos/{_repo(cartella)}/commits/{RAMO}", headers=intestazioni)
+    except httpx.HTTPError:
+        return "errore"
+    completo = adesso - float(osservato.get("completo") or 0) >= CONTROLLO_COMPLETO_OGNI
+    if r.status_code == 304 and not completo:
+        return "uguale"
+    if r.status_code == 200:
+        osservato.update(etag=r.headers.get("etag", ""), sha=(r.json() or {}).get("sha", ""))
+    elif r.status_code != 304:
+        return "errore"
+    esito = controlla(cartella, client)
+    osservato["completo"] = adesso
+    if esito.get("errore") or not esito.get("disponibile"):
+        _salva_osservato(cartella, osservato)
+        return "errore" if esito.get("errore") else "nessuna"
+    nuova = esito["ultima"]
+    if osservato.get("chiesto") == nuova["id"]:
+        _salva_osservato(cartella, osservato)
+        return "gia_chiesto"
+    osservato["chiesto"] = nuova["id"]
+    _salva_osservato(cartella, osservato)
+    descrizione = nuova.get("versione") or nuova.get("messaggio") or nuova["id"][:7]
+    avvia_aggiornamento(cartella, f"Su GitHub c'è una versione nuova ({descrizione}): aggiorno da solo…")
+    return "avviato"
+
+
+def sorveglia(cartella: Path, ogni: float = OGNI) -> None:
+    """Il controllo di ogni minuto (in un thread del servizio delle impostazioni, sempre acceso)."""
+    import logging
+    import time
+
+    log = logging.getLogger("mediabox.aggiornamenti")
+    with _client() as client:
+        while True:
+            try:
+                esito = un_controllo(cartella, client, time.time())
+                if esito == "avviato":
+                    log.warning("Versione nuova su GitHub: aggiornamento avviato")
+            except Exception:  # noqa: BLE001 - il controllo non deve mai fermare le impostazioni
+                log.exception("Errore nel controllo degli aggiornamenti")
+            time.sleep(ogni)
 
 
 # --- stato per la pagina ------------------------------------------------------------------------------

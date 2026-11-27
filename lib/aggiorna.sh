@@ -161,7 +161,7 @@ UNIT
   if [[ "$(leggi_env AGGIORNAMENTI_AUTOMATICI "$ENV_FILE")" == "no" ]]; then
     info "Aggiornamenti automatici spenti (si accendono dalle impostazioni)"
   else
-    ok "Aggiornamenti automatici attivi (ogni notte verso le 4:30)"
+    ok "Aggiornamenti automatici attivi (controllo ogni minuto, più uno di riserva ogni notte)"
   fi
 }
 
