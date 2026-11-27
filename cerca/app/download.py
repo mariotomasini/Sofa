@@ -181,7 +181,12 @@ class GestoreDownload:
             fonte="archive", tipo="torrent", url=versione["url_torrent"], nome_file=versione["nome"],
             categoria="cerca",
         )
-        await self.qbit.aggiungi(categoria="cerca", etichetta=etichetta(id_download), file_torrent=r.content)
+        try:
+            await self.qbit.aggiungi(categoria="cerca", etichetta=etichetta(id_download), file_torrent=r.content)
+        except ErroreServizio:
+            # come in da_torrent: niente voce "in corso" per un torrent che qBittorrent non ha
+            self.archivio.elimina_download(id_download)
+            raise
         # Il torrent di Archive contiene tutto l'item: scarichiamo solo il file scelto
         self._sottofondo(self._solo_file_scelto(id_download, versione["nome"]))
         return id_download
@@ -295,6 +300,10 @@ class GestoreDownload:
         compito = self._compiti.pop(id_download, None)
         if compito:
             compito.cancel()
+            # si aspetta che il download si fermi davvero (file chiuso), poi si cancellano i file:
+            # su Windows un file ancora aperto non si cancella e restava sul disco per sempre
+            if compito is not asyncio.current_task():
+                await asyncio.wait({compito}, timeout=5)
         if voce["tipo"] == "torrent" and voce["stato"] != "importato":
             with contextlib.suppress(ErroreServizio):
                 hash_torrent = voce.get("hash")

@@ -48,7 +48,7 @@ def jellyfin_finto(richieste, spento=False):
 def servizi_finti(tmp_path, richieste, spento=False):
     config = dataclasses.replace(Config(), jellyfin_url="http://jellyfin:8096", password="segreta1")
     client = httpx.AsyncClient(transport=httpx.MockTransport(jellyfin_finto(richieste, spento)))
-    archivio = SimpleNamespace(elenco_download=lambda n: [])
+    archivio = SimpleNamespace(elenco_download=lambda n: [], conta_download=lambda *stati, tra_gli_ultimi=60: 0)
     return SimpleNamespace(config=config, accesso=Accesso(tmp_path), jellyfin=Jellyfin(config, client),
                            archivio=archivio, disco=SimpleNamespace(stato=lambda: {}),
                            foto_profili=SimpleNamespace(in_sottofondo=lambda: None))

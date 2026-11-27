@@ -325,8 +325,7 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
     contesto.setdefault("sezione", "cerca")
     # il tasto "‹ Indietro" in alto a sinistra: ovunque tranne nelle pagine iniziali dei mondi
     contesto.setdefault("indietro", nome not in PAGINE_INIZIALI)
-    attivi = [d for d in s.archivio.elenco_download(60)
-              if d["stato"] in ("ricerca", "in_corso", "completato", "importazione")]
+    attivi = s.archivio.conta_download("ricerca", "in_corso", "completato", "importazione", tra_gli_ultimi=60)
     return modelli.TemplateResponse(
         request,
         nome,
@@ -337,7 +336,7 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
          "foto_utente": foto_utente(utente.get("id", ""), larghezza=96) if utente else "",
          "lidarr": bool(s.config.lidarr_url), "navidrome": bool(s.config.navidrome_url),
          "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
-         "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
+         "kids": in_kids(request), "download_attivi": attivi, "con_tmdb": s.config.con_tmdb, **contesto},
     )
 
 

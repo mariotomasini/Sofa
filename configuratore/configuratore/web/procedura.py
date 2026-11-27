@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..impostazioni import leggi_env
+from ..impostazioni import leggi_env, scrivi_atomico
 from ..leggero import MEMORIA_MB, memoria_gb, poca_memoria
 from ..menu import PREDEFINITI, VOCI, aggiorna_env, attivo, lingue_valide, modifiche_finali, percorso_valido
 
@@ -232,6 +232,8 @@ def valida_password(p1: str, p2: str) -> str:
         raise DatiNonValidi("password", "La password deve avere almeno 8 caratteri.")
     if len(p1.encode()) > 72:
         raise DatiNonValidi("password", "La password è troppo lunga: al massimo 72 caratteri.")
+    if any(ord(c) < 32 or ord(c) == 127 for c in p1):
+        raise DatiNonValidi("password", "La password non può contenere a capo o tabulazioni.")
     if '"' in p1 or "\\" in p1:
         raise DatiNonValidi("password", "Togli le virgolette doppie (\") e la barra rovesciata (\\).")
     if p1 != p2:
@@ -310,7 +312,8 @@ def salva_installazione(cartella: Path, dati: dict) -> None:
         modifiche["IMPOSTAZIONI_SEGRETO"] = secrets.token_hex(32)
     file_env = cartella / ".env"
     if not file_env.exists():
-        file_env.write_text((cartella / ".env.example").read_text(encoding="utf-8"), encoding="utf-8")
+        # già 600 da subito: tra poco dentro c'è la password
+        scrivi_atomico(file_env, (cartella / ".env.example").read_text(encoding="utf-8"), modo=0o600)
     aggiorna_env(file_env, modifiche)
     file_env.chmod(0o600)
     (cartella / FLAG_PRONTA).write_text(str(int(time.time())), encoding="utf-8")

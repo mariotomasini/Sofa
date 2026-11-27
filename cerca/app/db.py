@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -67,7 +70,26 @@ CREATE TABLE IF NOT EXISTS stato (
 );
 """
 
+# Indici creati dopo le colonne aggiunte negli aggiornamenti (serie, puntate): sugli archivi
+# vecchi la colonna "serie" esiste solo dopo l'ALTER TABLE.
+INDICI = """
+CREATE INDEX IF NOT EXISTS download_stato ON download (stato, creato);
+CREATE INDEX IF NOT EXISTS download_creato ON download (creato);
+CREATE INDEX IF NOT EXISTS download_hash ON download (hash);
+CREATE INDEX IF NOT EXISTS download_serie ON download (serie);
+CREATE INDEX IF NOT EXISTS download_tmdb ON download (tmdb_id);
+CREATE INDEX IF NOT EXISTS ricerche_quando ON ricerche (quando);
+"""
+
+log = logging.getLogger("cerca.db")
+
 STATI_ATTIVI = ("in_corso", "completato", "importazione")
+# Le colonne che nuovo_download e aggiorna_download possono scrivere: i nomi finiscono
+# nel testo della query, quindi solo questi (un nome sbagliato è un errore, non un SQL nuovo).
+COLONNE_DOWNLOAD = frozenset({
+    "tmdb_id", "titolo", "anno", "poster", "fonte", "tipo", "url", "nome_file", "percorso", "categoria",
+    "serie", "puntate", "hash", "stato", "scaricati", "totale", "velocita", "messaggio", "creato", "aggiornato",
+})
 # Le risposte scadute restano una settimana come riserva: se un servizio non risponde,
 # meglio la risposta di ieri che una pagina di errore.
 RISERVA = 7 * 24 * 3600
@@ -96,6 +118,7 @@ class Archivio:
             self._conn.execute("ALTER TABLE download ADD COLUMN serie INTEGER")
         if "puntate" not in colonne:
             self._conn.execute("ALTER TABLE download ADD COLUMN puntate TEXT")
+        self._conn.executescript(INDICI)
 
     @property
     def _conn(self) -> sqlite3.Connection:
@@ -114,13 +137,52 @@ class Archivio:
     def _righe(self, sql: str, parametri: tuple = ()) -> list[dict]:
         return [dict(r) for r in self._conn.execute(sql, parametri).fetchall()]
 
+    @contextlib.contextmanager
+    def _transazione(self) -> Iterator[sqlite3.Connection]:
+        """Più scritture tutte insieme o nessuna (BEGIN IMMEDIATE: niente scritture altrui a metà)."""
+        conn = self._conn
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        conn.execute("COMMIT")
+
+    @staticmethod
+    def _intervallo(prefisso: str) -> tuple[str, str]:
+        """Le chiavi che iniziano con il prefisso sono quelle in [prefisso, prefisso + U+10FFFF).
+
+        Con LIKE "_" e "%" nel prefisso facevano da jolly e le maiuscole non contavano
+        ("importa_musica:" prendeva anche "IMPORTA-MUSICA:…"); così invece il confronto è
+        esatto e usa l'indice della chiave primaria.
+        """
+        return prefisso, prefisso + "\U0010ffff"
+
+    def integrita(self) -> str:
+        """"ok" se il file dell'archivio è sano, altrimenti la descrizione del problema."""
+        righe = self._conn.execute("PRAGMA quick_check").fetchall()
+        return "; ".join(str(r[0]) for r in righe) or "ok"
+
+    @staticmethod
+    def _colonne_valide(campi: dict) -> None:
+        sconosciute = set(campi) - COLONNE_DOWNLOAD
+        if sconosciute:
+            raise ValueError(f"Colonne sconosciute per un download: {', '.join(sorted(sconosciute))}")
+
     # --- cache -----------------------------------------------------------------
     def cache_leggi(self, chiave: str, *, scadute: bool = False) -> Any | None:
         """La risposta salvata; con scadute=True anche quella scaduta (la riserva)."""
-        righe = self._righe("SELECT valore, scade FROM cache WHERE chiave = ?", (chiave,))
-        if not righe or (righe[0]["scade"] < time.time() and not scadute):
+        riga = self._conn.execute("SELECT valore, scade FROM cache WHERE chiave = ?", (chiave,)).fetchone()
+        if riga is None or (riga["scade"] < time.time() and not scadute):
             return None
-        return json.loads(righe[0]["valore"])
+        try:
+            return json.loads(riga["valore"])
+        except ValueError:
+            # una risposta rovinata (disco pieno, spegnimento a metà) vale come non salvata
+            log.warning("Risposta in cache illeggibile, la tolgo: %s", chiave)
+            self._esegui("DELETE FROM cache WHERE chiave = ?", (chiave,))
+            return None
 
     def cache_scrivi(self, chiave: str, valore: Any, durata: float) -> None:
         self._esegui(
@@ -129,7 +191,7 @@ class Archivio:
         )
 
     def cache_togli(self, prefisso: str) -> None:
-        self._esegui("DELETE FROM cache WHERE chiave LIKE ?", (prefisso + "%",))
+        self._esegui("DELETE FROM cache WHERE chiave >= ? AND chiave < ?", self._intervallo(prefisso))
 
     def cache_pulisci(self) -> int:
         """Toglie le risposte scadute da più di una settimana. Restituisce quante."""
@@ -150,14 +212,8 @@ class Archivio:
             da_liberare -= r["n"]
             if da_liberare <= 0:
                 break
-        conn = self._conn
-        conn.execute("BEGIN")
-        try:
+        with self._transazione() as conn:
             conn.executemany("DELETE FROM cache WHERE chiave = ?", [(c,) for c in via])
-            conn.execute("COMMIT")
-        except BaseException:
-            conn.execute("ROLLBACK")
-            raise
         return len(via)
 
     # --- cronologia ------------------------------------------------------------
@@ -165,9 +221,11 @@ class Archivio:
         testo = testo.strip()
         if not testo:
             return
-        self._esegui("DELETE FROM ricerche WHERE lower(testo) = lower(?)", (testo,))
-        self._esegui("INSERT INTO ricerche (testo, quando) VALUES (?, ?)", (testo, time.time()))
-        self._esegui("DELETE FROM ricerche WHERE id NOT IN (SELECT id FROM ricerche ORDER BY quando DESC LIMIT 30)")
+        # tutto insieme: due ricerche contemporanee non lasciano doppioni né più di 30 righe
+        with self._transazione() as conn:
+            conn.execute("DELETE FROM ricerche WHERE lower(testo) = lower(?)", (testo,))
+            conn.execute("INSERT INTO ricerche (testo, quando) VALUES (?, ?)", (testo, time.time()))
+            conn.execute("DELETE FROM ricerche WHERE id NOT IN (SELECT id FROM ricerche ORDER BY quando DESC LIMIT 30)")
 
     def ultime_ricerche(self, quante: int = 10) -> list[dict]:
         return self._righe("SELECT testo, quando FROM ricerche ORDER BY quando DESC LIMIT ?", (quante,))
@@ -177,13 +235,19 @@ class Archivio:
         adesso = time.time()
         campi.setdefault("stato", "in_corso")
         campi.update(creato=adesso, aggiornato=adesso)
+        self._colonne_valide(campi)
+        if campi.get("hash"):
+            campi["hash"] = str(campi["hash"]).lower()  # download_per_hash cerca in minuscolo
         colonne = ", ".join(campi)
         segnaposti = ", ".join("?" for _ in campi)
         cur = self._esegui(f"INSERT INTO download ({colonne}) VALUES ({segnaposti})", tuple(campi.values()))
         return int(cur.lastrowid)
 
     def aggiorna_download(self, id_download: int, **campi) -> None:
-        campi["aggiornato"] = time.time()
+        campi.setdefault("aggiornato", time.time())
+        self._colonne_valide(campi)
+        if campi.get("hash"):
+            campi["hash"] = str(campi["hash"]).lower()
         assegnazioni = ", ".join(f"{k} = ?" for k in campi)
         self._esegui(f"UPDATE download SET {assegnazioni} WHERE id = ?", (*campi.values(), id_download))
 
@@ -193,6 +257,14 @@ class Archivio:
 
     def elenco_download(self, quanti: int = 50) -> list[dict]:
         return self._righe("SELECT * FROM download ORDER BY creato DESC LIMIT ?", (quanti,))
+
+    def conta_download(self, *stati: str, tra_gli_ultimi: int = 60) -> int:
+        """Quanti tra gli ultimi download sono in questi stati (il numerino in ogni pagina):
+        un conteggio, senza leggere e copiare decine di righe intere a ogni pagina."""
+        segnaposti = ", ".join("?" for _ in stati)
+        return int(self._conn.execute(
+            f"SELECT COUNT(*) FROM (SELECT stato FROM download ORDER BY creato DESC LIMIT ?) "
+            f"WHERE stato IN ({segnaposti})", (tra_gli_ultimi, *stati)).fetchone()[0])
 
     def download_per_stato(self, *stati: str) -> list[dict]:
         segnaposti = ", ".join("?" for _ in stati)
@@ -245,7 +317,10 @@ class Archivio:
     def avvisami_elenco(self) -> list[dict]:
         righe = self._righe("SELECT * FROM avvisami ORDER BY gratis_dal IS NULL, aggiunto DESC")
         for r in righe:
-            r["provider"] = json.loads(r["provider"]) if r["provider"] else []
+            try:
+                r["provider"] = json.loads(r["provider"]) if r["provider"] else []
+            except ValueError:
+                r["provider"] = []  # una riga rovinata non deve far sparire tutto l'elenco
         return righe
 
     def avvisami_imposta(self, tmdb_id: int, gratis_dal: float | None, provider: list, notificato: bool) -> None:
@@ -271,7 +346,7 @@ class Archivio:
 
     def stato_con_prefisso(self, prefisso: str) -> dict[str, str]:
         return {r["chiave"]: r["valore"] for r in self._righe(
-            "SELECT chiave, valore FROM stato WHERE chiave LIKE ?", (prefisso.replace("%", "") + "%",))}
+            "SELECT chiave, valore FROM stato WHERE chiave >= ? AND chiave < ?", self._intervallo(prefisso))}
 
     def stato_togli(self, chiave: str) -> None:
         self._esegui("DELETE FROM stato WHERE chiave = ?", (chiave,))

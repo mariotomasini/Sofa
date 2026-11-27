@@ -119,7 +119,7 @@ def scrivi(cartella: Path, p: Piano) -> Piano:
     precedente = leggi(cartella)
     if precedente is not None:
         p = unisci(precedente, p)
-    file = cartella / FILE
-    file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(p.righe(), encoding="utf-8")
+    from .impostazioni import scrivi_atomico
+
+    scrivi_atomico(cartella / FILE, p.righe())
     return p

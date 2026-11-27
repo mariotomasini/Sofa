@@ -11,7 +11,7 @@ import re
 import secrets
 from pathlib import Path
 
-from .impostazioni import leggi_env
+from .impostazioni import leggi_env, scrivi_atomico
 from .messaggi import SPUNTA
 
 NESSUNA_MODIFICA = 3
@@ -44,6 +44,10 @@ def attivo(valori: dict[str, str], chiave: str) -> bool:
 
 def aggiorna_env(file: Path, modifiche: dict[str, str]) -> None:
     """Cambia solo le righe indicate, lasciando commenti e ordine come sono."""
+    for chiave, valore in modifiche.items():
+        # un a capo in un valore aggiungerebbe righe (e impostazioni) che nessuno ha scelto
+        if not re.fullmatch(r"[A-Z0-9_]+", chiave) or any(c in str(valore) for c in "\r\n\x00"):
+            raise ValueError(f"Valore non valido per {chiave!r} nel file .env")
     righe = file.read_text(encoding="utf-8").splitlines() if file.exists() else []
     restanti = dict(modifiche)
     nuove = []
@@ -56,7 +60,7 @@ def aggiorna_env(file: Path, modifiche: dict[str, str]) -> None:
         else:
             nuove.append(riga)
     nuove.extend(f"{k}={v}" for k, v in restanti.items())
-    file.write_text("\n".join(nuove) + "\n", encoding="utf-8")
+    scrivi_atomico(file, "\n".join(nuove) + "\n")
 
 
 def lingue_valide(testo: str) -> str | None:
@@ -79,7 +83,7 @@ def percorso_valido(testo: str, windows: bool) -> str | None:
     """Percorso assoluto della cartella dei media (su Windows con la lettera del disco)."""
     percorso = testo.strip().strip('"').replace("\\", "/").rstrip("/")
     if windows:
-        return percorso if re.fullmatch(r"[A-Za-z]:(/[^<>:\"|?*]*)?", percorso) and len(percorso) > 2 else None
+        return percorso if re.fullmatch(r"[A-Za-z]:(/[^<>:\"|?*\x00-\x1f]*)?", percorso) and len(percorso) > 2 else None
     return percorso if percorso.startswith("/") and len(percorso) > 1 and "\n" not in percorso else None
 
 

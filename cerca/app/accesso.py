@@ -16,6 +16,7 @@ import contextvars
 import hashlib
 import hmac
 import json
+import os
 import secrets
 from pathlib import Path
 
@@ -25,6 +26,23 @@ FILE_SEGRETO = "segreto-accesso"
 
 # l'utente della richiesta in corso: lo legge Jellyfin per "Continua a guardare" e i consigli
 utente_corrente: contextvars.ContextVar[dict | None] = contextvars.ContextVar("utente_corrente", default=None)
+
+
+def _scrivi_segreto(file: Path, testo: str) -> None:
+    """Scrive il segreto leggibile solo da Cerca fin dall'inizio, e tutto o niente: un file
+    scritto a metà (spegnimento) darebbe un segreto diverso a ogni avvio."""
+    file.parent.mkdir(parents=True, exist_ok=True)
+    temporaneo = file.with_name(f".{file.name}.{secrets.token_hex(4)}")
+    fd = os.open(temporaneo, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(testo)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporaneo, file)
+    except BaseException:
+        temporaneo.unlink(missing_ok=True)
+        raise
 
 
 class Accesso:
@@ -42,9 +60,7 @@ class Accesso:
                 testo = ""
             if len(testo) < 32:
                 testo = secrets.token_hex(32)
-                self.cartella.mkdir(parents=True, exist_ok=True)
-                file.write_text(testo, encoding="utf-8")
-                file.chmod(0o600)
+                _scrivi_segreto(file, testo)
             self._segreto = testo.encode()
         return self._segreto
 
