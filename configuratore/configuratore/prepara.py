@@ -31,7 +31,8 @@ CARTELLE_DATI = [
     "foto",  # Immich: le foto dei telefoni (mai toccate dalla pulizia)
 ]
 
-VOLUMI_UTENTE = ["jellyfin_config", "cerca_dati"]
+# i volumi dei programmi che girano come PUID:PGID: Docker li crea di root, e senza permessi non partono
+VOLUMI_UTENTE = ["jellyfin_config", "cerca_dati", "navidrome_dati"]
 
 
 def _chown(percorso: Path, uid: int, gid: int, ricorsivo: bool = False) -> None:

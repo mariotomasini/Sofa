@@ -961,3 +961,21 @@ def test_immich_password_sbagliata(cartella, monkeypatch):
     with pytest.raises(ErroreMediabox) as e:
         immich.configura(Impostazioni.carica(cartella), None)
     assert "ADMIN_PASSWORD" in e.value.cosa_fare
+def test_sistema_volumi_anche_quello_di_navidrome(tmp_path, monkeypatch):
+    # Navidrome gira come PUID:PGID: il suo volume, creato di root da Docker, va dato a quell'utente
+    from configuratore import prepara as modulo
+
+    for nome in ("navidrome_dati", "cerca_dati", "radarr_config"):
+        (tmp_path / nome).mkdir()
+    cambiati = []
+    monkeypatch.setattr(modulo, "_chown", lambda percorso, uid, gid, ricorsivo=False: cambiati.append(percorso.name))
+    modulo.sistema_volumi(Impostazioni({"PUID": "4321", "PGID": "4321"}), tmp_path)
+    assert "navidrome_dati" in cambiati and "cerca_dati" in cambiati and "radarr_config" not in cambiati
+
+
+def test_l_aggiornamento_prepara_le_cartelle_prima_di_avviare():
+    for script, prepara, avvio in (("lib/aggiorna.sh", "configuratore prepara", "compose up -d"),
+                                   ("lib/aggiorna.ps1", "configuratore prepara", "Invoca-Compose up -d")):
+        testo = (RADICE / script).read_text(encoding="utf-8")
+        parte = testo[testo.index("aggiorna_servizi" if script.endswith(".sh") else "function Aggiorna-Servizi"):]
+        assert parte.index(prepara) < parte.index(avvio), script

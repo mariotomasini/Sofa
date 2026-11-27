@@ -109,6 +109,8 @@ function Aggiorna-Servizi {
             Esci-ConErrore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova: mediabox update"
         }
     }
+    # cartelle e permessi dei volumi: un programma nuovo (es. Navidrome) ha un volume nuovo
+    Invoca-Compose run --rm --remove-orphans -T configuratore prepara | Out-Host
     Invoca-Compose up -d --remove-orphans | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Scrivi-StatoAggiornamento "errore" "Alcuni servizi non sono ripartiti."
