@@ -107,6 +107,8 @@ aggiorna_servizi() {
       errore "Non riesco a preparare Cerca." "Controlla la connessione a Internet e riprova: mediabox update"
     }
   fi
+  # cartelle e permessi dei volumi: un programma nuovo (es. Navidrome) ha un volume nuovo, creato di root
+  compose run --rm --remove-orphans -T configuratore prepara || avviso "Non sono riuscito a preparare le cartelle."
   compose up -d --remove-orphans || {
     stato_aggiornamento errore "Alcuni servizi non sono ripartiti."
     errore "Alcuni servizi non sono ripartiti." "Riprova con: mediabox configura"
