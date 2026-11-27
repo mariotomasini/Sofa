@@ -246,9 +246,80 @@ function avviaTorrent() {
   });
 }
 
+// --- importare le playlist (Apple Music, Spotify…) --------------------------------------
+function htmlImportazione(x) {
+  const tipo = { preferiti: "Preferiti", libreria: "Solo da scaricare", playlist: "Playlist" }[x.tipo] || "Playlist";
+  const percento = x.totale ? Math.round(100 * (x.pronti + x.non_trovati) / x.totale) : 100;
+  const persi = x.non_trovati === 1 ? "1 non trovato" : `${x.non_trovati} non trovati`;
+  const stato = x.finito
+    ? `Finito: ${x.pronti} di ${x.totale} ${x.totale === 1 ? "brano" : "brani"}${x.non_trovati ? `, ${persi}` : ""}`
+    : `${x.pronti} di ${x.totale} pronti · ${x.in_corso} da fare${x.non_trovati ? ` · ${persi}` : ""}`;
+  const mancanti = x.elenco_non_trovati.length
+    ? `<details><summary>Non trovati (${x.elenco_non_trovati.length})</summary><ul class="elenco-non-trovati">` +
+      x.elenco_non_trovati.map((b) => `<li><strong>${esc(b.artista)} · ${esc(b.titolo)}</strong>` +
+        `${b.motivo ? `<span class="sottotitolo">${esc(b.motivo)}</span>` : ""}</li>`).join("") + "</ul></details>" : "";
+  return `<div class="importazione" data-id="${esc(x.id)}">` +
+    `<div class="riga-titolo"><strong>${esc(x.nome)}</strong><span class="lingua">${tipo}</span>` +
+    `<span class="sottotitolo">${esc(x.utente)}</span></div>` +
+    htmlPellicola(percento, { viva: !x.finito }) +
+    `<p class="sottotitolo">${esc(stato)}</p>` +
+    (x.errore ? `<p class="errore-riga">${esc(x.errore)}</p>` : "") + mancanti +
+    `<div class="azioni-riga">${x.non_trovati ? `<button type="button" class="secondario" data-riprova-import>Riprova i non trovati</button>` : ""}` +
+    `<button type="button" class="secondario" data-elimina-import>${x.finito ? "Togli dall'elenco" : "Ferma"}</button></div></div>`;
+}
+
+function avviaImportaMusica() {
+  const form = document.getElementById("form-importa");
+  const file = document.getElementById("file-csv");
+  const elenco = document.getElementById("importazioni");
+  let ultimo = "";
+  file.addEventListener("change", () => {
+    document.getElementById("nomi-csv").textContent = file.files.length
+      ? Array.from(file.files).map((f) => f.name).join(", ") : "Nessun file scelto";
+  });
+  async function aggiorna() {
+    try {
+      const d = await chiama("/api/musica/importazioni");
+      const html = d.importazioni.length ? d.importazioni.map(htmlImportazione).join("")
+        : `<p class="sottotitolo">Ancora nessuna importazione.</p>`;
+      if (html !== ultimo) { ultimo = html; elenco.innerHTML = html; }
+    } catch (e) { elenco.innerHTML = htmlErrore(e); }
+  }
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!file.files.length) { avviso("Scegli prima i file CSV.", true); return; }
+    const bottone = form.querySelector("button[type=submit]");
+    bottone.disabled = true;
+    try {
+      const r = await chiama("/api/musica/importazioni", { method: "POST", body: new FormData(form) });
+      avviso(r.messaggio);
+      form.reset();
+      document.getElementById("nomi-csv").textContent = "Nessun file scelto";
+      aggiorna();
+    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
+    bottone.disabled = false;
+  });
+  elenco.addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button");
+    const riga = b && b.closest(".importazione");
+    if (!riga) return;
+    const id = encodeURIComponent(riga.dataset.id);
+    b.disabled = true;
+    try {
+      const r = b.hasAttribute("data-riprova-import")
+        ? await chiama(`/api/musica/importazioni/${id}/riprova`, { method: "POST" })
+        : await chiama(`/api/musica/importazioni/${id}`, { method: "DELETE" });
+      avviso(r.messaggio);
+      aggiorna();
+    } catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); b.disabled = false; }
+  });
+  aggiorna();
+  setInterval(aggiorna, 10000);
+}
+
 // --- elenco download (pagina Download e home) -----------------------------------------
 function htmlDownload(d, compatto = false) {
-  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", animeunity: "AnimeUnity", animeworld: "AnimeWorld", streamingcommunity: "StreamingCommunity" }[d.fonte] || d.fonte;
+  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", importazione: "Playlist importata", animeunity: "AnimeUnity", animeworld: "AnimeWorld", streamingcommunity: "StreamingCommunity" }[d.fonte] || d.fonte;
   if (compatto) {
     const riga = d.stato === "in_corso"
       ? `${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}`

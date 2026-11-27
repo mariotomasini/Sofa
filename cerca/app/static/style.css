@@ -1030,3 +1030,14 @@ body[data-tema] .logo-segno { color: var(--lampada); }
 .testa-stagione .sottotitolo { flex: 1; }
 button.pericolo { color: var(--rosso); }
 @media (max-width: 640px) { .dettaglio-serie { padding-left: 0; } }
+
+/* Importare le playlist */
+.istruzioni-import ol { margin: 8px 0; padding-left: 20px; display: grid; gap: 6px; }
+#form-importa, .istruzioni-import, #importazioni { margin-top: 16px; }
+.importazione { padding: 14px 0; border-top: 1px solid var(--linea); display: grid; gap: 8px; }
+.importazione:first-child { border-top: 0; }
+.importazione .riga-titolo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; overflow-wrap: anywhere; }
+.elenco-non-trovati { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; }
+.elenco-non-trovati li { overflow-wrap: anywhere; }
+.elenco-non-trovati .sottotitolo { display: block; }
+.errore-riga { color: var(--errore, #e5484d); margin: 0; }

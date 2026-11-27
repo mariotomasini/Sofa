@@ -350,6 +350,16 @@ Nell'app scegli **Subsonic** o **Navidrome** se te lo chiede, poi scrivi:
 - **Server**: `http://mediabox.local/navidrome` (fuori casa: l'indirizzo Tailscale, es. `http://100.x.y.z/navidrome`);
 - **Utente e password**: `admin` con la password di mediabox. Ogni persona di casa (*Utenti di casa* nelle impostazioni) ha anche il suo utente, con il suo nome e, come password, il nome in minuscolo (es. `Anna` / `anna`): così ognuno ha i suoi preferiti e le sue playlist. La password si cambia da Navidrome (in alto a destra → *Personale*).
 
+#### Portare qui le playlist di Apple Music (o Spotify)
+
+In Cerca, pagina **Musica → Importa la tua musica** (`/musica/importa`):
+
+1. dal browser esporta le playlist in **CSV** con **TuneMyMusic** o **Soundiiz** (dall'iPhone Apple non lo permette): origine *Apple Music*, destinazione *File → CSV*. Per i preferiti esporta la playlist **Brani preferiti**;
+2. carica i file nella pagina. Le playlist vanno all'utente con cui sei entrato in Cerca: ognuno di casa importa le sue;
+3. i brani che hai già vanno subito nella playlist con lo stesso nome in Navidrome; gli altri Cerca li cerca su Deezer e li scarica dai tuoi indexer, tre alla volta. Man mano che arrivano entrano nella playlist; quelli di *Brani preferiti* diventano i tuoi preferiti. A fine lavoro ricevi un avviso (ntfy), con i brani non trovati elencati nella pagina e il tasto per riprovarli.
+
+Con molti brani ci vogliono ore. Quanti se ne trovano dipende dagli indexer musicali che hai in Prowlarr. Se cambi la password del tuo utente in Navidrome, Cerca non riesce più a creare le tue playlist: la pagina te lo dice.
+
 La musica che c'è già compare dopo la prima scansione, in pochi minuti; quella nuova appena arriva (al più tardi entro un'ora). Navidrome è leggero (circa 50 MB di memoria): se non ti serve, spegnilo dalle impostazioni (*Musica nelle app per telefono*).
 
 ### Scoprire musica nuova

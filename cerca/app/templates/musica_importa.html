@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_mondi.html" import selettore %}
+{% block titolo %}Importa la musica{% endblock %}
+{% block contenuto %}
+<div class="capo">{{ selettore(mondo, base, mondi, kids) }}</div>
+<h1 class="titolo-pagina"><span class="rivela"><span>Porta qui la tua musica</span></span></h1>
+<p class="sottotitolo">Le playlist di Apple Music (o di Spotify, YouTube Music…) diventano playlist di casa, con il tuo utente</p>
+
+{%- if not navidrome %}
+<div class="blocco avviso-blocco">
+  <p><strong>Navidrome è spento.</strong> Le playlist vanno in Navidrome: accendilo dalle impostazioni
+    (<em>Musica nelle app per telefono</em>), poi torna qui.</p>
+</div>
+{%- endif %}
+
+<div class="blocco istruzioni-import">
+  <h2>1. Esporta le playlist da Apple Music</h2>
+  <p>Dall'iPhone Apple non lo permette: usa <strong>TuneMyMusic</strong> (tunemymusic.com) o <strong>Soundiiz</strong> (soundiiz.com), dal browser.</p>
+  <ol>
+    <li>Come origine scegli <strong>Apple Music</strong> e accedi con il tuo account.</li>
+    <li>Scegli le playlist. Per i preferiti scegli <strong>Brani preferiti</strong>: qui diventano i tuoi preferiti.</li>
+    <li>Come destinazione scegli <strong>File</strong> → <strong>CSV</strong> e scarica il file.</li>
+  </ol>
+  <p class="sottotitolo">Il piano gratuito di questi siti ha un limite di brani per volta: se ne hai tanti, esporta poche playlist alla volta.</p>
+</div>
+
+<form id="form-importa" class="blocco" enctype="multipart/form-data">
+  <h2>2. Carica i file qui</h2>
+  <p>Le playlist vanno a <strong>{{ utente.nome if utente else "admin" }}</strong>. Ognuno di casa le importa entrando in Cerca con il suo utente.</p>
+  <div class="campo-file">
+    <input id="file-csv" name="file" type="file" accept=".csv,text/csv" multiple>
+    <label for="file-csv" class="bottone secondario">Scegli i file CSV</label>
+    <span id="nomi-csv" class="sottotitolo">Nessun file scelto</span>
+  </div>
+  <button type="submit" class="grande"{% if not navidrome %} disabled{% endif %}>Importa</button>
+</form>
+
+<section class="blocco">
+  <h2>3. A che punto è</h2>
+  <p class="sottotitolo">I brani che hai già vanno subito nella playlist; gli altri li scarico pochi alla volta (con tante playlist ci vogliono ore). A fine lavoro ti avviso sul telefono.</p>
+  <div id="importazioni" aria-live="polite"><p class="caricamento">Carico</p></div>
+</section>
+{% endblock %}
+{% block script %}<script>avviaImportaMusica();</script>{% endblock %}

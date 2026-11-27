@@ -25,6 +25,7 @@ from .radarr import Radarr
 from .rete import ErroreServizio
 from .tmdb import TMDB
 
+FONTE_IMPORTAZIONE = "importazione"
 log = logging.getLogger("cerca.download")
 
 INTERVALLO_CONTROLLO = 15
@@ -521,7 +522,8 @@ class GestoreDownload:
         if voce.get("percorso"):
             await self.jellyfin.avvisa_nuovo(voce["percorso"])
         self.archivio.aggiorna_download(voce["id"], stato="importato", messaggio="")
-        if self.notifica:
+        # i brani delle playlist importate: un avviso solo, a importazione finita (importa_musica.py)
+        if self.notifica and voce.get("fonte") != FONTE_IMPORTAZIONE:
             await self.notifica("Pronto da ascoltare", f"{voce['titolo']} è in Jellyfin.",
                                 f"{self.config.indirizzo_pubblico}/jellyfin/")
 

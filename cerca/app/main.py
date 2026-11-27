@@ -50,6 +50,7 @@ from .deezer import Deezer
 from .download import GestoreDownload, e_magnet, nome_cartella, nome_da_magnet
 from .foto_profili import FotoProfili
 from .gruppi_download import con_coda_qbit, raggruppa
+from .importa_musica import ImportaMusica
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
 from .libreria import Libreria
@@ -127,6 +128,8 @@ class Servizi:
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.deezer = Deezer(self.archivio, client)
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
+        self.importa_musica = ImportaMusica(config, self.archivio, client, self.deezer, self.scarica_musica,
+                                            self.avvisami.notifica)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
         self.libreria = Libreria(config, self.archivio, client, self.qbit, self.jellyfin, self.download, self.serie)
@@ -178,6 +181,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
             asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
             asyncio.create_task(dopo(120, servizi.avvisi_italiano.ciclo())),
+            asyncio.create_task(dopo(150, servizi.importa_musica.ciclo())),
             asyncio.create_task(dopo(600, servizi.puntate_italiane.ciclo())),
             asyncio.create_task(dopo(240, servizi.anime.ciclo())),
             asyncio.create_task(dopo(30, servizi.foto_profili.assegna())),
@@ -472,6 +476,49 @@ async def pagina_musica(request: Request):
     return solo_adulti(request) or pagina(request, "musica.html", mondo="musica",
                                           indirizzo_navidrome=f"http://{host}/navidrome",
                                           admin=e_admin(request))
+
+
+@app.get("/musica/importa", response_class=HTMLResponse)
+async def pagina_importa_musica(request: Request):
+    return solo_adulti(request) or pagina(request, "musica_importa.html", mondo="musica")
+
+
+@app.get("/api/musica/importazioni")
+async def api_importazioni(request: Request):
+    s = servizi(request)
+    return {"importazioni": s.importa_musica.elenco(utente_di(request)), "attivo": s.importa_musica.attivo}
+
+
+@app.post("/api/musica/importazioni")
+async def api_nuova_importazione(request: Request, file: list[UploadFile] = File(...)):
+    """Le playlist esportate in CSV (TuneMyMusic, Soundiiz): una importazione per playlist."""
+    letti = []
+    for f in file:
+        contenuto = await f.read()
+        if len(contenuto) > 5 * 1024 * 1024:
+            raise ErroreServizio(f"Il file \"{f.filename}\" è troppo grande.", "Carica le playlist poche alla volta.")
+        try:
+            testo = contenuto.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            testo = contenuto.decode("latin-1")
+        letti.append((f.filename or "playlist.csv", testo))
+    creati = servizi(request).importa_musica.nuova(utente_di(request), letti)
+    brani = sum(c["totale"] for c in creati)
+    nomi = ", ".join(f"\"{c['nome']}\"" for c in creati[:3]) + ("…" if len(creati) > 3 else "")
+    return {"messaggio": f"Importo {nomi}: {brani} brani. Quelli che hai già vanno subito nella playlist, "
+                         "gli altri li scarico pochi alla volta.", "importazioni": creati}
+
+
+@app.post("/api/musica/importazioni/{id_lavoro}/riprova")
+async def api_riprova_importazione(request: Request, id_lavoro: str):
+    quanti = servizi(request).importa_musica.riprova(id_lavoro, utente_di(request))
+    return {"messaggio": f"Riprovo {quanti} brani." if quanti else "Non c'è niente da riprovare."}
+
+
+@app.delete("/api/musica/importazioni/{id_lavoro}")
+async def api_elimina_importazione(request: Request, id_lavoro: str):
+    servizi(request).importa_musica.elimina(id_lavoro, utente_di(request))
+    return {"messaggio": "Importazione fermata. I brani già scaricati e la playlist restano."}
 
 
 @app.get("/musica/artista/{id_artista}", response_class=HTMLResponse)
