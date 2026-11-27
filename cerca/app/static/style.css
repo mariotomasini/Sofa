@@ -558,6 +558,19 @@ div.errore p, .nota p { margin: 2px 0 0; color: var(--testo-2); }
 .puntata .stato-puntata .ia { width: 16px; height: 16px; }
 .puntata button { min-height: 34px; padding: 0 12px; }
 .puntata button svg { width: 16px; height: 16px; }
+.azioni-puntata { display: flex; gap: 6px; flex-shrink: 0; }
+.puntata .da-qui { display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; font-size: .85rem; }
+.serie-au { border-top: 1px solid var(--linea); margin-top: 12px; padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.au-testa { display: flex; flex-direction: column; gap: 2px; }
+.au-voce { display: flex; align-items: center; gap: 10px; }
+.au-voce img { width: 40px; height: 56px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--linea); }
+.au-voce .descrizione { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.au-voce select { max-width: 220px; min-height: 34px; margin-top: 4px; }
+.au-voce button { min-height: 34px; padding: 0 12px; flex-shrink: 0; }
+.au-cerca { display: flex; gap: 8px; }
+.au-cerca input { flex: 1; min-width: 0; min-height: 40px; }
+.au-cerca button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; flex-shrink: 0; }
+.au-cerca button svg { width: 16px; height: 16px; }
 
 /* --- moduli e finestre -------------------------------------------------------------- */
 .modulo { display: flex; flex-direction: column; gap: 16px; }

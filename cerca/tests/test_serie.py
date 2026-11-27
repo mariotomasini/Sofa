@@ -300,3 +300,14 @@ def test_scarica_e_annulla_puntate():
     asyncio.run(s.annulla_puntate([2]))
     assert ("episode/monitor", {"episodeIds": [2], "monitored": False}) in comandi
     assert any(c[0] == "queue/50" for c in comandi)
+
+
+def test_scarica_da_questa_puntata_in_avanti():
+    comandi = []
+    s = sonarr({}, [], comandi=comandi)
+    assert asyncio.run(s.scarica_da(7, 2)) == 3  # la 2 e la 3 della stagione 1, la 1 della 2 (non lo speciale)
+    serie = next(c for nome, c in comandi if nome == "serie")
+    assert serie["monitorNewItems"] == "all" and serie["seasons"][1]["monitored"]
+    assert ("episode/monitor", {"episodeIds": [2, 3, 4], "monitored": True}) in comandi
+    # si cercano subito solo quelle già uscite (la 4 esce nel 2099)
+    assert ("command", {"name": "EpisodeSearch", "episodeIds": [2, 3]}) in comandi

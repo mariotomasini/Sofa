@@ -53,6 +53,12 @@ class Config:
     ) or ("it", "es", "en"))
     sonarr_url: str = field(default_factory=lambda: _env("SONARR_URL"))
     sonarr_chiave: str = field(default_factory=lambda: _env("SONARR_API_KEY"))
+    # AnimeUnity e AnimeWorld, fonti dirette (HTTP) degli anime: preferite ai torrent. Vuoto = spenta.
+    # Il sito cambia spesso dominio: si aggiorna qui.
+    animeunity_url: str = field(default_factory=lambda: _env("ANIMEUNITY_URL", "https://animeunity.cx").rstrip("/"))
+    animeworld_url: str = field(default_factory=lambda: _env("ANIMEWORLD_URL", "https://www.animeworld.ac").rstrip("/"))
+    # StreamingCommunity (film e serie): spento finché non scrivi l'indirizzo, che cambia spesso
+    streamingcommunity_url: str = field(default_factory=lambda: _env("STREAMINGCOMMUNITY_URL").rstrip("/"))
     pulizia_visti: bool = field(default_factory=lambda: _env("PULIZIA_VISTI", "no").lower() in VERO)
     # un valore scritto male nel .env non deve impedire a Cerca di partire
     pulizia_giorni: int = field(default_factory=lambda: _numero(_env("PULIZIA_GIORNI", "30"), 30))

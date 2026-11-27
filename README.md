@@ -288,6 +288,7 @@ Cerca si ricorda l'ultima home che hai visto: quando la riapri compare subito, e
 Attivale dalle **impostazioni** (`/impostazioni`, voce *Serie TV*): viene installato **Sonarr**.
 
 - **Da Cerca** (mondo *Serie TV*): tocca una serie, nella home o tra i risultati, e premi **Scarica tutte** (oppure scegli una stagione o una puntata). Cerca la aggiunge a Sonarr con la qualità giusta (e nella cartella Anime se è un anime), e Sonarr scarica le puntate già uscite e, con *Scarica tutte*, anche quelle nuove appena escono.
+- **Da questa puntata in avanti**: nella finestra della serie, accanto a ogni puntata non ancora scaricata, c'è il tasto **Da qui**. Scarica quella puntata e tutte quelle dopo (anche delle stagioni successive) già uscite, e poi quelle nuove appena escono. Le puntate prima restano come sono: comodo se hai già visto l'inizio altrove o se vuoi riprendere da metà.
 - **Puntate nuove con il titolo italiano**: Sonarr cerca i torrent solo con il titolo inglese, quindi molte serie italiane non le trova da solo (*Mare fuori* per lui è *The Sea Beyond*). Per questo ogni 3 ore Cerca prende le puntate già uscite che Sonarr non ha ancora trovato e le cerca da sola con il titolo italiano, quello originale e quelli di Sonarr. Scarica la versione nella tua lingua preferita (la puntata singola, o la stagione intera se ne mancano più di una), solo se ha abbastanza fonti, e a download finito la consegna a Sonarr: la puntata compare in Jellyfin. Il titolo italiano Cerca lo impara quando apri la serie dalla sua finestra: per le serie aggiunte prima di questa versione basta aprirla una volta.
 - Le puntate finiscono in `Serie/Nome serie (Anno)/Stagione 01/`. Puoi sempre usare anche Sonarr direttamente ("Apri in Sonarr"), per esempio per scaricare solo una stagione.
 - In Jellyfin ogni serie è **una sola scheda**, divisa in **stagioni** ed **episodi**.
@@ -303,6 +304,26 @@ Attivali dalle **impostazioni** (voce *Anime*). In Jellyfin compare la libreria 
 2. come *Tipo di serie* scegli **Anime**: così Sonarr usa anche la numerazione assoluta degli episodi (es. "One Piece 1071"), che è quella usata da molti rilasci.
 
 Per i sottotitoli degli anime aggiungi l'inglese e, se vuoi, il giapponese alle lingue (voce 6 del menu). Prowlarr passa a Sonarr anche le categorie anime degli indexer.
+
+#### Link diretti (AnimeUnity e AnimeWorld), prima dei torrent
+
+Per gli anime Cerca usa anche due siti con i link diretti: [AnimeUnity](https://animeunity.cx) e [AnimeWorld](https://www.animeworld.ac). Le puntate si scaricano direttamente (HTTP), senza torrent.
+
+- **Si collega da solo**: quando apri un anime in Cerca, lo cerca su entrambi i siti e collega a ogni stagione la voce giusta, sia doppiata (ITA) sia sottotitolata. Gli spin-off (ONA, OVA, film, speciali) non vengono collegati da soli. Le serie lunghe con un'unica voce (es. *One Piece* su AnimeUnity) si collegano con la numerazione assoluta. Le voci collegate le vedi in fondo alla finestra della serie, nella sezione **Link diretti**, con il nome del sito: se ne ha scelta una sbagliata premi **Scollega**, poi cerca quella giusta, scegli la stagione e premi **Collega**.
+- **I link diretti sono sempre i preferiti**: *Scarica tutte*, *Stagione*, la singola puntata e *Da qui* prendono dai siti diretti tutto quello che c'è: prima la versione nella tua lingua preferita, poi AnimeUnity, poi AnimeWorld. Se un sito non dà il file di una puntata (per esempio solo in streaming), Cerca prova da solo l'altro. Solo le puntate che nessuno dei due ha le cerca Sonarr come torrent. Le puntate prese dai siti diretti Sonarr non le cerca più, e se le stava già scaricando si fermano.
+- **La versione in italiano sostituisce il resto**: se una puntata c'è già ma non in italiano (per esempio un torrent in giapponese) e su un sito diretto esiste doppiata, Cerca la scarica e la mette al posto di quella vecchia.
+- **Le puntate nuove**: ogni ora Cerca controlla gli anime collegati e scarica le puntate nuove (con *Scarica tutte* o *Da qui*). Se una puntata è uscita da più di 2 giorni e nessun sito ce l'ha ancora, la cerca Sonarr.
+- Scarica al massimo 2 puntate alla volta per sito; le altre aspettano il loro turno nella pagina **Download**. Un download interrotto riparte da dove era. A download finito la puntata passa a Sonarr e compare in Jellyfin come le altre (`… - S01E05 - ITA.mp4`).
+- I siti cambiano spesso indirizzo: se uno non risponde più, scrivi quello nuovo in `ANIMEUNITY_URL` o `ANIMEWORLD_URL` nel file `.env` e scrivi `mediabox configura`. Lascia vuoto l'indirizzo per spegnere quel sito.
+
+#### StreamingCommunity: film e serie con link diretto (da accendere)
+
+Lo stesso principio vale anche per **film e serie** con [StreamingCommunity](https://it.wikipedia.org/wiki/StreamingCommunity) (oggi anche *StreamingUnity*), dove quasi tutto è doppiato in italiano.
+
+- **È spento di base.** Cambia dominio molto spesso, viene bloccato, e i domini vecchi diventano copie truffa: per questo mediabox non sceglie l'indirizzo al posto tuo. Per accenderlo scrivi l'indirizzo attuale in `STREAMINGCOMMUNITY_URL` nel file `.env` (solo se sei sicuro che sia quello vero) e scrivi `mediabox configura`.
+- **Film**: il pulsante **Scarica** della scheda, se il film è su StreamingCommunity (stesso codice TMDB, o stesso titolo e anno), lo scarica da lì e lo passa a Radarr, che lo mette in Jellyfin. Se il download non riesce, passa da solo ai torrent (Radarr). Se il film c'è già in Jellyfin, decide Radarr come sempre.
+- **Serie**: nella finestra della serie la sezione **Link diretti** compare per tutte le serie. StreamingCommunity si collega da solo se il titolo è proprio quello (non basta che "inizi con": *Dark* non è *Dark Matter*) e l'anno è vicino. Ha le stesse stagioni di Sonarr ("Tutte le stagioni"), e da lì in poi funziona come per gli anime: prima i link diretti, la versione italiana sostituisce le altre, le puntate nuove ogni ora.
+- Il video arriva a pezzi (HLS): lo scarica **ffmpeg**, già dentro Cerca, in un file MKV con l'audio italiano. Un download interrotto ricomincia da capo, non da metà.
 
 ### Musica
 
@@ -459,7 +480,7 @@ L'argomento è come una password: chi lo conosce vede le tue notifiche. Non sceg
 
 ## Aggiornamenti
 
-Ogni notte, verso le 4:30, mediabox controlla su GitHub se c'è una **versione nuova**. Se c'è:
+**Ogni minuto** mediabox controlla su GitHub se c'è una **versione nuova** (un cambiamento nel ramo principale o una nuova Release) e, se c'è, l'aggiornamento **parte da solo**, senza aspettare la notte. Il controllo lo fa il servizio delle impostazioni, sempre acceso. Chiede a GitHub solo "è cambiato qualcosa?": finché non cambia niente, la risposta non consuma il limite di richieste di GitHub. Ogni versione nuova si prova una volta sola: se l'aggiornamento non riesce, non riparte ogni minuto, ma ci riprova il controllo di ogni notte (verso le 4:30) o il pulsante *Aggiorna ora*. Quando parte l'aggiornamento:
 
 1. fa un backup;
 2. scarica la versione nuova e installa **solo i file cambiati**;

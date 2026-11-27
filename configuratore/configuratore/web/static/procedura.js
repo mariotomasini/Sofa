@@ -363,7 +363,7 @@ function testoVersione(a) {
 function disegnaAggiornamento(d) {
   $("agg-versione").textContent = testoVersione(d.attuale);
   $("agg-automatici").textContent = d.automatici
-    ? "Si aggiorna da solo ogni notte verso le 4:30: scarica e installa solo le parti cambiate."
+    ? "Si aggiorna da solo appena esce una versione nuova (controlla GitHub ogni minuto): scarica e installa solo le parti cambiate."
     : "Gli aggiornamenti automatici sono spenti (li accendi qui sopra, in Manutenzione).";
   const registro = $("agg-registro");
   registro.textContent = (d.registro || []).join("\n");

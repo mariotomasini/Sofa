@@ -110,6 +110,7 @@ class PuntateItaliane:
         mancanti = await tutte_le_pagine(self.serie._api, "wanted/missing", {
             "monitored": "true", "includeSeries": "true"})
         per_serie: dict[int, tuple[dict, list[tuple[int, int, int]]]] = {}
+        dirette: dict[int, set[int]] = {}  # puntate che Cerca scarica già da AnimeUnity
         for e in mancanti:
             id_puntata = e.get("id")
             if (not id_puntata or id_puntata in in_coda or str(id_puntata) in avviate
@@ -117,6 +118,10 @@ class PuntateItaliane:
                 continue
             serie = e.get("series") or {}
             id_serie = e.get("seriesId") or serie.get("id")
+            if id_serie and id_serie not in dirette:
+                dirette[id_serie] = self.archivio.puntate_in_download(id_serie)
+            if id_puntata in dirette.get(id_serie, ()):
+                continue
             if id_serie:
                 per_serie.setdefault(id_serie, (serie, []))[1].append(
                     (id_puntata, e["seasonNumber"], e.get("episodeNumber") or 0))

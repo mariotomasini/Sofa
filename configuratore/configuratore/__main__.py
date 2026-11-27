@@ -126,10 +126,15 @@ def main(argv: list[str] | None = None) -> int:
         return aggiornamento(CARTELLA_MEDIABOX, args.azione)
 
     if args.comando == "web":
+        import threading
+
         import uvicorn
 
+        from .aggiornamenti import sorveglia
         from .web.app import crea_app
 
+        # ogni minuto: c'è una versione nuova su GitHub? Se sì, l'aggiornamento parte da solo
+        threading.Thread(target=sorveglia, args=(CARTELLA_MEDIABOX,), daemon=True, name="aggiornamenti").start()
         uvicorn.run(crea_app(CARTELLA_MEDIABOX), host="0.0.0.0", port=args.porta, log_level="warning")  # noqa: S104
         return 0
 

@@ -179,6 +179,43 @@ class Serie:
             await self._api("POST", "command", json={"name": "SeasonSearch", "seriesId": serie_id,
                                                       "seasonNumber": stagione})
 
+    async def scarica_da(self, serie_id: int, episodio_id: int) -> int:
+        """Dalla puntata scelta in avanti: quelle già uscite subito, le altre (e le stagioni nuove) appena escono.
+
+        Le puntate prima di quella scelta restano come sono. Restituisce quante puntate segue.
+        """
+        episodi = await self.episodi(serie_id)
+        scelta = next((e for e in episodi if e.get("id") == episodio_id), None)
+        if scelta is None:
+            raise ErroreServizio("Non trovo questa puntata in Sonarr.", "Chiudi e riapri la serie, poi riprova.")
+        da = (scelta.get("seasonNumber", 0), scelta.get("episodeNumber", 0))
+        serie = await self._api("GET", f"series/{serie_id}")
+        serie["monitored"] = True
+        serie["monitorNewItems"] = "all"
+        for st in serie.get("seasons", []):
+            if st.get("seasonNumber", 0) >= da[0] > 0 or st.get("seasonNumber") == da[0]:
+                st["monitored"] = True
+        await self._api("PUT", f"series/{serie_id}", json=serie)
+        dopo = [e for e in episodi if (e.get("seasonNumber", 0), e.get("episodeNumber", 0)) >= da
+                and (e.get("seasonNumber", 0) > 0 or da[0] == 0)]
+        await self._api("PUT", "episode/monitor", json={"episodeIds": [e["id"] for e in dopo], "monitored": True})
+        oggi = dt.datetime.now(dt.UTC)
+        uscite = [e["id"] for e in dopo if not e.get("hasFile") and e.get("airDateUtc")
+                  and dt.datetime.fromisoformat(e["airDateUtc"].replace("Z", "+00:00")) <= oggi]
+        if uscite:
+            await self._api("POST", "command", json={"name": "EpisodeSearch", "episodeIds": uscite})
+        return len(dopo)
+
+    async def episodi(self, serie_id: int) -> list[dict]:
+        return await self._api("GET", "episode", params={"seriesId": serie_id}) or []
+
+    async def file_puntate(self, serie_id: int) -> list[dict]:
+        """I file delle puntate (con la lingua che Sonarr ha riconosciuto)."""
+        return await self._api("GET", "episodefile", params={"seriesId": serie_id}) or []
+
+    async def dati(self, serie_id: int) -> dict:
+        return await self._api("GET", f"series/{serie_id}") or {}
+
     async def scarica_puntate(self, episodi: list[int]) -> None:
         await self._api("PUT", "episode/monitor", json={"episodeIds": episodi, "monitored": True})
         await self._api("POST", "command", json={"name": "EpisodeSearch", "episodeIds": episodi})

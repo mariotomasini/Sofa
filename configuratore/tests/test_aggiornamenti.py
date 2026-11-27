@@ -128,3 +128,54 @@ def test_archivio_sbagliato_non_tocca_niente(tmp_path):
         assert "mediabox" in str(exc)
     assert (cartella / "mediabox").read_text().endswith("vecchio\n")
     assert agg.leggi_stato(cartella)["fase"] == "errore"
+
+
+def github_che_cambia(stato: dict):
+    """GitHub finto: un commit su main (con ETag), nessuna Release."""
+    chiamate = []
+
+    def gestore(r: httpx.Request) -> httpx.Response:
+        chiamate.append((r.url.path, r.headers.get("If-None-Match", "")))
+        if r.url.path.endswith("/releases/latest"):
+            return httpx.Response(404)
+        etag = f'"{stato["sha"]}"'
+        if r.headers.get("If-None-Match") == etag:
+            return httpx.Response(304)
+        return httpx.Response(200, headers={"etag": etag}, json={
+            "sha": stato["sha"], "commit": {"message": "Novità", "committer": {"date": "2026-11-27T10:00:00Z"}}})
+
+    return httpx.Client(transport=httpx.MockTransport(gestore)), chiamate
+
+
+def test_controllo_ogni_minuto_avvia_l_aggiornamento_da_solo(tmp_path):
+    (tmp_path / ".env").write_text("AGGIORNAMENTI_AUTOMATICI=si\nMEDIA_DIR=/srv/media\n")
+    (tmp_path / agg.INSTALLATA).write_text(json.dumps({"fonte": "main", "id": "aaa"}))
+    github = {"sha": "aaa"}
+    client, chiamate = github_che_cambia(github)
+
+    # stessa versione installata: niente da fare; il minuto dopo GitHub risponde 304 (gratis)
+    assert agg.un_controllo(tmp_path, client, adesso=1000) == "nessuna"
+    assert agg.un_controllo(tmp_path, client, adesso=1060) == "uguale"
+    assert chiamate[-1][1] == '"aaa"'
+
+    # esce un commit nuovo: parte l'aggiornamento, come con il pulsante "Aggiorna ora"
+    github["sha"] = "bbb"
+    assert agg.un_controllo(tmp_path, client, adesso=1120) == "avviato"
+    assert (tmp_path / ".da-aggiornare").exists()
+    assert (tmp_path / ".da-applicare").read_text() == "/srv/media"
+    assert agg.leggi_stato(tmp_path)["fase"] == "in_attesa"
+
+    # mentre aggiorna non si richiede di nuovo
+    assert agg.un_controllo(tmp_path, client, adesso=1180) == "occupato"
+
+    # aggiornamento fallito (la versione installata è ancora quella vecchia): non riparte ogni minuto
+    (tmp_path / ".da-aggiornare").unlink()
+    agg.scrivi_stato(tmp_path, "errore", "no")
+    assert agg.un_controllo(tmp_path, client, adesso=1240) == "uguale"
+    assert agg.un_controllo(tmp_path, client, adesso=1120 + agg.CONTROLLO_COMPLETO_OGNI) == "gia_chiesto"
+
+
+def test_controllo_spento_dalle_impostazioni(tmp_path):
+    (tmp_path / ".env").write_text("AGGIORNAMENTI_AUTOMATICI=no\n")
+    client, chiamate = github_che_cambia({"sha": "x"})
+    assert agg.un_controllo(tmp_path, client, adesso=1) == "spento" and chiamate == []

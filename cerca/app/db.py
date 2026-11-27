@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS download (
     percorso TEXT,                -- file o cartella sul disco
     categoria TEXT,
     serie INTEGER,                -- id della serie in Sonarr (per le puntate)
+    puntate TEXT,                 -- id delle puntate di Sonarr, in JSON (download da AnimeUnity)
     hash TEXT,
     stato TEXT NOT NULL,          -- in_corso | completato | importazione | importato | da_associare | errore
     scaricati INTEGER DEFAULT 0,
@@ -93,6 +94,8 @@ class Archivio:
         colonne = {r["name"] for r in self._righe("PRAGMA table_info(download)")}
         if "serie" not in colonne:
             self._conn.execute("ALTER TABLE download ADD COLUMN serie INTEGER")
+        if "puntate" not in colonne:
+            self._conn.execute("ALTER TABLE download ADD COLUMN puntate TEXT")
 
     @property
     def _conn(self) -> sqlite3.Connection:
@@ -199,6 +202,24 @@ class Archivio:
         righe = self._righe("SELECT * FROM download WHERE hash = ?", (hash_torrent.lower(),))
         return righe[0] if righe else None
 
+    def puntate_in_download(self, serie_id: int) -> set[int]:
+        """Le puntate di Sonarr che Cerca sta già scaricando (da AnimeUnity) per questa serie."""
+        return set(self.download_puntate(serie_id))
+
+    def download_puntate(self, serie_id: int) -> dict[int, dict]:
+        """{id puntata di Sonarr: download di Cerca ancora attivo}."""
+        segnaposti = ", ".join("?" for _ in STATI_ATTIVI)
+        risultato: dict[int, dict] = {}
+        for r in self._righe(f"SELECT * FROM download WHERE serie = ? AND puntate IS NOT NULL "
+                             f"AND stato IN ({segnaposti}, 'errore')", (serie_id, *STATI_ATTIVI)):
+            try:
+                ids = json.loads(r["puntate"] or "[]")
+            except ValueError:
+                continue
+            for i in ids:
+                risultato[int(i)] = r
+        return risultato
+
     def elimina_download(self, id_download: int) -> None:
         self._esegui("DELETE FROM download WHERE id = ?", (id_download,))
 
@@ -241,6 +262,10 @@ class Archivio:
     def stato_leggi(self, chiave: str) -> str | None:
         righe = self._righe("SELECT valore FROM stato WHERE chiave = ?", (chiave,))
         return righe[0]["valore"] if righe else None
+
+    def stato_con_prefisso(self, prefisso: str) -> dict[str, str]:
+        return {r["chiave"]: r["valore"] for r in self._righe(
+            "SELECT chiave, valore FROM stato WHERE chiave LIKE ?", (prefisso.replace("%", "") + "%",))}
 
     def stato_scrivi(self, chiave: str, valore: str) -> None:
         self._esegui("INSERT OR REPLACE INTO stato (chiave, valore) VALUES (?, ?)", (chiave, valore))
