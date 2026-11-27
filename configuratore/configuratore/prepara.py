@@ -28,6 +28,7 @@ CARTELLE_DATI = [
     "media/anime",
     "media/musica",
     "media/registrazioni",
+    "foto",  # Immich: le foto dei telefoni (mai toccate dalla pulizia)
 ]
 
 VOLUMI_UTENTE = ["jellyfin_config", "cerca_dati"]

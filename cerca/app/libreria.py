@@ -22,6 +22,7 @@ import httpx
 
 from .config import Config
 from .db import Archivio
+from .foto_protette import tocca_le_foto
 from .pulizia import dimensione
 from .rete import ErroreServizio, non_raggiungibile
 
@@ -313,7 +314,7 @@ class Libreria:
     async def elimina_altro(self, percorso: str) -> dict:
         async with self._lock:
             voce = Path(percorso)
-            if not dentro_una_libreria(voce, self.cartelle):
+            if tocca_le_foto(voce) or not dentro_una_libreria(voce, self.cartelle):
                 raise ErroreServizio("Questo percorso non è nelle librerie di mediabox.", "Ricarica la pagina.")
             elenco = await self.elenco()
             if elenco["errori"] or percorso not in {a["percorso"] for a in elenco["altro"]}:

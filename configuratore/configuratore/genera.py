@@ -59,11 +59,13 @@ def normalizza_percorso(percorso: str) -> str:
 
 
 SEGRETI_TGARR = ("TGARR_API_KEY", "TGARR_DB_PASSWORD", "TGARR_MEILI_KEY")
+SEGRETI_IMMICH = ("IMMICH_DB_PASSWORD",)
 
 
-def assicura_segreti_tgarr(imp: Impostazioni, file_env: Path) -> None:
-    """Le chiavi interne di tgarr si creano da sole la prima volta e restano nel file .env."""
-    mancanti = {k: secrets.token_hex(24) for k in SEGRETI_TGARR if not imp.get(k)}
+def assicura_segreti_tgarr(imp: Impostazioni, file_env: Path, chiavi: tuple[str, ...] = SEGRETI_TGARR) -> None:
+    """Le chiavi interne (tgarr, database di Immich) si creano da sole la prima volta e
+    restano nel file .env: cambiarle dopo renderebbe illeggibili i database."""
+    mancanti = {k: secrets.token_hex(24) for k in chiavi if not imp.get(k)}
     if not mancanti:
         return
     from .menu import aggiorna_env
@@ -76,6 +78,8 @@ def assicura_segreti_tgarr(imp: Impostazioni, file_env: Path) -> None:
 def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
     if imp.tgarr:
         assicura_segreti_tgarr(imp, cartella_generato.parent / ".env")
+    if imp.immich:
+        assicura_segreti_tgarr(imp, cartella_generato.parent / ".env", SEGRETI_IMMICH)
     valori = dict(imp.valori)
     # la chiave TMDB è facoltativa: senza, Cerca usa fonti gratuite
     for chiave in ("ADMIN_PASSWORD", "RADARR_API_KEY", "PROWLARR_API_KEY"):
@@ -102,6 +106,9 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         anime=imp.anime,
         lidarr=imp.lidarr,
         navidrome=imp.navidrome,
+        immich=imp.immich,
+        foto_porta=imp.get("FOTO_PORT", "2283") or "2283",
+        foto_copia=normalizza_percorso(imp.foto_copia) if imp.foto_copia else "",
         bazarr=imp.bazarr,
         flaresolverr=imp.flaresolverr,
         beszel=imp.beszel,
