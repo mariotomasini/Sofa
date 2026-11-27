@@ -192,10 +192,19 @@ class Serie:
         serie = await self._api("GET", f"series/{serie_id}")
         serie["monitored"] = True
         serie["monitorNewItems"] = "all"
+        accese: set[int] = set()
         for st in serie.get("seasons", []):
             if st.get("seasonNumber", 0) >= da[0] > 0 or st.get("seasonNumber") == da[0]:
+                if not st.get("monitored"):
+                    accese.add(st.get("seasonNumber", 0))
                 st["monitored"] = True
         await self._api("PUT", f"series/{serie_id}", json=serie)
+        # Accendendo una stagione, Sonarr segue anche tutte le sue puntate, comprese quelle prima
+        # della scelta: quelle che prima non erano seguite tornano come erano.
+        prima = [e["id"] for e in episodi if e.get("seasonNumber", 0) in accese and not e.get("monitored")
+                 and (e.get("seasonNumber", 0), e.get("episodeNumber", 0)) < da]
+        if prima:
+            await self._api("PUT", "episode/monitor", json={"episodeIds": prima, "monitored": False})
         dopo = [e for e in episodi if (e.get("seasonNumber", 0), e.get("episodeNumber", 0)) >= da
                 and (e.get("seasonNumber", 0) > 0 or da[0] == 0)]
         await self._api("PUT", "episode/monitor", json={"episodeIds": [e["id"] for e in dopo], "monitored": True})

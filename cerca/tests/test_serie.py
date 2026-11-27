@@ -311,3 +311,29 @@ def test_scarica_da_questa_puntata_in_avanti():
     assert ("episode/monitor", {"episodeIds": [2, 3, 4], "monitored": True}) in comandi
     # si cercano subito solo quelle già uscite (la 4 esce nel 2099)
     assert ("command", {"name": "EpisodeSearch", "episodeIds": [2, 3]}) in comandi
+
+
+def test_scarica_da_non_segue_le_puntate_prima():
+    # Sonarr, accendendo la stagione 1, seguirebbe anche le puntate prima della 3:
+    # la 1 e la 2 erano già seguite e restano così; nessuna va spenta per sbaglio.
+    comandi = []
+    s = sonarr({}, [], comandi=comandi)
+    asyncio.run(s.scarica_da(7, 3))
+    assert not any(n == "episode/monitor" and c["monitored"] is False for n, c in comandi)
+    assert ("episode/monitor", {"episodeIds": [3, 4], "monitored": True}) in comandi
+
+
+def test_scarica_da_rispegne_le_puntate_prima_non_seguite():
+    episodi = [dict(e, monitored=False) for e in EPISODI]
+    comandi = []
+    s = sonarr({}, [], comandi=comandi)
+
+    async def finti_episodi(serie_id):
+        return episodi
+    s.episodi = finti_episodi
+    asyncio.run(s.scarica_da(7, 3))
+    spente = [c for n, c in comandi if n == "episode/monitor" and c["monitored"] is False]
+    assert spente == [{"episodeIds": [1, 2], "monitored": False}]
+    # prima si spengono quelle prima, poi si accendono quelle scelte
+    assert comandi.index(("episode/monitor", spente[0])) < comandi.index(
+        ("episode/monitor", {"episodeIds": [3, 4], "monitored": True}))
