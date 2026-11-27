@@ -6,15 +6,70 @@
 #  Tiene anche le versioni passate (7 giorni, 8 settimane, 24 mesi): una foto
 #  cancellata per sbaglio si recupera.
 #
-#  Con degli argomenti esegue restic e basta, per controllare o ripristinare:
-#    docker compose run --rm foto-cloud snapshots
-#    docker compose run --rm foto-cloud restore latest --target /ripristino
+#  Dal PC si usa con "mediabox foto-cloud":
+#    collega      (Storage Box di Hetzner) installa la chiave, una volta sola
+#    stato        le copie nel cloud, una per notte
+#    ripristina   riporta l'ultima copia in MEDIA_DIR/foto-ripristinate
+#  Con altri argomenti esegue restic e basta (es. "snapshots", "check").
 # -----------------------------------------------------------------------------
 set -u
 
-if [ "$#" -gt 0 ]; then
-	exec restic "$@"
-fi
+CHIAVE=/chiave/id_ed25519
+
+prepara_ssh() {
+	# Storage Box di Hetzner: SFTP sulla porta 23 con una chiave creata qui la prima volta
+	[ -n "${STORAGEBOX_UTENTE:-}" ] || return 0
+	mkdir -p /root/.ssh /chiave
+	[ -f "$CHIAVE" ] || ssh-keygen -q -t ed25519 -N "" -C "mediabox-foto" -f "$CHIAVE"
+	cat > /root/.ssh/config <<FINE
+Host storagebox
+	HostName ${STORAGEBOX_HOST}
+	User ${STORAGEBOX_UTENTE}
+	Port 23
+	IdentityFile ${CHIAVE}
+	IdentitiesOnly yes
+	UserKnownHostsFile /chiave/known_hosts
+	StrictHostKeyChecking accept-new
+	ServerAliveInterval 60
+	ServerAliveCountMax 10
+FINE
+	chmod 600 /root/.ssh/config
+}
+
+collegato() {
+	# vero se lo Storage Box accetta la chiave (senza chiedere password)
+	ssh -o BatchMode=yes -o ConnectTimeout=20 storagebox ls > /dev/null 2>&1
+}
+
+collega() {
+	if [ -z "${STORAGEBOX_UTENTE:-}" ]; then
+		echo "Serve solo per lo Storage Box di Hetzner (FOTO_STORAGEBOX nel file .env)."
+		return 1
+	fi
+	if collegato; then
+		echo "Lo Storage Box accetta già la chiave di mediabox: niente da fare."
+	else
+		echo "Installo la chiave di mediabox sullo Storage Box ${STORAGEBOX_UTENTE}."
+		echo "Scrivi la password dello Storage Box (la trovi nella pagina di Hetzner): serve solo adesso."
+		ssh -p 23 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/chiave/known_hosts \
+			"${STORAGEBOX_UTENTE}@${STORAGEBOX_HOST}" install-ssh-key < "${CHIAVE}.pub" || {
+			echo "Non è andata. Controlla nella pagina dello Storage Box che \"SSH\" sia attivo e la password giusta."
+			return 1
+		}
+		collegato || { echo "La chiave non funziona ancora: riprova tra un minuto."; return 1; }
+	fi
+	restic cat config > /dev/null 2>&1 || restic init || return 1
+	echo "Fatto: ogni notte alle ${ORA_COPIA:-3} le foto nuove vanno sullo Storage Box, cifrate."
+}
+
+prepara_ssh
+case "${1:-}" in
+	"") ;;
+	collega) collega; exit $? ;;
+	stato) exec restic snapshots --compact ;;
+	ripristina) exec restic restore latest --target /ripristino ;;
+	*) exec restic "$@" ;;
+esac
 
 ORA="${ORA_COPIA:-3}"
 STATO=/stato
@@ -31,6 +86,10 @@ scrivi_stato() {
 }
 
 copia() {
+	if [ -n "${STORAGEBOX_UTENTE:-}" ] && ! collegato; then
+		echo "Lo Storage Box non accetta la chiave: sul PC scrivi \"mediabox foto-cloud collega\""
+		return 1
+	fi
 	if ! restic cat config > /dev/null 2>&1; then
 		echo "Prima copia: preparo lo spazio nel cloud"
 		restic init || return 1

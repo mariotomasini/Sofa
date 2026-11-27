@@ -33,6 +33,9 @@ Uso: mediabox <comando>
   restore <file>     ripristina un backup
   remote             installa Tailscale per usare mediabox da fuori casa
   indirizzi          mostra gli indirizzi da aprire nel browser
+  foto-cloud collega collega lo Storage Box di Hetzner alla copia delle foto (una volta sola)
+  foto-cloud stato   le copie delle foto nel cloud, una per notte
+  foto-cloud ripristina  riporta le foto dal cloud nella cartella foto-ripristinate
 EOF
 }
 
@@ -281,6 +284,16 @@ case "$comando" in
     controlla_installazione; prepara_docker; aggiorna_ip
     configuratore_costruisci
     "${DOCKER[@]}" run --rm -v "$MEDIABOX_DIR:/mediabox" mediabox/configuratore:locale indirizzi ;;
+  foto-cloud)
+    controlla_installazione; prepara_docker
+    if ! compose config --services 2>/dev/null | grep -qx foto-cloud; then
+      errore "La copia delle foto nel cloud è spenta." \
+        "Accendi le foto e scrivi FOTO_STORAGEBOX (o FOTO_CLOUD_REPO, FOTO_CLOUD_ID e FOTO_CLOUD_CHIAVE) nel file .env, poi \"mediabox configura\"."
+    fi
+    case "${1:-stato}" in
+      collega|stato|ripristina) compose run --rm foto-cloud "${1:-stato}" ;;
+      *) errore "Non conosco \"mediabox foto-cloud ${1}\"." "Usa collega, stato o ripristina." ;;
+    esac ;;
   *)
     avviso "Comando sconosciuto: $comando"
     aiuto

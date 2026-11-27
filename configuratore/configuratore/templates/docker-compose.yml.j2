@@ -39,6 +39,9 @@ volumes:
 {%- if foto_cloud %}
   foto_cloud_cache:
   foto_cloud_stato:
+{%- if storagebox %}
+  foto_cloud_chiave:
+{%- endif %}
 {%- endif %}
 {%- if bazarr %}
   bazarr_config:
@@ -363,10 +366,17 @@ services:
     entrypoint: ["/bin/sh", "/copia.sh"]
     environment:
       TZ: "{{ TZ }}"
-      RESTIC_REPOSITORY: "{{ FOTO_CLOUD_REPO }}"
       RESTIC_PASSWORD: "{{ FOTO_CLOUD_PASSWORD }}"
+{%- if storagebox %}
+      # Storage Box di Hetzner: SFTP sulla porta 23, con una chiave SSH creata qui
+      RESTIC_REPOSITORY: "sftp:storagebox:mediabox-foto"
+      STORAGEBOX_UTENTE: "{{ storagebox }}"
+      STORAGEBOX_HOST: "{{ storagebox_host }}"
+{%- else %}
+      RESTIC_REPOSITORY: "{{ FOTO_CLOUD_REPO }}"
       AWS_ACCESS_KEY_ID: "{{ FOTO_CLOUD_ID }}"
       AWS_SECRET_ACCESS_KEY: "{{ FOTO_CLOUD_CHIAVE }}"
+{%- endif %}
       LIMITE_KB: "{{ FOTO_CLOUD_LIMITE_KB | default('') }}"
       NTFY_TOPIC: "{{ NTFY_TOPIC }}"
       NTFY_SERVER: "{{ NTFY_SERVER }}"
@@ -377,6 +387,9 @@ services:
       - "{{ MEDIA_DIR }}/foto:/foto:ro"
       - foto_cloud_cache:/root/.cache/restic
       - foto_cloud_stato:/stato
+{%- if storagebox %}
+      - foto_cloud_chiave:/chiave
+{%- endif %}
       # per i ripristini: le foto tornano qui, mai sopra quelle che ci sono
       - "{{ MEDIA_DIR }}/foto-ripristinate:/ripristino"
     cpu_shares: 256

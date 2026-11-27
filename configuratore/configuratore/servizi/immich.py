@@ -156,6 +156,11 @@ def configura(imp: Impostazioni, esito) -> None:
             f"poi email {email(nome)} e password {password}. Al primo accesso Immich ne chiede una nuova, "
             f"che solo {nome} conosce."
         )
+    if imp.foto_cloud and imp.storagebox:
+        esito.da_fare(
+            f"Copia delle foto sullo Storage Box {imp.storagebox}: nella pagina di Hetzner attiva \"SSH\", "
+            f"poi sul PC scrivi \"mediabox foto-cloud collega\" e la password dello Storage Box (una volta sola)."
+        )
     if imp.foto_cloud:
         esito.da_fare(
             f"Copia delle foto nel cloud: scrivi su carta questa password e tienila fuori casa: "

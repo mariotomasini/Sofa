@@ -139,9 +139,22 @@ class Impostazioni:
         return self.get("FOTO_COPIA_DIR").strip() if self.immich else ""
 
     @property
+    def storagebox(self) -> str:
+        """Utente dello Storage Box di Hetzner (es. u123456), "" se non usato."""
+        return self.get("FOTO_STORAGEBOX").strip()
+
+    @property
+    def storagebox_host(self) -> str:
+        return self.get("FOTO_STORAGEBOX_HOST").strip() or f"{self.storagebox}.your-storagebox.de"
+
+    @property
+    def foto_s3(self) -> bool:
+        return all(self.get(k).strip() for k in ("FOTO_CLOUD_REPO", "FOTO_CLOUD_ID", "FOTO_CLOUD_CHIAVE"))
+
+    @property
     def foto_cloud(self) -> bool:
-        """Copia delle foto nel cloud (restic, cifrata): serve indirizzo e chiave del bucket."""
-        return self.immich and all(self.get(k).strip() for k in ("FOTO_CLOUD_REPO", "FOTO_CLOUD_ID", "FOTO_CLOUD_CHIAVE"))
+        """Copia delle foto nel cloud (restic, cifrata): Storage Box di Hetzner o spazio S3."""
+        return self.immich and (bool(self.storagebox) or self.foto_s3)
 
     @property
     def bazarr(self) -> bool:

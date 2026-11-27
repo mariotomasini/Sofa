@@ -990,3 +990,40 @@ def test_copia_nel_cloud_spenta_senza_chiavi(cartella):
     genera(imp, cartella)
     assert "foto-cloud:" not in (cartella / "generato" / "docker-compose.yml").read_text()
     assert not Impostazioni.carica(cartella).get("FOTO_CLOUD_PASSWORD")
+
+
+def test_copia_delle_foto_sullo_storage_box(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nFOTO_STORAGEBOX=u123456\n")
+    imp = Impostazioni.carica(cartella)
+    assert imp.foto_cloud and imp.storagebox_host == "u123456.your-storagebox.de"
+    genera(imp, cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    blocco = compose.split("  foto-cloud:", 1)[1].split("\n\n", 1)[0]
+    assert 'RESTIC_REPOSITORY: "sftp:storagebox:mediabox-foto"' in blocco
+    assert 'STORAGEBOX_HOST: "u123456.your-storagebox.de"' in blocco and "AWS_" not in blocco
+    assert "foto_cloud_chiave:/chiave" in blocco  # la chiave SSH resta tra un riavvio e l'altro
+    script = (cartella / "generato" / "foto-cloud.sh").read_text()
+    assert "install-ssh-key" in script and "Port 23" in script
+
+
+def test_configura_ricorda_di_collegare_lo_storage_box(cartella, monkeypatch):
+    from configuratore.riepilogo import Esito
+    from configuratore.servizi import immich
+
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nFOTO_STORAGEBOX=u123456\nFOTO_CLOUD_PASSWORD=segretissima\n")
+
+    class Finto:
+        def inizializzato(self): return True
+        def accedi(self, imp): pass
+        def impostazioni_di_casa(self, imp): return False
+        def utenti(self): return []
+        def crea_utente(self, nome, password): pass
+
+    monkeypatch.setattr(immich, "Immich", Finto)
+    monkeypatch.setattr(immich, "attendi", lambda *a, **kw: None)
+    esito = Esito()
+    immich.configura(Impostazioni.carica(cartella), esito)
+    assert any("mediabox foto-cloud collega" in d for d in esito.cose_da_fare)
+    assert any("segretissima" in d and "carta" in d for d in esito.cose_da_fare)

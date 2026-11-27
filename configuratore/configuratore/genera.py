@@ -113,6 +113,8 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         immich=imp.immich,
         foto_porta=imp.get("FOTO_PORT", "2283") or "2283",
         foto_cloud=imp.foto_cloud,
+        storagebox=imp.storagebox,
+        storagebox_host=imp.storagebox_host if imp.storagebox else "",
         foto_copia=normalizza_percorso(imp.foto_copia) if imp.foto_copia else "",
         bazarr=imp.bazarr,
         flaresolverr=imp.flaresolverr,
