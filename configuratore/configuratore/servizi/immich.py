@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 import secrets
 import unicodedata
+from pathlib import Path
 
 import httpx
 
@@ -32,6 +33,8 @@ INDIRIZZO = "http://immich-server:2283"
 DOMINIO = "mediabox.local"
 # Cartelle per persona e per data: library/<nome>/2026/2026-11-27/IMG_0001.HEIC
 MODELLO_CARTELLE = "{{y}}/{{y}}-{{MM}}-{{dd}}/{{filename}}"
+# Le copie notturne del database di Immich, sul disco dei media (nel configuratore /data)
+COPIE_DATABASE = Path("/data/foto/backups")
 ALFABETO = "abcdefghjkmnpqrstuvwxyz23456789"  # niente 0/o, 1/l/i: si legge e si scrive facile
 
 
@@ -49,6 +52,15 @@ def email(nome: str) -> str:
 def password_iniziale() -> str:
     """Tre gruppi di quattro caratteri (es. k7fm-q2xa-9pwe): da cambiare al primo accesso."""
     return "-".join("".join(secrets.choice(ALFABETO) for _ in range(4)) for _ in range(3))
+
+
+def copie_del_database(cartella: Path | None = None) -> list[Path]:
+    """Le copie del database lasciate da un'installazione precedente (stesso disco, PC nuovo)."""
+    cartella = COPIE_DATABASE if cartella is None else cartella
+    try:
+        return sorted(cartella.glob("immich-db-backup-*.sql.gz"))
+    except OSError:
+        return []
 
 
 def indirizzo_app(imp: Impostazioni) -> str:
@@ -132,6 +144,17 @@ def configura(imp: Impostazioni, esito) -> None:
             accetta=lambda r: r.status_code == 200)
     im = Immich()
     if not im.inizializzato():
+        copie = copie_del_database()
+        if copie:
+            # Disco con le foto di prima (PC nuovo o reinstallazione): Immich si ripristina solo
+            # se è ancora vuoto, quindi niente account nuovi. Dopo il ripristino tornano album,
+            # volti con i nomi e gli account di prima, ognuno con la sua password.
+            esito.da_fare(
+                f"Foto: su questo disco ci sono già le foto e {len(copie)} copie del database di Immich. "
+                f"Apri {indirizzo_app(imp)}, scegli \"Ripristina da Backup\" e prendi la più recente "
+                f"({copie[-1].name}). Poi scrivi \"mediabox configura\"."
+            )
+            return
         im.crea_amministratore(imp)
         ok(f"Amministratore di Immich creato ({email(imp.utente)}, password di mediabox)")
     im.accedi(imp)

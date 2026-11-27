@@ -1033,3 +1033,29 @@ def test_configura_ricorda_di_collegare_lo_storage_box(cartella, monkeypatch):
     immich.configura(Impostazioni.carica(cartella), esito)
     assert any("mediabox foto-cloud collega" in d for d in esito.cose_da_fare)
     assert any("segretissima" in d and "carta" in d for d in esito.cose_da_fare)
+
+
+def test_immich_su_un_disco_con_le_foto_di_prima(cartella, monkeypatch, tmp_path):
+    """PC nuovo, stesso disco: niente account nuovi, Immich va ripristinato dalla sua copia."""
+    from configuratore.riepilogo import Esito
+    from configuratore.servizi import immich
+
+    copie = tmp_path / "backups"
+    copie.mkdir()
+    (copie / "immich-db-backup-20261126T020000-v3.4.0-pg14.17.sql.gz").write_bytes(b"x")
+    (copie / "immich-db-backup-20261127T020000-v3.4.0-pg14.17.sql.gz").write_bytes(b"x")
+    monkeypatch.setattr(immich, "COPIE_DATABASE", copie)
+    creati = []
+
+    class Vuoto:
+        def inizializzato(self): return False
+        def crea_amministratore(self, imp): creati.append("admin")
+
+    monkeypatch.setattr(immich, "Immich", Vuoto)
+    monkeypatch.setattr(immich, "attendi", lambda *a, **kw: None)
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nUTENTI_CASA=Anna\n")
+    esito = Esito()
+    immich.configura(Impostazioni.carica(cartella), esito)
+    assert creati == []
+    assert any("Ripristina da Backup" in d and "20261127T020000" in d for d in esito.cose_da_fare)

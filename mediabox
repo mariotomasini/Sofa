@@ -104,10 +104,63 @@ backup() {
   return "$esito"
 }
 
+# Copia delle impostazioni (.env) sul disco dei media, in mediabox-impostazioni/: se il PC
+# si rompe, per ripartire su un PC nuovo basta il disco ("mediabox restore" di quel file).
+# Contiene le password (anche quella della copia delle foto nel cloud): la legge solo il
+# proprietario. Si rifà solo se le impostazioni sono cambiate.
+copia_impostazioni_sul_disco() {
+  local media cartella
+  media="$(leggi_env MEDIA_DIR "$ENV_FILE")"
+  [[ -n "$media" && -d "$media" ]] || return 0
+  cartella="$media/mediabox-impostazioni"
+  mkdir -p "$cartella" 2>/dev/null || return 0
+  chmod 700 "$cartella" 2>/dev/null || true
+  if ! cmp -s "$ENV_FILE" "$cartella/impostazioni.env"; then
+    (umask 077 && cp "$ENV_FILE" "$cartella/impostazioni.env.nuovo" \
+      && mv -f "$cartella/impostazioni.env.nuovo" "$cartella/impostazioni.env") 2>/dev/null || return 0
+  fi
+  [[ -f "$cartella/LEGGIMI.txt" ]] || cat > "$cartella/LEGGIMI.txt" 2>/dev/null <<'TESTO' || true
+Impostazioni di mediabox (con le password), copiate qui da sole quando cambiano.
+
+PC nuovo con questo disco: installa mediabox, poi scrivi
+    mediabox restore <questa cartella>/impostazioni.env
+e, se usi le foto, apri la pagina delle foto e scegli "Ripristina da Backup".
+
+Non dare questo file a nessuno: contiene le password di mediabox.
+TESTO
+  return 0
+}
+
+ripristina_impostazioni() {
+  local file="$1" cartella_media
+  chiedi_si_no "Uso le impostazioni di $file al posto di quelle attuali (film e foto non si toccano). Continuo?" n || exit 0
+  compose stop >/dev/null 2>&1 || true
+  cp "$ENV_FILE" "$ENV_FILE.prima-del-ripristino" 2>/dev/null || true
+  cp "$file" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  # il file sta in <cartella dei media>/mediabox-impostazioni: la cartella giusta è quella,
+  # anche se sul PC vecchio il disco era montato altrove
+  if [[ "$(basename "$(dirname "$file")")" == "mediabox-impostazioni" ]]; then
+    cartella_media="$(dirname "$(dirname "$file")")"
+    scrivi_env MEDIA_DIR "$cartella_media" "$ENV_FILE"
+    info "Cartella dei media: $cartella_media"
+  fi
+  ok "Impostazioni ripristinate (quelle di prima sono in .env.prima-del-ripristino)"
+  aggiorna_ip
+  applica
+}
+
 restore() {
   local file="${1:-}"
   [[ -n "$file" ]] || errore "Indica il file di backup." "Esempio: mediabox restore backup/mediabox-backup-2025-01-31_2100.tar.gz"
   [[ -f "$file" ]] || errore "Non trovo il file $file." "Controlla il nome con: ls $MEDIABOX_DIR/backup"
+  # solo le impostazioni (la copia che sta sul disco dei media)?
+  if ! tar -tzf "$file" >/dev/null 2>&1; then
+    grep -q '^ADMIN_PASSWORD=' "$file" || errore "Questo file non sembra un backup di mediabox." \
+      "Usa un file creato con \"mediabox backup\" o mediabox-impostazioni/impostazioni.env dal disco dei media."
+    ripristina_impostazioni "$(readlink -f "$file")"
+    return
+  fi
   local assoluto nome
   assoluto="$(readlink -f "$file")"
   nome="$(basename "$assoluto")"
@@ -220,7 +273,8 @@ case "$comando" in
     controlla_installazione; prepara_docker
     compose logs -f --tail 200 "$@" ;;
   configura)
-    controlla_installazione; prepara_docker; aggiorna_ip; applica ;;
+    controlla_installazione; prepara_docker; aggiorna_ip; applica
+    copia_impostazioni_sul_disco ;;
   azzera-jellyfin)
     controlla_installazione; prepara_docker
     titolo "Rifaccio Jellyfin da zero"
@@ -230,7 +284,8 @@ case "$comando" in
     ok "Jellyfin azzerato: ora lo riconfiguro con l'utente di mediabox"
     aggiorna_ip; con_registro applica ;;
   applica-impostazioni)
-    controlla_installazione; prepara_docker; applica_impostazioni_web ;;
+    controlla_installazione; prepara_docker; applica_impostazioni_web
+    copia_impostazioni_sul_disco ;;
   prepara-cartella)
     # avviato da systemd come amministratore prima di applica-impostazioni
     cartella="$(leggi_env MEDIA_DIR "$ENV_FILE")"
@@ -262,6 +317,7 @@ case "$comando" in
   aggiorna-automatico)
     # avviato ogni notte dal timer di systemd
     controlla_installazione; prepara_docker
+    copia_impostazioni_sul_disco
     [[ "$(leggi_env AGGIORNAMENTI_AUTOMATICI "$ENV_FILE")" == "no" ]] && exit 0
     registro_aggiornamento
     "$MEDIABOX_DIR/mediabox" update >> "$MEDIABOX_DIR/aggiornamenti.log" 2>&1 || true
