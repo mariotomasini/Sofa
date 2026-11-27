@@ -56,6 +56,7 @@ from .justwatch import CODICI as CODICI_PIATTAFORME
 from .libreria import Libreria
 from .musica import Musica
 from .musica_download import ScaricaMusica
+from .navidrome import Navidrome, credenziali
 from .ordine_download import OrdineDownload, posizioni
 from .prowlarr import Prowlarr, contenuto
 from .pulizia import Pulizia
@@ -63,6 +64,7 @@ from .puntate_italiane import PuntateItaliane, ricorda_titoli
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
 from .rete import ErroreServizio, non_raggiungibile, nuovo_client
+from .scoperte import Scoperte
 from .sentinella import Sentinella, ultimo_blocco
 from .serie import Serie, e_anime
 from .stato import ControlloDisco
@@ -130,6 +132,8 @@ class Servizi:
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
         self.importa_musica = ImportaMusica(config, self.archivio, client, self.deezer, self.scarica_musica,
                                             self.avvisami.notifica)
+        self.scoperte = Scoperte(config, self.archivio, client, self.jellyfin, self.musica, self.deezer,
+                                 self.importa_musica)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
         self.libreria = Libreria(config, self.archivio, client, self.qbit, self.jellyfin, self.download, self.serie)
@@ -182,6 +186,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
             asyncio.create_task(dopo(120, servizi.avvisi_italiano.ciclo())),
             asyncio.create_task(dopo(150, servizi.importa_musica.ciclo())),
+            asyncio.create_task(dopo(900, servizi.scoperte.ciclo())),
             asyncio.create_task(dopo(600, servizi.puntate_italiane.ciclo())),
             asyncio.create_task(dopo(240, servizi.anime.ciclo())),
             asyncio.create_task(dopo(30, servizi.foto_profili.assegna())),
@@ -476,6 +481,11 @@ async def pagina_musica(request: Request):
     return solo_adulti(request) or pagina(request, "musica.html", mondo="musica",
                                           indirizzo_navidrome=f"http://{host}/navidrome",
                                           admin=e_admin(request))
+
+
+@app.get("/musica/playlist/{id_playlist}", response_class=HTMLResponse)
+async def pagina_playlist(request: Request, id_playlist: str = FastPath(pattern=r"^[A-Za-z0-9_-]{1,64}$")):
+    return solo_adulti(request) or pagina(request, "musica_playlist.html", mondo="musica", id_playlist=id_playlist)
 
 
 @app.get("/musica/importa", response_class=HTMLResponse)
@@ -799,10 +809,88 @@ async def api_musica_per_te(request: Request):
     return await servizi(request).musica.per_te()
 
 
+def navidrome_di(request: Request) -> Navidrome:
+    s = servizi(request)
+    if not s.config.navidrome_url:
+        raise ErroreServizio("Navidrome è spento.", "Accendilo dalle impostazioni (Musica nelle app per telefono).")
+    return Navidrome(s.config, s.client, *credenziali(s.config, utente_di(request)))
+
+
 @app.get("/api/musica/home")
 async def api_musica_home(request: Request):
     s = servizi(request)
-    return await s.musica.home(s.deezer)
+    home, playlist = await asyncio.gather(s.musica.home(s.deezer), _le_mie_playlist(request))
+    if playlist:
+        # le playlist di casa (importate e scoperte) subito dopo i preferiti
+        posto = 1 if home["righe"] and home["righe"][0]["tipo"] == "preferiti" else 0
+        home["righe"].insert(posto, {"tipo": "playlist", "titolo": "Le tue playlist",
+                                     "sottotitolo": "Quelle che hai importato e le scoperte di ogni settimana",
+                                     "elementi": playlist})
+    home["scoperte"] = s.scoperte.stato(utente_di(request))
+    return home
+
+
+async def _le_mie_playlist(request: Request) -> list[dict]:
+    if not servizi(request).config.navidrome_url:
+        return []
+    try:
+        elenco = await navidrome_di(request).le_mie_playlist()
+    except ErroreServizio:
+        return []
+    # prima le scoperte, dalla più recente, poi le altre per nome
+    scoperte = sorted((p for p in elenco if p["nome"].startswith("Scoperte")), key=lambda p: p["aggiornata"], reverse=True)
+    altre = sorted((p for p in elenco if not p["nome"].startswith("Scoperte")), key=lambda p: p["nome"].lower())
+    return scoperte + altre
+
+
+@app.get("/api/musica/playlist/{id_playlist}")
+async def api_musica_playlist(request: Request, id_playlist: str = FastPath(pattern=r"^[A-Za-z0-9_-]{1,64}$")):
+    return await navidrome_di(request).brani_playlist(id_playlist)
+
+
+ID_NAVIDROME = r"^[A-Za-z0-9_-]{1,64}$"
+
+
+async def _da_navidrome(request: Request, metodo: str, passa: tuple[str, ...], cache: str = "", **parametri):
+    intestazioni = {k: v for k in ("range", "if-range") if (v := request.headers.get(k))}
+    try:
+        r = await navidrome_di(request).apri(metodo, intestazioni, **parametri)
+    except httpx.HTTPError as exc:
+        raise non_raggiungibile("Navidrome", "/navidrome") from exc
+    if r.status_code >= 400 or "json" in r.headers.get("content-type", ""):  # Subsonic risponde agli errori in JSON
+        await r.aclose()
+        return Response(status_code=404)
+    risposta = {k: r.headers[k] for k in passa if k in r.headers}
+    if cache:
+        risposta["Cache-Control"] = cache
+    return StreamingResponse(r.aiter_raw(), status_code=r.status_code, headers=risposta,
+                             background=BackgroundTask(r.aclose))
+
+
+@app.get("/api/musica/ascolta-nd/{id_brano}")
+async def api_musica_ascolta_nd(request: Request, id_brano: str = FastPath(pattern=ID_NAVIDROME)):
+    """Un brano di Navidrome, intero (con i salti avanti e indietro)."""
+    return await _da_navidrome(request, "stream", ("content-type", "content-length", "content-range", "accept-ranges"),
+                               id=id_brano, format="raw")
+
+
+@app.get("/api/musica/copertina-nd/{id_copertina}")
+async def api_musica_copertina_nd(request: Request, id_copertina: str = FastPath(pattern=ID_NAVIDROME)):
+    return await _da_navidrome(request, "getCoverArt", ("content-type", "content-length"),
+                               cache="private, max-age=604800", id=id_copertina, size=600)
+
+
+class SceltaScoperte(BaseModel):
+    accese: bool
+
+
+@app.post("/api/musica/scoperte")
+async def api_musica_scoperte(request: Request, dati: SceltaScoperte):
+    s = servizi(request)
+    s.scoperte.imposta(utente_di(request), dati.accese)
+    return {"messaggio": ("Fatto: ogni settimana ti preparo una playlist di brani nuovi, già scaricati." if dati.accese
+                          else "Scoperte spente: non scarico più musica nuova da solo."),
+            **s.scoperte.stato(utente_di(request))}
 
 
 @app.get("/api/musica/artista/{id_artista}")

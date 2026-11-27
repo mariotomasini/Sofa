@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block titolo %}Playlist{% endblock %}
+{% block contenuto %}
+<div class="musica" id="pagina-playlist" aria-busy="true"><p class="caricamento">Carico…</p></div>
+{% endblock %}
+{% block script %}<script>avviaPlaylist("{{ id_playlist }}");</script>{% endblock %}
