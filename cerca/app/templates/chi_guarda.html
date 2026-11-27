@@ -17,8 +17,8 @@
       <form method="post" action="{{ base }}/chi-guarda" class="profilo">
         <input type="hidden" name="id" value="{{ p.id }}">
         <input type="hidden" name="dopo" value="{{ dopo }}">
-        <button type="submit" class="tasto-profilo" data-nome="{{ p.nome }}" data-iniziali="{{ p.iniziali }}">
-          <span class="faccia" aria-hidden="true"><svg class="anello" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x="1.5" y="1.5" width="97" height="97" rx="15" pathLength="1"/></svg><span class="lettere">{{ p.iniziali }}</span></span>
+        <button type="submit" class="tasto-profilo" data-nome="{{ p.nome }}" data-iniziali="{{ p.iniziali }}" data-foto="{{ p.foto }}">
+          <span class="faccia" aria-hidden="true">{% if p.foto %}<img class="foto" src="{{ p.foto }}" alt="" onerror="this.remove()">{% endif %}<svg class="anello" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M16.5 1.5H83.5A15 15 0 0 1 98.5 16.5V83.5A15 15 0 0 1 83.5 98.5H16.5A15 15 0 0 1 1.5 83.5V16.5A15 15 0 0 1 16.5 1.5Z" pathLength="1"/></svg><span class="lettere">{{ p.iniziali }}</span></span>
           <span class="nome-profilo">{{ p.nome }}</span>
         </button>
       </form>

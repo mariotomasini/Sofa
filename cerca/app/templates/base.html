@@ -6,8 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#161513">
   <title>{% block titolo %}Cerca{% endblock %} · mediabox</title>
-  <link rel="preload" href="{{ base }}/static/fonts/atkinson-hyperlegible-next-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="{{ base }}/static/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ base }}/static/fonts/inter-latin-variabile.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ base }}/static/style.css?v={{ v }}">
   <!-- icone e "app" sul telefono (Aggiungi a schermata Home) -->
   <link rel="icon" href="{{ base }}/static/logo.svg" type="image/svg+xml">
@@ -38,7 +37,7 @@
     </a>
     {% if utente and not senza_menu and not kids %}
     <a class="utente-testata" href="{{ base }}/esci" aria-label="{{ utente.nome }}: cambia utente">
-      <span class="faccia piccola" aria-hidden="true">{{ iniziali_utente }}</span>
+      <span class="faccia piccola" aria-hidden="true">{% if foto_utente %}<img class="foto" src="{{ foto_utente }}" alt="" onerror="this.remove()">{% endif %}{{ iniziali_utente }}</span>
     </a>
     {% endif %}
     {% if senza_menu %}
@@ -62,7 +61,7 @@
       {% endif %}
       {% if utente %}
       <a class="nav-voce utente-attivo" href="{{ base }}/esci" title="Cambia utente">
-        <span class="faccia piccola" aria-hidden="true">{{ iniziali_utente }}</span>{{ utente.nome }}
+        <span class="faccia piccola" aria-hidden="true">{% if foto_utente %}<img class="foto" src="{{ foto_utente }}" alt="" onerror="this.remove()">{% endif %}{{ iniziali_utente }}</span>{{ utente.nome }}
       </a>
       {% endif %}
     </nav>

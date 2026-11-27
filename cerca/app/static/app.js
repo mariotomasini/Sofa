@@ -437,7 +437,19 @@ function avviaPaginaDownload() {
 
   function disegnaDettaglio() {
     const g = gruppi.find((x) => x.chiave === dettaglio.dataset.gruppo);
-    if (!g) { if (dettaglio.open) dettaglio.close(); return; }
+    if (!g) {
+      // annullato tutto: invece di sparire di colpo, la finestra dice che è fatta e si chiude
+      if (!dettaglio.open || dettaglio._vuoto) return;
+      dettaglio._vuoto = true;
+      const azioni = document.getElementById("dettaglio-azioni"), voci = document.getElementById("dettaglio-voci");
+      azioni.hidden = true; azioni._html = ""; voci._html = "";
+      document.getElementById("dettaglio-stato").textContent = "Niente più da scaricare";
+      voci.innerHTML = `<div class="dettaglio-vuoto">${iconaAnimata("pronto")}<p>Fatto: qui non resta niente in coda.</p>` +
+        "<p class=\"sottotitolo\">Quello che è già in Jellyfin resta.</p></div>";
+      if (!FERMO) G.from(voci.firstElementChild, { opacity: 0, y: 10, duration: 0.4, ease: CURVA });
+      dettaglio._chiudi = setTimeout(() => dettaglio.close(), 2200);
+      return;
+    }
     document.getElementById("dettaglio-copertina").innerHTML = g.poster ? `<img src="${esc(g.poster)}" alt="">` : "";
     document.getElementById("dettaglio-titolo").textContent = g.titolo;
     const pezzi = [g.stato_testo];
@@ -513,6 +525,8 @@ function avviaPaginaDownload() {
     const b = ev.target.closest("button[data-gruppo]");
     if (!b) return;
     dettaglio.dataset.gruppo = b.dataset.gruppo;
+    dettaglio._vuoto = false;
+    clearTimeout(dettaglio._chiudi);
     disegnaDettaglio();
     dettaglio.showModal();
   });
@@ -977,20 +991,46 @@ function htmlRigaBrano(t, i, coda, conCopertina = true) {
 }
 
 // Scarica la canzone completa (o l'album): Cerca la cerca sugli indexer e la mette nella Musica di Jellyfin
+// L'avviso segue la ricerca (promise-toast): "lo cerco" finché gli indexer rispondono, poi
+// "trovato, in download" oppure il perché non c'è. Il tasto resta acceso finché si sa.
 async function scaricaMusica(b) {
   if (b.classList.contains("fatto") || b.disabled) return;
   b.disabled = true;
   b.classList.add("in-corso");
+  const album = b.dataset.scarica === "album";
   try {
-    avviso((await inviaJSON("/api/musica/scarica", { tipo: b.dataset.scarica, id: Number(b.dataset.id) })).messaggio);
-    b.classList.add("fatto");
-    if (b.dataset.scarica === "brano") b.innerHTML = SCARICATO;
-    else b.innerHTML = `${SCARICATO}<span>In download</span>`;
+    const r = await inviaJSON("/api/musica/scarica", { tipo: b.dataset.scarica, id: Number(b.dataset.id) });
+    mostraAvviso(album ? "Cerco l'album sui tuoi indexer…" : "Cerco la canzone sui tuoi indexer…", "cerco", 0);
+    const esito = await attendiRicerca(r.id);
+    if (esito.stato === "errore") {
+      mostraAvviso(esito.messaggio || "Non l'ho trovata.", "errore", 9000);
+      b.disabled = false;
+    } else {
+      mostraAvviso(esito.stato === "ricerca"
+        ? "La cerco ancora: la segui nella pagina Download."
+        : `${album ? "Trovato" : "Trovata"}: è in download. Appena finisce la trovi in Jellyfin, nella Musica.`, "pronto", 6000);
+      b.classList.add("fatto");
+      b.innerHTML = album ? `${SCARICATO}<span>In download</span>` : SCARICATO;
+    }
   } catch (e) {
     avviso(`${e.errore} ${e.cosa_fare || ""}`, true);
     b.disabled = false;
   }
   b.classList.remove("in-corso");
+}
+
+async function attendiRicerca(id) {
+  const fine = Date.now() + 3 * 60 * 1000;  // poi la si segue nella pagina Download
+  while (Date.now() < fine) {
+    await new Promise((ok) => setTimeout(ok, 2500));
+    try {
+      const v = await chiama(`/api/download/${id}`);
+      if (v.stato !== "ricerca") return v;
+    } catch (e) {
+      return { stato: "errore", messaggio: e.errore || "" };
+    }
+  }
+  return { stato: "ricerca" };
 }
 
 document.addEventListener("click", (ev) => {
