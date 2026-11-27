@@ -6,6 +6,7 @@ Con mediabox puoi:
 
 - **guardare** film, serie, anime e TV in diretta, e **ascoltare musica**, sulla TV, sul telefono o sul PC, con locandine, stagioni, saghe e guida TV (Jellyfin);
 - **ascoltare la musica nelle app fatte apposta**, anche offline e in auto: Amperfy su iPhone, Symfonium su Android (Navidrome);
+- **tenere le foto e i video dei telefoni a casa**, al posto di Foto di iCloud: si caricano da soli, i volti si riconoscono sul PC, ognuno vede solo le sue, con una copia cifrata fuori casa (Immich);
 - **cercare qualsiasi film** per titolo e vedere subito:
   - dove guardarlo legalmente in Italia (gratis, in abbonamento, a noleggio);
   - se esiste su Internet Archive, per scaricarlo direttamente;
@@ -30,17 +31,18 @@ Con mediabox puoi:
 4. [Primi passi](#primi-passi)
 5. [Come si usa Cerca](#come-si-usa-cerca)
 6. [Serie, anime e musica](#serie-anime-e-musica)
-7. [Cambiare le scelte dopo l'installazione](#cambiare-le-scelte-dopo-linstallazione)
-8. [Spazio, pulizia e monitoraggio](#spazio-pulizia-e-monitoraggio)
-9. [Notifiche sul telefono](#notifiche-sul-telefono)
-10. [Aggiornamenti](#aggiornamenti)
-11. [TV in diretta](#tv-in-diretta)
-12. [Usare mediabox fuori casa](#usare-mediabox-fuori-casa)
-13. [Il comando mediabox](#il-comando-mediabox)
-14. [Backup](#backup)
-15. [Dove sono i file](#dove-sono-i-file)
-16. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-17. [Per chi vuole mettere le mani nel codice](#per-chi-vuole-mettere-le-mani-nel-codice)
+7. [Foto e video dei telefoni](#foto-e-video-dei-telefoni)
+8. [Cambiare le scelte dopo l'installazione](#cambiare-le-scelte-dopo-linstallazione)
+9. [Spazio, pulizia e monitoraggio](#spazio-pulizia-e-monitoraggio)
+10. [Notifiche sul telefono](#notifiche-sul-telefono)
+11. [Aggiornamenti](#aggiornamenti)
+12. [TV in diretta](#tv-in-diretta)
+13. [Usare mediabox fuori casa](#usare-mediabox-fuori-casa)
+14. [Il comando mediabox](#il-comando-mediabox)
+15. [Backup](#backup)
+16. [Dove sono i file](#dove-sono-i-file)
+17. [Risoluzione dei problemi](#risoluzione-dei-problemi)
+18. [Per chi vuole mettere le mani nel codice](#per-chi-vuole-mettere-le-mani-nel-codice)
 
 ---
 
@@ -400,6 +402,86 @@ Se il PC ha meno di 6 GB di memoria, l'installer spegne da solo i programmi più
 - **Indexer pubblici**: con `PROWLARR_PUBLICI=si` (predefinito) mediabox prova tutti gli indexer pubblici senza account che Prowlarr conosce e tiene quelli che funzionano; quelli in italiano sono usati per primi. Altri indexer (anche con account) si scrivono in `PROWLARR_INDEXER`, quelli Torznab in `INDEXER_TORZNAB`.
 - **Telegram (tgarr)**: con `WITH_TGARR=si` mediabox installa [tgarr](https://tgarr.me) e lo collega a Prowlarr, Radarr e Sonarr. Apri `http://mediabox.local:8765`, entra con la password di amministrazione e collega il tuo account Telegram (QR o numero + codice; `TG_API_ID`, `TG_API_HASH` e `TG_PHONE` nel file `.env` sono facoltativi). Per i **gruppi privati** basta iscrivere quell'account ai gruppi: tgarr li indicizza da solo. Meglio un account Telegram dedicato.
 
+## Foto e video dei telefoni
+
+Con **Immich** le foto e i video degli iPhone (e degli Android) di casa stanno sul PC di mediabox, al posto di Foto di iCloud:
+
+- l'app **Immich** li carica da sola, a casa e fuori casa (con Tailscale);
+- i **volti** si riconoscono sul PC: dai un nome a una persona una volta e da lì ogni foto nuova va da sola nella sua pagina. C'è anche la ricerca per contenuto ("spiaggia", "torta di compleanno", "neve"). Nessuna foto esce di casa per questo;
+- **ognuno vede solo le sue**: ogni persona ha il suo account, con la sua password, e i suoi album e i suoi volti. Niente è condiviso finché non lo sceglie lei dall'app (album condivisi, link). L'amministratore gestisce gli account ma non vede le foto di nessuno;
+- **video** compresi, anche Live Photo e rallentatori. I video HEVC dell'iPhone restano come sono, senza una seconda copia convertita;
+- la **pulizia automatica non tocca mai** foto e video: lavora solo sui download e su film, serie e anime, e prima di cancellare controlla di non essere nella cartella delle foto.
+
+Immich è pesante (circa 2 GB di memoria in più) e per questo è spento di base.
+
+### Accenderlo
+
+1. Impostazioni (`/impostazioni`) → **Foto dei telefoni**. In **Chi ha le foto** scrivi le persone (es. `Mario, Anna`); se lo lasci vuoto valgono gli *Utenti di casa*.
+2. Alla fine della configurazione, in *Cosa resta da fare a mano*, trovi per ognuno l'**email** (`mario@mediabox.local`) e una **password iniziale**. Al primo accesso Immich ne chiede una nuova, che conosce solo quella persona.
+3. Sul telefono installa l'app **Immich** e scrivi come server l'indirizzo che ti dà mediabox, es. `http://192.168.1.10:2283` (fuori casa, con Tailscale acceso: `http://100.x.y.z:2283`). Poi email e password.
+4. Nell'app tocca la nuvoletta in alto, scegli gli album da caricare (di solito **Recenti**, cioè tutte) e accendi il **backup in background**.
+
+Dal browser le foto sono su `http://mediabox.local:2283` (Immich ha la sua porta: non sa stare sotto un indirizzo come `/foto`; `http://mediabox.local/foto` ci porta).
+
+**iPhone e background**: iOS non lascia lavorare le app sempre. Il caricamento parte quando lo decide iOS (di solito di notte, in carica e in Wi-Fi) o quando apri l'app. In *Impostazioni → Generali → Aggiorna app in background* lascia acceso Immich.
+
+### Portare qui le foto di iCloud
+
+Non serve un Mac: lo fa l'app Immich. Se l'iPhone ha *Ottimizza spazio*, l'app si fa dare da iCloud gli originali man mano che li carica.
+
+1. La prima volta, con 100 GB, ci vogliono alcune ore: lascia l'iPhone **in carica, in Wi-Fi, con l'app Immich aperta** (in *Impostazioni → Schermo e luminosità → Blocco automatico* metti *Mai* per quella notte).
+2. Ogni persona lo fa con il suo telefono e il suo account.
+3. Alla fine confronta i numeri: in fondo alla Libreria di Foto c'è quante foto e video hai; nell'app Immich, nella pagina del backup, quanti sono stati caricati.
+
+**Solo quando i numeri tornano e c'è almeno una copia di sicurezza** (vedi sotto), disattiva iCloud:
+
+1. sull'iPhone: *Impostazioni → [il tuo nome] → iCloud → Foto*. Se vuoi tenere le foto anche sul telefono, prima scegli **Scarica e mantieni originali** e aspetta che finisca (serve spazio sul telefono);
+2. spegni **Sincronizza questo iPhone**;
+3. *Impostazioni → [il tuo nome] → iCloud → Gestisci spazio → Foto → Disattiva ed elimina*. Apple tiene comunque tutto per 30 giorni;
+4. dopo, riduci il piano di iCloud+ (o tornate a quello gratuito).
+
+Gli **album condivisi** di iCloud non contano nello spazio e restano dove sono.
+
+### Le copie di sicurezza delle foto
+
+Oggi le foto stanno su iCloud: sul PC devono avere almeno una copia **fuori casa**, perché un disco si rompe e un PC si può rubare.
+
+- **Ogni notte Immich** salva una copia del suo database (account, album, volti con i nomi) in `foto/backups`, sul disco dei media.
+- **Ogni notte alle 3** mediabox manda le foto e i video nuovi **nel cloud, cifrati sul PC** prima di partire (restic): chi gestisce il cloud vede solo dati illeggibili. Tiene anche le versioni passate (7 giorni, 8 settimane, 24 mesi): una foto cancellata per sbaglio si recupera.
+- Facoltativa, la copia notturna su un **altro disco** collegato al PC (`FOTO_COPIA_DIR` nel file `.env`).
+
+#### Hetzner Storage Box (consigliato)
+
+1 TB a prezzo fisso (BX11, circa 3,20 € al mese più IVA, [prezzi](https://www.hetzner.com/storage/storage-box/)), in Germania o Finlandia.
+
+1. Su [console.hetzner.com](https://console.hetzner.com) crea uno **Storage Box BX11**. Ti dà un utente come `u123456` e ti fa scegliere una password.
+2. Nelle impostazioni dello Storage Box accendi **SSH** (*SSH support*) e **Raggiungibilità esterna** (*External reachability*).
+3. Nel file `.env` di mediabox scrivi `FOTO_STORAGEBOX=u123456`, poi `mediabox configura`.
+4. Sul PC scrivi `mediabox foto-cloud collega` e la password dello Storage Box: serve solo adesso, per installare la chiave di mediabox. Poi non si usa più.
+5. **Scrivi su carta la password della copia** che mediabox mostra a fine configurazione (è anche nel file `.env`, `FOTO_CLOUD_PASSWORD`) e tienila fuori casa: se il PC si rompe, senza di lei la copia non si può aprire.
+
+La prima copia di 200 GB dura qualche notte, a seconda della velocità di invio della tua connessione. Se di giorno rallenta internet, metti un limite in `FOTO_CLOUD_LIMITE_KB` (es. `1000` = circa 8 Mbit/s). Quando la prima copia è finita, e ogni volta che una copia non riesce, arriva un avviso sul telefono (ntfy). In **Controllo servizi** vedi l'ultima copia riuscita.
+
+In alternativa va bene uno spazio compatibile S3 (Backblaze B2, Cloudflare R2…): `FOTO_CLOUD_REPO`, `FOTO_CLOUD_ID` e `FOTO_CLOUD_CHIAVE` nel file `.env`.
+
+#### Riprendere le foto dal cloud
+
+```bash
+mediabox foto-cloud stato        # le copie, una per notte
+mediabox foto-cloud ripristina   # l'ultima copia in foto-ripristinate/, mai sopra le foto
+```
+
+### PC nuovo con lo stesso disco
+
+Le foto stanno sul disco dei media e vengono con lui. Le impostazioni (con le password) si copiano da sole sul disco, in `mediabox-impostazioni/`.
+
+1. Collega il disco al PC nuovo e installa mediabox.
+2. `mediabox restore /percorso/del/disco/mediabox-impostazioni/impostazioni.env` (oppure un file di `mediabox backup`).
+3. Apri `http://mediabox.local:2283`: Immich vede le foto di prima e propone **Ripristina da Backup**. Scegli la copia più recente: tornano account, album e volti con i nomi, senza rifare il riconoscimento. Poi `mediabox configura`.
+4. Se usi lo Storage Box: `mediabox foto-cloud collega` (la chiave del PC vecchio è rimasta lì).
+
+---
+
 ## Cambiare le scelte dopo l'installazione
 
 Apri **`http://mediabox.local/impostazioni`**: la trovi anche nel Pannello, tessera *Impostazioni*. Accedi con la password di amministrazione e trovi le stesse scelte della procedura guidata, tutte in una pagina: chiave TMDB, cosa guardi, lingue dei sottotitoli, cartella dei media e avvisi sul telefono. Il tasto **Salva e applica** si accende solo quando cambi qualcosa. mediabox rifà solo quello che usa le voci cambiate (per esempio le lingue dell'audio aggiornano solo Radarr e Sonarr, la chiave TMDB riavvia solo Cerca); gli altri programmi non si toccano. La pagina dice cosa rifà e mostra l'avanzamento. Se cambi cartella, i film già scaricati vengono spostati da soli.
@@ -459,7 +541,8 @@ La pulizia non tocca mai:
 - i **preferiti** (❤️ in Jellyfin);
 - quello che qualcuno sta ancora guardando;
 - la musica e le registrazioni;
-- i film che hai copiato tu a mano.
+- i film che hai copiato tu a mano;
+- **le foto e i video di Immich**, né le loro copie: prima di cancellare qualsiasi cosa, mediabox controlla di non essere nella cartella delle foto.
 
 I film e gli episodi tolti non vengono riscaricati: Radarr e Sonarr smettono di seguirli. Se ne vuoi uno indietro, riaggiungilo da Cerca.
 
@@ -616,6 +699,9 @@ Su Linux scrivilo in un terminale; su Windows in PowerShell o nel Prompt dei com
 | `mediabox restore <file>` | ripristina un backup |
 | `mediabox remote` | mostra il link per accedere a Tailscale (accesso da fuori casa) |
 | `mediabox indirizzi` | mostra gli indirizzi da aprire nel browser |
+| `mediabox foto-cloud collega` | collega lo Storage Box di Hetzner alla copia delle foto (una volta sola) |
+| `mediabox foto-cloud stato` | le copie delle foto nel cloud, una per notte |
+| `mediabox foto-cloud ripristina` | riporta le foto dal cloud nella cartella `foto-ripristinate` |
 
 ---
 
@@ -631,7 +717,9 @@ Il comando crea un file in `/opt/mediabox/backup/` (Windows: `C:\Mediabox\backup
 - la configurazione di tutti i servizi;
 - la cronologia di Cerca.
 
-**I film non sono inclusi**, perché sono troppo grandi: per quelli usa un disco esterno.
+**I film e le foto non sono inclusi**, perché sono troppo grandi. Per le foto ci sono le copie notturne nel cloud (vedi [Le copie di sicurezza delle foto](#le-copie-di-sicurezza-delle-foto)).
+
+Le impostazioni si copiano anche da sole sul disco dei media, in `mediabox-impostazioni/impostazioni.env`, ogni volta che cambiano: con quel file e il disco si riparte su un PC nuovo (`mediabox restore` accetta anche lui).
 
 Copia il backup su una chiavetta. Per ripristinarlo, anche su un PC nuovo dopo aver installato mediabox:
 
@@ -651,6 +739,9 @@ mediabox restore /percorso/mediabox-backup-AAAA-MM-GG_HHMM.tar.gz
 | Musica | `.../media/musica` | `...\media\musica` |
 | Registrazioni TV | `.../media/registrazioni` | `...\media\registrazioni` |
 | Download in corso | `.../downloads` | `...\downloads` |
+| Foto e video (Immich) | `.../foto/library/<persona>/<anno>/...` | `...\foto\library\...` |
+| Copie del database delle foto | `.../foto/backups` | `...\foto\backups` |
+| Copia delle impostazioni | `.../mediabox-impostazioni` | `...\mediabox-impostazioni` |
 | Impostazioni (`.env`) | `/opt/mediabox/.env` | `C:\Mediabox\.env` |
 
 I film vengono rinominati come `Titolo (Anno) [tmdbid-123]/Titolo (Anno) Qualità.mkv`, così Jellyfin li riconosce sempre.
