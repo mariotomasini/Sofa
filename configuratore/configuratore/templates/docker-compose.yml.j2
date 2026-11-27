@@ -418,6 +418,7 @@ services:
       SONARR_URL: "{{ 'http://sonarr:8989/sonarr' if sonarr else '' }}"
       SONARR_API_KEY: "{{ SONARR_API_KEY if sonarr else '' }}"
       ANIMEUNITY_URL: "{{ ANIMEUNITY_URL | default('https://animeunity.cx') }}"
+      ANIMEWORLD_URL: "{{ ANIMEWORLD_URL | default('https://www.animeworld.ac') }}"
       LIDARR_URL: "{{ 'http://lidarr:8686/lidarr' if lidarr else '' }}"
       LIDARR_API_KEY: "{{ LIDARR_API_KEY if lidarr else '' }}"
     volumes:

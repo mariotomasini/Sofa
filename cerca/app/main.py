@@ -29,7 +29,15 @@ from . import home as home_netflix
 from .accesso import COOKIE as COOKIE_UTENTE
 from .accesso import DURATA as DURATA_ACCESSO
 from .accesso import Accesso, destinazione_sicura, iniziali, percorso_libero, utente_corrente
-from .animeunity import AnimeUnity, AnimeUnitySerie, con_download_cerca, indovina_stagione, ordina_risultati
+from .animeunity import (
+    NOMI_FONTI,
+    AnimeDiretti,
+    AnimeUnity,
+    con_download_cerca,
+    indovina_stagione,
+    ordina_risultati,
+)
+from .animeworld import AnimeWorld
 from .archive import InternetArchive
 from .automatici import Automatici
 from .avvisami import Avvisami
@@ -103,9 +111,11 @@ class Servizi:
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
         self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.puntate_italiane = PuntateItaliane(config, self.archivio, self.serie, self.prowlarr, self.download)
-        self.animeunity = AnimeUnity(config)
-        self.anime = AnimeUnitySerie(self.animeunity, self.archivio, self.serie, self.download, config)
-        self.download.risolutori["animeunity"] = self._link_animeunity
+        # le fonti dirette degli anime: link HTTP, preferiti ai torrent
+        self.siti_anime = {"animeunity": AnimeUnity(config), "animeworld": AnimeWorld(config)}
+        self.anime = AnimeDiretti(self.siti_anime, self.archivio, self.serie, self.download, config)
+        for fonte in self.siti_anime:
+            self.download.risolutori[fonte] = self._link_diretto
         self.musica = Musica(config, self.archivio, client, self.jellyfin)
         self.deezer = Deezer(self.archivio, client)
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
@@ -113,8 +123,8 @@ class Servizi:
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
         self.foto_profili = FotoProfili(self.archivio, client, self.jellyfin)
 
-    async def _link_animeunity(self, voce: dict) -> tuple[str, dict]:
-        return await self.animeunity.link_video(int(str(voce["url"]).removeprefix("animeunity:")))
+    async def _link_diretto(self, voce: dict) -> tuple[str, dict]:
+        return await self.anime.link(json.loads(str(voce["url"]).removeprefix("diretto:")))
 
 
 async def manutenzione_cache(archivio: Archivio) -> None:
@@ -170,7 +180,8 @@ async def ciclo_di_vita(app: FastAPI):
         for c in compiti:
             with contextlib.suppress(asyncio.CancelledError):
                 await c
-        await servizi.animeunity.chiudi()
+        for sito in servizi.siti_anime.values():
+            await sito.chiudi()
 
 
 app = FastAPI(title="Cerca", lifespan=ciclo_di_vita, docs_url=None, redoc_url=None, openapi_url=None)
@@ -1115,14 +1126,14 @@ async def api_serie_apri(request: Request, dati: RichiestaSerie):
     serie = await s.serie.prepara(tvdb=dati.tvdb, tmdb=dati.tmdb, imdb=dati.imdb, titolo=dati.titolo)
     # per cercare da soli le puntate nuove anche con il titolo italiano (puntate_italiane.py)
     await asyncio.to_thread(ricorda_titoli, s.archivio, serie["id"], [dati.nome, dati.titolo])
-    if s.animeunity.attivo:
-        # gli anime si collegano da soli ad AnimeUnity (fonte diretta, preferita ai torrent)
+    if s.anime.attivo:
+        # gli anime si collegano da soli ai siti diretti (AnimeUnity, AnimeWorld), preferiti ai torrent
         try:
             await asyncio.wait_for(s.anime.collega_da_solo(serie["id"], serie, await s.serie.episodi(serie["id"])), 20)
         except (TimeoutError, ErroreServizio):
             pass
     risposta = await _puntate_e_anime(s, serie["id"])
-    risposta["animeunity"]["anime"] = serie.get("seriesType") == "anime" or e_anime(serie)
+    risposta["diretti"]["anime"] = serie.get("seriesType") == "anime" or e_anime(serie)
     return risposta
 
 
@@ -1130,7 +1141,8 @@ async def _puntate_e_anime(s, serie_id: int) -> dict:
     stagioni = con_download_cerca(await s.serie.puntate(serie_id), s.archivio.download_puntate(serie_id))
     stato = s.anime.leggi(serie_id)
     return {"serie_id": serie_id, "stagioni": stagioni,
-            "animeunity": {"attivo": s.animeunity.attivo, "collegamenti": stato["collegamenti"], "da": stato["da"]}}
+            "diretti": {"attivo": s.anime.attivo, "collegamenti": s.anime.collegamenti(serie_id), "da": stato["da"],
+                        "siti": [NOMI_FONTI[f] for f in s.anime.siti_attivi()]}}
 
 
 @app.get("/api/serie/{serie_id}/puntate")
@@ -1152,7 +1164,7 @@ def _uscita(e: dict) -> bool:
 
 @app.post("/api/serie/{serie_id}/scarica")
 async def api_serie_scarica_puntate(request: Request, serie_id: int, dati: SceltaPuntate):
-    """Le puntate scelte: prima da AnimeUnity (link diretti, preferiti), il resto lo cerca Sonarr."""
+    """Le puntate scelte: prima dai siti diretti (AnimeUnity, AnimeWorld: preferiti), il resto lo cerca Sonarr."""
     s = servizi(request)
     episodi = await s.serie.episodi(serie_id)
     da = None
@@ -1172,15 +1184,15 @@ async def api_serie_scarica_puntate(request: Request, serie_id: int, dati: Scelt
         volute = [e for e in episodi if e["id"] in set(dati.puntate)]
 
     avviate: list[int] = []
-    if s.animeunity.attivo:
+    if s.anime.attivo:
         if da is not None:
             s.anime.segui_da(serie_id, da)
         try:
             esito = await s.anime.scarica(serie_id, solo=[e["id"] for e in volute])
             avviate = esito["avviate"]
         except ErroreServizio as exc:
-            log.info("AnimeUnity non disponibile: %s", exc.cosa)
-    if not (s.animeunity.attivo and s.anime.collegamenti(serie_id)):
+            log.info("Siti diretti non disponibili: %s", exc.cosa)
+    if not s.anime.collegamenti(serie_id):
         # nessuna fonte diretta: come sempre, ci pensa Sonarr
         if dati.da_puntata is not None:
             quante = await s.serie.scarica_da(serie_id, dati.da_puntata)
@@ -1200,9 +1212,9 @@ async def api_serie_scarica_puntate(request: Request, serie_id: int, dati: Scelt
         await s.serie.scarica_puntate(resto)
     parti = []
     if avviate:
-        parti.append(f"{len(avviate)} da AnimeUnity" if len(avviate) > 1 else "1 da AnimeUnity")
+        parti.append(f"{len(avviate)} con link diretto")
     if resto:
-        parti.append(f"{len(resto)} le cerco come torrent (AnimeUnity non le ha)")
+        parti.append(f"{len(resto)} le cerco come torrent (i siti diretti non le hanno)")
     if da is not None:
         parti.append("le nuove le scarico appena escono")
     if not parti:
@@ -1221,32 +1233,35 @@ async def api_serie_annulla_puntate(request: Request, serie_id: int, dati: Scelt
     if dati.tutte:
         s.anime.segui_da(serie_id, None)
     await s.serie.annulla_puntate(puntate)
-    # e i download diretti (AnimeUnity) di quelle puntate
+    # e i download diretti (AnimeUnity, AnimeWorld) di quelle puntate
     per_puntata = s.archivio.download_puntate(serie_id)
     for id_download in {per_puntata[p]["id"] for p in puntate if p in per_puntata}:
         await s.download.annulla(id_download)
     return {"messaggio": "Annullato: non le cerco e non le scarico più (quelle già in Jellyfin restano)."}
 
 
-# --- AnimeUnity: le voci collegate a una serie ---------------------------------------
+# --- Siti diretti degli anime: le voci collegate a una serie --------------------------
 
-@app.get("/api/serie/{serie_id}/animeunity/cerca")
-async def api_animeunity_cerca(request: Request, serie_id: int, q: str = ""):
-    """Le voci di AnimeUnity per collegarle a mano, con la stagione che sembra giusta."""
+@app.get("/api/serie/{serie_id}/diretti/cerca")
+async def api_diretti_cerca(request: Request, serie_id: int, q: str = ""):
+    """Le voci di AnimeUnity e AnimeWorld per collegarle a mano, con la stagione che sembra giusta."""
     s = servizi(request)
     episodi = await s.serie.episodi(serie_id)
-    voci = await s.animeunity.cerca(q.strip() or (await s.serie.dati(serie_id)).get("title", ""))
+    q = q.strip() or (await s.serie.dati(serie_id)).get("title", "")
+    voci = await s.anime.cerca(q)
     stagioni: dict[int, int] = {}
     for e in episodi:
         stagioni[e.get("seasonNumber", 0)] = stagioni.get(e.get("seasonNumber", 0), 0) + 1
     assoluta = any(e.get("absoluteEpisodeNumber") for e in episodi)
-    voci = ordina_risultati(voci, [q], s.anime.italiano)[:20]
-    return {"risultati": [{**v, "stagione": indovina_stagione(v, voci, stagioni, assoluta)} for v in voci],
+    voci = ordina_risultati(voci, [q], s.anime.italiano)[:24]
+    return {"risultati": [{**v, "nome_fonte": NOMI_FONTI.get(v["fonte"], v["fonte"]),
+                           "stagione": indovina_stagione(v, voci, stagioni, assoluta)} for v in voci],
             "stagioni": sorted(n for n in stagioni if n > 0), "assoluta": assoluta}
 
 
-class VoceAnimeUnity(BaseModel):
-    id: int
+class VoceDiretta(BaseModel):
+    fonte: str = Field(pattern="^(animeunity|animeworld)$")
+    id: int | str
     slug: str = ""
     titolo: str = ""
     doppiato: bool = False
@@ -1256,24 +1271,26 @@ class VoceAnimeUnity(BaseModel):
     stagione: int = 1
 
 
-@app.post("/api/serie/{serie_id}/animeunity/collega")
-async def api_animeunity_collega(request: Request, serie_id: int, voce: VoceAnimeUnity):
+@app.post("/api/serie/{serie_id}/diretti/collega")
+async def api_diretti_collega(request: Request, serie_id: int, voce: VoceDiretta):
     s = servizi(request)
     s.anime.collega(serie_id, voce.model_dump(), voce.stagione)
     esito = await s.anime.scarica(serie_id)
     quante = len(esito["avviate"])
     extra = f" Ho messo in coda {quante} puntate." if quante else ""
-    return {"messaggio": f"Collegato \"{voce.titolo}\": da ora le puntate arrivano prima da AnimeUnity.{extra}"}
+    sito = NOMI_FONTI[voce.fonte]
+    return {"messaggio": f"Collegato \"{voce.titolo}\" ({sito}): da ora quelle puntate arrivano prima da lì.{extra}"}
 
 
-class ScollegaAnimeUnity(BaseModel):
-    id: int
+class ScollegaDiretta(BaseModel):
+    fonte: str = "animeunity"
+    id: int | str
 
 
-@app.post("/api/serie/{serie_id}/animeunity/scollega")
-async def api_animeunity_scollega(request: Request, serie_id: int, dati: ScollegaAnimeUnity):
-    servizi(request).anime.scollega(serie_id, dati.id)
-    return {"messaggio": "Scollegato: quelle puntate le cerca di nuovo Sonarr."}
+@app.post("/api/serie/{serie_id}/diretti/scollega")
+async def api_diretti_scollega(request: Request, serie_id: int, dati: ScollegaDiretta):
+    servizi(request).anime.scollega(serie_id, dati.fonte, dati.id)
+    return {"messaggio": "Scollegato: quelle puntate le prende un altro sito diretto, o le cerca Sonarr."}
 
 
 @app.post("/api/download/{id_download}/associa")

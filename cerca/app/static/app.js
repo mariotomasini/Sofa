@@ -248,7 +248,7 @@ function avviaTorrent() {
 
 // --- elenco download (pagina Download e home) -----------------------------------------
 function htmlDownload(d, compatto = false) {
-  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", animeunity: "AnimeUnity" }[d.fonte] || d.fonte;
+  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", animeunity: "AnimeUnity", animeworld: "AnimeWorld" }[d.fonte] || d.fonte;
   if (compatto) {
     const riga = d.stato === "in_corso"
       ? `${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}`
@@ -1376,28 +1376,29 @@ function htmlPuntate(stagioni) {
   }).join("");
 }
 
-// --- AnimeUnity: link diretti, preferiti ai torrent (e la versione doppiata in italiano sostituisce le altre)
+// --- Link diretti (AnimeUnity, AnimeWorld): preferiti ai torrent, e la versione doppiata in italiano sostituisce le altre
 function nomeStagione(n) { return Number(n) === 0 ? "Numerazione assoluta" : `Stagione ${n}`; }
 
 function htmlCollegati(au) {
   if (!au.collegamenti.length) {
     return '<p class="sottotitolo">Nessuna voce collegata: le puntate le cerca Sonarr come torrent. Cerca qui sotto per collegarne una.</p>';
   }
+  const nomi = { animeunity: "AnimeUnity", animeworld: "AnimeWorld" };
   return au.collegamenti.map((c) => `<div class="au-voce">` +
     (c.immagine ? `<img src="${esc(c.immagine)}" alt="" loading="lazy">` : "") +
-    `<div class="descrizione"><strong>${esc(c.titolo)}</strong><span class="sottotitolo">${esc(nomeStagione(c.stagione))} · ` +
-    `${c.doppiato ? "Doppiato ITA" : "Sub ITA"}${c.auto ? " · trovato da solo" : ""}</span></div>` +
-    `<button class="secondario" data-au-scollega="${c.id}">Scollega</button></div>`).join("");
+    `<div class="descrizione"><strong>${esc(c.titolo)}</strong><span class="sottotitolo">${esc(nomi[c.fonte] || c.fonte)} · ` +
+    `${esc(nomeStagione(c.stagione))} · ${c.doppiato ? "Doppiato ITA" : "Sub ITA"}${c.auto ? " · trovato da solo" : ""}</span></div>` +
+    `<button class="secondario" data-au-scollega="${esc(String(c.id))}" data-au-fonte="${esc(c.fonte)}">Scollega</button></div>`).join("");
 }
 
 function htmlRisultatiAU(r) {
-  if (!r.risultati.length) return '<p class="sottotitolo">AnimeUnity non trova niente con questo titolo.</p>';
+  if (!r.risultati.length) return '<p class="sottotitolo">Nessun sito trova niente con questo titolo.</p>';
   const opzioni = (scelta) => [...r.stagioni, ...(r.assoluta ? [0] : [])]
     .map((n) => `<option value="${n}"${n === scelta ? " selected" : ""}>${esc(nomeStagione(n))}</option>`).join("");
   return r.risultati.map((v, i) => `<div class="au-voce">` +
     (v.immagine ? `<img src="${esc(v.immagine)}" alt="" loading="lazy">` : "") +
     `<div class="descrizione"><strong>${esc(v.titolo)}</strong><span class="sottotitolo">` +
-    `${esc([v.anno, v.puntate ? v.puntate + " puntate" : "", v.doppiato ? "Doppiato ITA" : "Sub ITA"].filter(Boolean).join(" · "))}</span>` +
+    `${esc([v.nome_fonte, v.anno, v.puntate ? v.puntate + " puntate" : "", v.tipo && v.tipo !== "TV" ? v.tipo : "", v.doppiato ? "Doppiato ITA" : "Sub ITA"].filter(Boolean).join(" · "))}</span>` +
     `<select aria-label="Stagione di Sonarr" data-au-stagione="${i}">${opzioni(v.stagione)}</select></div>` +
     `<button class="secondario" data-au-collega="${i}">Collega</button></div>`).join("");
 }
@@ -1429,11 +1430,11 @@ function dialogoSerie() {
     <p id="serie-esito" class="messaggio-serie" role="status"></p>
     <div id="serie-puntate" class="serie-puntate"></div>
     <section id="serie-au" class="serie-au" hidden>
-      <div class="au-testa"><strong>AnimeUnity</strong>
-        <span class="sottotitolo">Link diretti, senza torrent: se ci sono si usano sempre per primi, e la versione
-          doppiata in italiano sostituisce quelle in altre lingue.</span></div>
+      <div class="au-testa"><strong>Link diretti</strong>
+        <span class="sottotitolo" id="au-siti">AnimeUnity e AnimeWorld, senza torrent: se ci sono si usano sempre per primi,
+          e la versione doppiata in italiano sostituisce quelle in altre lingue.</span></div>
       <div id="au-collegati"></div>
-      <form id="au-cerca" class="au-cerca"><input id="au-testo" type="search" placeholder="Cerca su AnimeUnity" aria-label="Cerca su AnimeUnity">
+      <form id="au-cerca" class="au-cerca"><input id="au-testo" type="search" placeholder="Cerca sui siti diretti" aria-label="Cerca su AnimeUnity e AnimeWorld">
         <button class="secondario" type="submit">${ICONE.lente}Cerca</button></form>
       <div id="au-risultati"></div>
     </section>
@@ -1488,14 +1489,14 @@ function dialogoSerie() {
   document.getElementById("au-cerca").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (!d.dataset.serieId) return;
-    risultatiAU.innerHTML = '<p class="caricamento">Cerco su AnimeUnity</p>';
+    risultatiAU.innerHTML = '<p class="caricamento">Cerco su AnimeUnity e AnimeWorld</p>';
     try {
       const q = encodeURIComponent(document.getElementById("au-testo").value.trim());
-      const r = await chiama(`/api/serie/${d.dataset.serieId}/animeunity/cerca?q=${q}`);
+      const r = await chiama(`/api/serie/${d.dataset.serieId}/diretti/cerca?q=${q}`);
       risultatiAU._dati = r.risultati;
       risultatiAU.innerHTML = htmlRisultatiAU(r);
     } catch (e) {
-      risultatiAU.innerHTML = `<p class="messaggio-serie errore">${esc(e.errore || "AnimeUnity non risponde.")} ${esc(e.cosa_fare || "")}</p>`;
+      risultatiAU.innerHTML = `<p class="messaggio-serie errore">${esc(e.errore || "I siti diretti non rispondono.")} ${esc(e.cosa_fare || "")}</p>`;
     }
   });
   document.getElementById("serie-au").addEventListener("click", async (ev) => {
@@ -1503,7 +1504,8 @@ function dialogoSerie() {
     if (!b) return;
     b.disabled = true;
     if (b.dataset.auScollega) {
-      await invia("animeunity/scollega", { id: Number(b.dataset.auScollega) });
+      const id = /^\d+$/.test(b.dataset.auScollega) ? Number(b.dataset.auScollega) : b.dataset.auScollega;
+      await invia("diretti/scollega", { fonte: b.dataset.auFonte, id });
       return;
     }
     const i = Number(b.dataset.auCollega);
@@ -1511,7 +1513,7 @@ function dialogoSerie() {
     const stagione = Number(risultatiAU.querySelector(`[data-au-stagione="${i}"]`).value);
     esito.className = "messaggio-serie";
     esito.textContent = "Collego e metto in coda le puntate…";
-    await invia("animeunity/collega", { ...voce, stagione });
+    await invia("diretti/collega", { ...voce, stagione });
     risultatiAU.innerHTML = "";
   });
   return d;
@@ -1530,7 +1532,7 @@ async function aggiornaPuntate(d) {
     });
     const tutte = r.stagioni.flatMap((st) => st.puntate);
     document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
-    mostraAnimeUnity(d, r.animeunity);
+    mostraAnimeUnity(d, r.diretti);
   } catch (e) { /* riprova al prossimo giro */ }
 }
 
@@ -1566,7 +1568,7 @@ async function apriSerie(dati) {
     document.getElementById("serie-tutte").disabled = false;
     const tutte = r.stagioni.flatMap((st) => st.puntate);
     document.getElementById("serie-annulla-tutte").hidden = !tutte.some((p) => p.seguita && p.stato !== "pronta");
-    mostraAnimeUnity(d, r.animeunity);
+    mostraAnimeUnity(d, r.diretti);
     clearInterval(d._aggiorna);
     d._aggiorna = setInterval(() => aggiornaPuntate(d), 8000);
   } catch (e) {

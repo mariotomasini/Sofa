@@ -1,4 +1,4 @@
-"""Gestione dei download: HTTP diretto da Internet Archive e AnimeUnity, torrent via
+"""Gestione dei download: HTTP diretto da Internet Archive e dai siti degli anime, torrent via
 qBittorrent, e passaggio finale a Radarr (che mette il film in Jellyfin) o a Sonarr."""
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ INTERVALLO_CONTROLLO = 15
 PREFISSO_ETICHETTA = "mediabox-"
 CATEGORIE_SORVEGLIATE = ("cerca", "manuale")
 CATEGORIA_MUSICA = "musica"
-# download HTTP contemporanei per fonte: AnimeUnity non ama troppe richieste insieme
-CONTEMPORANEI = {"animeunity": 2}
+# download HTTP contemporanei per fonte: i siti degli anime non amano troppe richieste insieme
+CONTEMPORANEI = {"animeunity": 2, "animeworld": 2}
 
 
 # --- funzioni pure (testate) ---------------------------------------------------
@@ -104,7 +104,7 @@ class GestoreDownload:
         # in sottofondo (es. il passaggio a Radarr) poteva sparire a metà senza lasciare traccia
         self._in_sottofondo: set[asyncio.Task] = set()
         # fonte → funzione che dà il link vero (e le intestazioni) al momento di scaricare:
-        # i link di AnimeUnity scadono, quindi si chiedono a ogni partenza (li imposta main.py)
+        # i link dei siti degli anime scadono, quindi si chiedono a ogni partenza (li imposta main.py)
         self.risolutori: dict = {}
         self._turni = {fonte: asyncio.Semaphore(n) for fonte, n in CONTEMPORANEI.items()}
 
@@ -139,15 +139,16 @@ class GestoreDownload:
         self._avvia_http(id_download)
         return id_download
 
-    async def da_animeunity(self, *, serie_id: int, titolo_serie: str, poster: str, puntata_au: int,
-                            episodio: dict, nome_file: str, doppiato: bool) -> int:
-        """Una puntata da AnimeUnity: HTTP diretto, poi a Sonarr come le altre."""
-        cartella = self.config.cartella_download / "cerca" / "animeunity" / nome_cartella(titolo_serie, "")
+    async def da_diretto(self, *, serie_id: int, titolo_serie: str, poster: str, episodio: dict,
+                         fonti: list[list], nome_file: str, doppiato: bool) -> int:
+        """Una puntata da un sito diretto (AnimeUnity, AnimeWorld): HTTP, poi a Sonarr come le altre.
+        `fonti` = [[sito, id puntata], …] nell'ordine in cui provarli: il link si chiede a ogni partenza."""
+        cartella = self.config.cartella_download / "cerca" / "anime" / nome_cartella(titolo_serie, "")
         lingua = "ITA" if doppiato else "SUB ITA"
         id_download = self.archivio.nuovo_download(
             tmdb_id=None, titolo=f"{titolo_serie} · Stagione {episodio['seasonNumber']} · "
                                  f"Episodio {episodio['episodeNumber']} ({lingua})",
-            anno="", poster=poster, fonte="animeunity", tipo="http", url=f"animeunity:{puntata_au}",
+            anno="", poster=poster, fonte=fonti[0][0], tipo="http", url="diretto:" + json.dumps(fonti),
             nome_file=nome_file, percorso=str(cartella / nome_file), categoria="cerca", serie=serie_id,
             puntate=json.dumps([episodio["id"]]), totale=0,
         )

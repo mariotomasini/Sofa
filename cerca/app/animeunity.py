@@ -1,4 +1,6 @@
-"""AnimeUnity come fonte degli anime: puntate scaricate in HTTP, senza torrent.
+"""Le fonti dirette degli anime (AnimeUnity e AnimeWorld): puntate scaricate in HTTP, senza torrent.
+
+Qui c'è il sito AnimeUnity e la logica comune; AnimeWorld è in animeworld.py.
 
 Come funziona:
 - su AnimeUnity cerco l'anime (POST /livesearch, serve il token CSRF della home);
@@ -7,7 +9,7 @@ Come funziona:
   `window.downloadUrl`: il file MP4 da scaricare. Il link scade, quindi lo chiedo
   ogni volta che il download parte o riparte (download.py → risolutori).
 
-Una serie di Sonarr si "collega" a una o più voci di AnimeUnity (di solito una per stagione,
+Una serie di Sonarr si "collega" a una o più voci dei siti (di solito una per stagione,
 oppure una sola con la numerazione assoluta, come One Piece). Il collegamento ricorda da quale
 puntata scaricare: Cerca scarica quelle già uscite e, ogni ora, le nuove che compaiono.
 A download finito il file va a Sonarr (download.py → _passa_a_sonarr), che lo mette in Jellyfin.
@@ -40,6 +42,9 @@ OGNI = 3600  # le puntate nuove si controllano una volta all'ora
 MAX_PER_GIRO = 300  # puntate messe in coda al massimo in un giro (ne scarico poche alla volta)
 DURATA_TOKEN = 20 * 60
 CHIAVE = "animeunity:"
+# in ordine di preferenza (a parità di lingua): se una non dà il file si prova l'altra
+FONTI = ("animeunity", "animeworld")
+NOMI_FONTI = {"animeunity": "AnimeUnity", "animeworld": "AnimeWorld"}
 
 RE_CSRF = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', re.I)
 RE_DOWNLOAD = re.compile(r"""window\.downloadUrl\s*=\s*['"]([^'"]+)['"]""")
@@ -70,6 +75,7 @@ def normalizza(record: dict) -> dict:
     titolo = record.get("title_it") or record.get("title") or record.get("title_eng") or ""
     altri = [t for t in (record.get("title"), record.get("title_eng")) if t and t != titolo]
     return {
+        "fonte": "animeunity",
         "id": int(record.get("id") or 0),
         "slug": record.get("slug") or "",
         "titolo": titolo,
@@ -100,7 +106,7 @@ def ordina_risultati(voci: list[dict], titoli: list[str], italiano: bool) -> lis
         nomi = {_semplice(n) for n in [v["titolo"], *v.get("altri_titoli", [])]}
         uguale = bool(nomi & cercati)
         inizia = any(n.startswith(c) for n in nomi for c in cercati if c)
-        return (not uguale, not inizia, v["doppiato"] != italiano, v["anno"] or "9999", v["id"])
+        return (not uguale, not inizia, v["doppiato"] != italiano, v["anno"] or "9999", str(v["id"]))
 
     return sorted(voci, key=chiave)
 
@@ -119,8 +125,9 @@ def indovina_stagione(voce: dict, voci: list[dict], stagioni: dict[int, int], as
         return normali[0]
     if assoluta and voce["puntate"] > max(stagioni.values()):
         return 0
-    simili = sorted((v for v in voci if v["doppiato"] == voce["doppiato"] and v["tipo"] in ("TV", "ONA", voce["tipo"])),
-                    key=lambda v: (v["anno"] or "9999", v["id"]))
+    simili = sorted((v for v in voci if v["doppiato"] == voce["doppiato"] and v.get("fonte") == voce.get("fonte")
+                     and v["tipo"] in ("TV", "ONA", voce["tipo"])),
+                    key=lambda v: (v["anno"] or "9999", len(v["titolo"]), str(v["id"])))
     posto = next((i for i, v in enumerate(simili) if v["id"] == voce["id"]), 0)
     return normali[min(posto, len(normali) - 1)]
 
@@ -161,17 +168,19 @@ def candidati_forti(voci: list[dict], titoli: list[str]) -> list[dict]:
         nomi = {_semplice(n) for n in [v["titolo"], *v.get("altri_titoli", [])]}
         if any(n == c or n.startswith(c + " ") for n in nomi for c in cercati):
             forti.append(v)
-    return forti
+    # ONA e OVA sono di solito spin-off ("Mini Anime"): solo se di quel sito non c'è la serie TV
+    con_tv = {v.get("fonte") for v in forti if v["tipo"].upper() == "TV"}
+    return [v for v in forti if v["tipo"].upper() not in ("ONA", "OVA") or v.get("fonte") not in con_tv]
 
 
 def scegli_collegamenti(voci: list[dict], titoli: list[str], stagioni: dict[int, int], assoluta: bool,
                         italiano: bool) -> list[dict]:
-    """I collegamenti automatici: per ogni stagione la voce doppiata e quella sottotitolata migliori."""
+    """I collegamenti automatici: per ogni sito e stagione la voce doppiata e quella sottotitolata migliori."""
     forti = ordina_risultati(candidati_forti(voci, titoli), titoli, italiano)
-    scelti: dict[tuple[int, bool], dict] = {}
+    scelti: dict[tuple[str, int, bool], dict] = {}
     for v in forti:
         stagione = indovina_stagione(v, forti, stagioni, assoluta)
-        scelti.setdefault((stagione, v["doppiato"]), {**v, "stagione": stagione})
+        scelti.setdefault((v.get("fonte", "animeunity"), stagione, v["doppiato"]), {**v, "stagione": stagione})
     return list(scelti.values())
 
 
@@ -179,11 +188,27 @@ def lingua_file_italiana(file: dict | None) -> bool:
     return any((lingua.get("name") or "").casefold() == "italian" for lingua in (file or {}).get("languages") or [])
 
 
+def fonte_di(collegamento: dict) -> str:
+    return collegamento.get("fonte") or "animeunity"
+
+
+def ordina_fonti(disponibili: list[tuple[dict, dict]], italiano: bool) -> list[tuple[dict, dict]]:
+    """Prima la lingua preferita, poi i siti nell'ordine di FONTI."""
+    def chiave(x):
+        f = fonte_di(x[0])
+        return (bool(x[0].get("doppiato")) != italiano, FONTI.index(f) if f in FONTI else 99)
+    return sorted(disponibili, key=chiave)
+
+
 def scegli_fonte(episodio: dict, disponibili: list[tuple[dict, dict]], italiano: bool) -> tuple[dict, dict] | None:
     """Tra le voci collegate che hanno la puntata: prima quella nella lingua preferita."""
-    if not disponibili:
-        return None
-    return sorted(disponibili, key=lambda x: x[0].get("doppiato") != italiano)[0]
+    return ordina_fonti(disponibili, italiano)[0] if disponibili else None
+
+
+def alternative(disponibili: list[tuple[dict, dict]], scelta: dict, italiano: bool) -> list[list]:
+    """Le fonti della stessa lingua della scelta, nell'ordine in cui provarle: [[sito, id puntata], …]."""
+    return [[fonte_di(c), p["id"]] for c, p in ordina_fonti(disponibili, italiano)
+            if bool(c.get("doppiato")) == bool(scelta.get("doppiato"))]
 
 
 def da_scaricare(episodi: list[dict], fonti: dict[int, list[tuple[dict, dict]]], *, file_italiani: set[int],
@@ -195,7 +220,7 @@ def da_scaricare(episodi: list[dict], fonti: dict[int, list[tuple[dict, dict]]],
     - altrimenti le puntate da `da` in avanti non ancora scaricate da qui.
     In più, sempre: le puntate già presenti ma non in italiano, se AnimeUnity le ha doppiate
     (la versione italiana sostituisce il resto).
-    Restituisce ([(puntata, collegamento, puntata AU)], [puntate che AnimeUnity non ha]).
+    Restituisce ([(puntata, collegamento, puntata sul sito)], [puntate che nessun sito ha]).
     """
     scegli, mancano = [], []
     for e in episodi:
@@ -335,21 +360,25 @@ class AnimeUnity:
 
 # --- serie collegate -----------------------------------------------------------
 
-class AnimeUnitySerie:
-    """Le serie di Sonarr collegate ad AnimeUnity e il giro che scarica le puntate nuove.
+def chiave_voce(voce: dict) -> str:
+    return f"{fonte_di(voce)}:{voce['id']}"
 
-    Per ogni serie (chiave "animeunity:{id}" nello stato) ricordo:
-    - collegamenti: le voci di AnimeUnity e a quale stagione vanno (0 = numerazione assoluta);
+
+class AnimeDiretti:
+    """Le serie di Sonarr collegate ai siti diretti e il giro che scarica le puntate nuove.
+
+    Per ogni serie (chiave "animeunity:{id}" nello stato, per i dati già salvati) ricordo:
+    - collegamenti: le voci dei siti e a quale stagione vanno (0 = numerazione assoluta);
     - da: [stagione, puntata] da cui scaricare anche le nuove (None = solo quelle scelte a mano);
     - fatte: {id puntata Sonarr: "ita" | "sub"} quelle già prese da qui;
     - cercato: quando ho cercato l'anime da solo l'ultima volta.
     """
 
     RICERCA_OGNI = 24 * 3600
-    RISERVA_GIORNI = 2  # dopo, una puntata che AnimeUnity non ha la cerca Sonarr
+    RISERVA_GIORNI = 2  # dopo, una puntata che nessun sito ha la cerca Sonarr
 
-    def __init__(self, sito: AnimeUnity, archivio, serie, download, config) -> None:
-        self.sito = sito
+    def __init__(self, siti: dict, archivio, serie, download, config) -> None:
+        self.siti = siti  # {"animeunity": AnimeUnity, "animeworld": AnimeWorld}
         self.archivio = archivio
         self.serie = serie
         self.download = download
@@ -359,6 +388,13 @@ class AnimeUnitySerie:
     @property
     def italiano(self) -> bool:
         return (self.config.lingue_audio or ("it",))[0] == "it"
+
+    @property
+    def attivo(self) -> bool:
+        return any(s.attivo for s in self.siti.values())
+
+    def siti_attivi(self) -> list[str]:
+        return [f for f in FONTI if f in self.siti and self.siti[f].attivo]
 
     # --- stato -----------------------------------------------------------------
     def leggi(self, serie_id: int) -> dict:
@@ -372,29 +408,36 @@ class AnimeUnitySerie:
         stato.setdefault("da", None)
         stato.setdefault("fatte", {})
         stato.setdefault("cercato", 0)
+        for c in stato["collegamenti"]:
+            c.setdefault("fonte", "animeunity")
         return stato
 
     def _scrivi(self, serie_id: int, stato: dict) -> None:
         self.archivio.stato_scrivi(f"{CHIAVE}{serie_id}", json.dumps(stato))
 
     def collegamenti(self, serie_id: int) -> list[dict]:
-        return self.leggi(serie_id)["collegamenti"]
+        """Solo quelli dei siti accesi."""
+        attivi = set(self.siti_attivi())
+        return [c for c in self.leggi(serie_id)["collegamenti"] if fonte_di(c) in attivi]
 
     def serie_collegate(self) -> list[int]:
         return [int(k[len(CHIAVE):]) for k in self.archivio.stato_con_prefisso(CHIAVE) if k[len(CHIAVE):].isdigit()]
 
     def collega(self, serie_id: int, voce: dict, stagione: int) -> None:
-        """Collegamento scelto a mano: prende il posto di quello (della stessa lingua) di quella stagione."""
+        """Collegamento scelto a mano: prende il posto di quello (stesso sito e lingua) di quella stagione."""
         stato = self.leggi(serie_id)
-        stato["collegamenti"] = [c for c in stato["collegamenti"] if c["id"] != voce["id"]
-                                 and (c["stagione"], c["doppiato"]) != (stagione, bool(voce.get("doppiato")))]
+        posto = (fonte_di(voce), stagione, bool(voce.get("doppiato")))
+        stato["collegamenti"] = [c for c in stato["collegamenti"] if chiave_voce(c) != chiave_voce(voce)
+                                 and (fonte_di(c), c["stagione"], c["doppiato"]) != posto]
         stato["collegamenti"].append(self._collegamento(voce, stagione, auto=False))
+        stato["scollegati"] = [x for x in stato.get("scollegati") or [] if x != chiave_voce(voce)]
         self._scrivi(serie_id, stato)
 
-    def scollega(self, serie_id: int, anime_id: int) -> None:
+    def scollega(self, serie_id: int, fonte: str, anime_id) -> None:
         stato = self.leggi(serie_id)
-        stato["collegamenti"] = [c for c in stato["collegamenti"] if c["id"] != anime_id]
-        stato.setdefault("scollegati", []).append(anime_id)  # la ricerca automatica non lo ricollega
+        chiave = f"{fonte}:{anime_id}"
+        stato["collegamenti"] = [c for c in stato["collegamenti"] if chiave_voce(c) != chiave]
+        stato.setdefault("scollegati", []).append(chiave)  # la ricerca automatica non lo ricollega
         self._scrivi(serie_id, stato)
 
     def segui_da(self, serie_id: int, da: tuple[int, int] | None) -> None:
@@ -404,55 +447,72 @@ class AnimeUnitySerie:
 
     @staticmethod
     def _collegamento(voce: dict, stagione: int, auto: bool) -> dict:
-        return {"id": voce["id"], "slug": voce.get("slug", ""), "titolo": voce.get("titolo", ""),
-                "doppiato": bool(voce.get("doppiato")), "immagine": voce.get("immagine", ""),
-                "anno": voce.get("anno", ""), "puntate": voce.get("puntate", 0), "stagione": stagione, "auto": auto}
+        return {"fonte": fonte_di(voce), "id": voce["id"], "slug": voce.get("slug", ""),
+                "titolo": voce.get("titolo", ""), "doppiato": bool(voce.get("doppiato")),
+                "immagine": voce.get("immagine", ""), "anno": voce.get("anno", ""),
+                "puntate": voce.get("puntate", 0), "stagione": stagione, "auto": auto}
+
+    # --- ricerca -----------------------------------------------------------------
+    async def cerca(self, titolo: str) -> list[dict]:
+        """Su tutti i siti accesi insieme; un sito che non risponde non ferma gli altri."""
+        fonti = self.siti_attivi()
+        esiti = await asyncio.gather(*(self.siti[f].cerca(titolo) for f in fonti), return_exceptions=True)
+        voci, errori = [], []
+        for f, esito in zip(fonti, esiti, strict=True):
+            if isinstance(esito, ErroreServizio):
+                errori.append(esito)
+                log.info("%s: ricerca di %s non riuscita (%s)", NOMI_FONTI.get(f, f), titolo, esito.cosa)
+            elif isinstance(esito, BaseException):
+                log.warning("%s: errore nella ricerca", NOMI_FONTI.get(f, f), exc_info=esito)
+            else:
+                voci += esito
+        if not voci and errori:
+            raise errori[0]
+        return voci
 
     # --- collegamento automatico ----------------------------------------------
     async def collega_da_solo(self, serie_id: int, dati: dict, episodi: list[dict], forza: bool = False) -> list[dict]:
-        """Cerca l'anime su AnimeUnity e lo collega da solo (una volta al giorno, o subito con `forza`)."""
+        """Cerca l'anime sui siti e lo collega da solo (una volta al giorno, o subito con `forza`)."""
         stato = self.leggi(serie_id)
-        if not self.sito.attivo or not (dati.get("seriesType") == "anime" or e_anime(dati)):
-            return stato["collegamenti"]
+        if not self.attivo or not (dati.get("seriesType") == "anime" or e_anime(dati)):
+            return self.collegamenti(serie_id)
         if not forza and time.time() - stato["cercato"] < self.RICERCA_OGNI:
-            return stato["collegamenti"]
+            return self.collegamenti(serie_id)
         titoli = list(dict.fromkeys(t for t in [*titoli_ricordati(self.archivio, serie_id), dati.get("title", ""),
                                                 *(a.get("title", "") for a in dati.get("alternateTitles") or [])] if t))
-        voci: dict[int, dict] = {}
+        voci: dict[str, dict] = {}
         for t in titoli[:3]:
             try:
-                for v in await self.sito.cerca(t):
-                    voci.setdefault(v["id"], v)
-            except ErroreServizio as exc:
-                log.info("AnimeUnity: ricerca di %s non riuscita (%s)", t, exc.cosa)
-                return stato["collegamenti"]
+                for v in await self.cerca(t):
+                    voci.setdefault(chiave_voce(v), v)
+            except ErroreServizio:
+                return self.collegamenti(serie_id)
         stagioni: dict[int, int] = {}
         for e in episodi:
             stagioni[e.get("seasonNumber", 0)] = stagioni.get(e.get("seasonNumber", 0), 0) + 1
         assoluta = any(e.get("absoluteEpisodeNumber") for e in episodi)
         scollegati = set(stato.get("scollegati") or [])
         a_mano = [c for c in stato["collegamenti"] if not c.get("auto")]
-        occupati = {(c["stagione"], c["doppiato"]) for c in a_mano}
+        occupati = {(fonte_di(c), c["stagione"], c["doppiato"]) for c in a_mano}
         automatici = [self._collegamento(v, v["stagione"], auto=True)
-                      for v in scegli_collegamenti([v for v in voci.values() if v["id"] not in scollegati],
+                      for v in scegli_collegamenti([v for k, v in voci.items() if k not in scollegati],
                                                    titoli, stagioni, assoluta, self.italiano)
-                      if (v["stagione"], v["doppiato"]) not in occupati]
+                      if (fonte_di(v), v["stagione"], v["doppiato"]) not in occupati]
         stato.update(collegamenti=a_mano + automatici, cercato=time.time())
         self._scrivi(serie_id, stato)
         if automatici:
-            log.info("AnimeUnity: %s collegata a %s", dati.get("title"), ", ".join(c["titolo"] for c in automatici))
-        return stato["collegamenti"]
+            log.info("Anime diretti: %s collegata a %s", dati.get("title"),
+                     ", ".join(f"{c['titolo']} ({NOMI_FONTI.get(c['fonte'], c['fonte'])})" for c in automatici))
+        return self.collegamenti(serie_id)
 
     # --- download --------------------------------------------------------------
-    async def _fonti(self, collegamenti: list[dict], episodi: list[dict], obbligatorio: bool):
+    async def _fonti(self, collegamenti: list[dict], episodi: list[dict]):
         fonti: dict[int, list[tuple[dict, dict]]] = {}
         for c in collegamenti:
             try:
-                puntate = await self.sito.puntate(c["id"])
+                puntate = await self.siti[fonte_di(c)].puntate(c["id"])
             except ErroreServizio:
-                if obbligatorio:
-                    raise
-                log.info("AnimeUnity: elenco puntate di %s non disponibile", c["titolo"])
+                log.info("%s: elenco puntate di %s non disponibile", NOMI_FONTI.get(fonte_di(c)), c["titolo"])
                 continue
             for p in puntate:
                 n = numero_puntata(p["numero"])
@@ -462,8 +522,8 @@ class AnimeUnitySerie:
         return fonti
 
     async def scarica(self, serie_id: int, *, solo: list[int] | None = None) -> dict:
-        """Prende da AnimeUnity quello che può (vedi da_scaricare). Restituisce
-        {"avviate": [id puntate], "mancano": [id puntate che AnimeUnity non ha]}."""
+        """Prende dai siti diretti quello che può (vedi da_scaricare). Restituisce
+        {"avviate": [id puntate], "mancano": [id puntate che nessun sito ha]}."""
         async with self._lock:
             dati = await self.serie.dati(serie_id)
             episodi = await self.serie.episodi(serie_id)
@@ -472,7 +532,7 @@ class AnimeUnitySerie:
             if not collegamenti:
                 return {"avviate": [], "mancano": list(solo or [])}
             stato = self.leggi(serie_id)
-            fonti = await self._fonti(collegamenti, episodi, obbligatorio=False)
+            fonti = await self._fonti(collegamenti, episodi)
             file_italiani: set[int] = set()
             if any(e.get("hasFile") for e in episodi) and self.italiano:
                 per_file = {f["id"]: f for f in await self.serie.file_puntate(serie_id)}
@@ -484,20 +544,21 @@ class AnimeUnitySerie:
             nome = (titoli_ricordati(self.archivio, serie_id)[:1] or [dati.get("title") or "Anime"])[0]
             poster = next((i.get("remoteUrl") for i in dati.get("images") or [] if i.get("coverType") == "poster"), "")
             avviate = []
-            for e, c, p in scelte[:MAX_PER_GIRO]:
-                await self.download.da_animeunity(
-                    serie_id=serie_id, titolo_serie=nome, poster=poster or "", puntata_au=p["id"], episodio=e,
-                    nome_file=nome_file(dati.get("title") or nome, e, c.get("doppiato", False)),
-                    doppiato=c.get("doppiato", False))
-                stato["fatte"][str(e["id"])] = "ita" if c.get("doppiato") else "sub"
+            for e, c, _p in scelte[:MAX_PER_GIRO]:
+                doppiato = bool(c.get("doppiato"))
+                await self.download.da_diretto(
+                    serie_id=serie_id, titolo_serie=nome, poster=poster or "", episodio=e,
+                    fonti=alternative(fonti[e["id"]], c, self.italiano),
+                    nome_file=nome_file(dati.get("title") or nome, e, doppiato), doppiato=doppiato)
+                stato["fatte"][str(e["id"])] = "ita" if doppiato else "sub"
                 avviate.append(e["id"])
             self._scrivi(serie_id, stato)
             if avviate:
                 # i preferiti: Sonarr non le cerca più come torrent (e ferma quelli già partiti)
                 await self.serie.annulla_puntate(avviate)
-                log.info("AnimeUnity: %s puntate in coda per %s", len(avviate), dati.get("title"))
+                log.info("Anime diretti: %s puntate in coda per %s", len(avviate), dati.get("title"))
             if solo is None and mancano:
-                # riserva: quelle uscite da un po' che AnimeUnity non ha le cerca Sonarr
+                # riserva: quelle uscite da un po' che nessun sito ha le cerca Sonarr
                 limite = time.time() - self.RISERVA_GIORNI * 86400
                 vecchie = [e["id"] for e in mancano if not e.get("monitored") and e.get("airDateUtc")
                            and _quando(e["airDateUtc"]) < limite]
@@ -505,17 +566,31 @@ class AnimeUnitySerie:
                     await self.serie.scarica_puntate(vecchie)
             return {"avviate": avviate, "mancano": [e["id"] for e in mancano]}
 
+    async def link(self, fonti: list[list]) -> tuple[str, dict]:
+        """Il file della puntata dal primo sito che lo dà (gli altri sono la riserva)."""
+        ultimo = ErroreServizio("Nessun sito dà il file di questa puntata.", "Riprova più tardi.")
+        for fonte, puntata_id in fonti:
+            sito = self.siti.get(fonte)
+            if sito is None or not sito.attivo:
+                continue
+            try:
+                return await sito.link_video(puntata_id)
+            except ErroreServizio as exc:
+                log.info("%s: puntata %s non disponibile (%s)", NOMI_FONTI.get(fonte, fonte), puntata_id, exc.cosa)
+                ultimo = exc
+        raise ultimo
+
     async def giro(self) -> int:
-        if not self.sito.attivo or not self.serie.attivo:
+        if not self.attivo or not self.serie.attivo:
             return 0
         totale = 0
         for serie_id in self.serie_collegate():
             try:
                 totale += len((await self.scarica(serie_id))["avviate"])
             except ErroreServizio as exc:
-                log.info("AnimeUnity, serie %s: %s", serie_id, exc.cosa)
+                log.info("Anime diretti, serie %s: %s", serie_id, exc.cosa)
             except Exception:  # noqa: BLE001 - una serie che non va non deve fermare le altre
-                log.exception("AnimeUnity: errore con la serie %s", serie_id)
+                log.exception("Anime diretti: errore con la serie %s", serie_id)
         return totale
 
     async def ciclo(self) -> None:
@@ -523,7 +598,7 @@ class AnimeUnitySerie:
             try:
                 await self.giro()
             except Exception:  # noqa: BLE001
-                log.warning("Controllo delle puntate di AnimeUnity non riuscito", exc_info=True)
+                log.warning("Controllo delle puntate degli anime diretti non riuscito", exc_info=True)
             await asyncio.sleep(OGNI)
 
 
@@ -548,5 +623,5 @@ def con_download_cerca(stagioni: list[dict], per_puntata: dict[int, dict]) -> li
                 p.update(stato="download", percentuale=round(100 * (d.get("scaricati") or 0) / totale, 1) if totale else 0)
             else:
                 p.update(stato="download", percentuale=100)
-            p.update(seguita=True, fonte="AnimeUnity", download=d["id"])
+            p.update(seguita=True, fonte=NOMI_FONTI.get(d.get("fonte") or "", "Link diretto"), download=d["id"])
     return stagioni

@@ -6,8 +6,9 @@ import json
 import httpx
 
 from app.animeunity import (
+    AnimeDiretti,
     AnimeUnity,
-    AnimeUnitySerie,
+    alternative,
     candidati_forti,
     con_download_cerca,
     da_scaricare,
@@ -101,7 +102,7 @@ def test_da_scaricare_non_ripete():
 
 def test_stato_delle_puntate_con_i_download_diretti():
     stagioni = [{"numero": 1, "puntate": [{"id": 3, "stato": "libera"}, {"id": 4, "stato": "libera"}]}]
-    con_download_cerca(stagioni, {3: {"id": 8, "stato": "in_corso", "scaricati": 50, "totale": 200},
+    con_download_cerca(stagioni, {3: {"id": 8, "stato": "in_corso", "scaricati": 50, "totale": 200, "fonte": "animeunity"},
                                   4: {"id": 9, "stato": "errore", "messaggio": "Solo streaming."}})
     p3, p4 = stagioni[0]["puntate"]
     assert (p3["stato"], p3["percentuale"], p3["fonte"]) == ("download", 25.0, "AnimeUnity")
@@ -172,7 +173,7 @@ class DownloadFinto:
     def __init__(self):
         self.avviati = []
 
-    async def da_animeunity(self, **kw):
+    async def da_diretto(self, **kw):
         self.avviati.append(kw)
 
 
@@ -180,13 +181,13 @@ def test_serie_collegata_scarica_e_ricorda(tmp_path):
     sito = sito_finto()
     archivio = Archivio(tmp_path / "a.db")
     serie, download = SerieFinta(), DownloadFinto()
-    anime = AnimeUnitySerie(sito, archivio, serie, download, Config(lingue_audio=("it", "en")))
+    anime = AnimeDiretti({"animeunity": sito}, archivio, serie, download, Config(lingue_audio=("it", "en")))
 
     async def puntate_doppiate(anime_id):
         return [{"id": 70 + n, "numero": str(n)} for n in (1, 2, 3)]
 
     sito.puntate = puntate_doppiate
-    anime.collega(5, {"id": 7, "titolo": "Frieren (ITA)", "doppiato": True}, 1)
+    anime.collega(5, {"fonte": "animeunity", "id": 7, "titolo": "Frieren (ITA)", "doppiato": True}, 1)
     anime.segui_da(5, (1, 2))
 
     async def prova():
@@ -194,6 +195,7 @@ def test_serie_collegata_scarica_e_ricorda(tmp_path):
         # la 1 c'è in giapponese → sostituita con quella doppiata; 2 e 3 nuove; la 4 non c'è
         assert esito == {"avviate": [31, 32, 33], "mancano": [34]}
         assert download.avviati[0]["nome_file"] == "Frieren - S01E01 - ITA.mp4"
+        assert download.avviati[0]["fonti"] == [["animeunity", 71]]
         assert serie.annullate == [31, 32, 33]  # Sonarr non le cerca più come torrent
         assert serie.cercate == [34]  # uscita da giorni e AnimeUnity non ce l'ha: la cerca Sonarr
         # al giro dopo non si riscarica niente
@@ -231,15 +233,83 @@ def test_download_diretto_chiede_il_link_a_ogni_partenza(tmp_path):
     g._passa_a_radarr = passa
 
     async def prova():
-        id_d = await g.da_animeunity(serie_id=5, titolo_serie="Frieren", poster="", puntata_au=71,
-                                     episodio={"id": 31, "seasonNumber": 1, "episodeNumber": 1},
-                                     nome_file="Frieren - S01E01 - ITA.mp4", doppiato=True)
+        id_d = await g.da_diretto(serie_id=5, titolo_serie="Frieren", poster="",
+                                  fonti=[["animeunity", 71], ["animeworld", "vlhlNp"]],
+                                  episodio={"id": 31, "seasonNumber": 1, "episodeNumber": 1},
+                                  nome_file="Frieren - S01E01 - ITA.mp4", doppiato=True)
         await g._compiti[id_d]
         return id_d
 
     id_d = asyncio.run(prova())
     voce = archivio.download(id_d)
-    assert chiesti == ["animeunity:71"] and richieste[0].headers["Referer"] == "https://vixcloud.co/embed/1"
+    assert chiesti == ['diretto:[["animeunity", 71], ["animeworld", "vlhlNp"]]'] and richieste[0].headers["Referer"] == "https://vixcloud.co/embed/1"
     assert voce["titolo"] == "Frieren · Stagione 1 · Episodio 1 (ITA)" and voce["stato"] == "importato"
-    assert (tmp_path / "cerca" / "animeunity" / "Frieren" / "Frieren - S01E01 - ITA.mp4").read_bytes() == b"video" * 10
+    assert (tmp_path / "cerca" / "anime" / "Frieren" / "Frieren - S01E01 - ITA.mp4").read_bytes() == b"video" * 10
     assert archivio.download_puntate(5) == {}  # importato: non più attivo
+
+
+FIXTURE = __import__("pathlib").Path(__file__).parent / "fixtures"
+
+
+def test_animeworld_legge_le_pagine_vere():
+    from app.animeworld import leggi_anno, leggi_puntate, leggi_ricerca
+
+    voci = leggi_ricerca((FIXTURE / "animeworld_ricerca.html").read_text())
+    assert [(v["id"], v["doppiato"], v["tipo"]) for v in voci][:3] == [
+        ("sousou-no-frieren.kbcPv", False, "TV"), ("frieren-beyond-journeys-end-ita.v26Gn", True, "TV"),
+        ("frieren-beyond-journeys-end-mini-anime.Jso1r", False, "ONA")]
+    assert voci[0]["titolo"] == "Frieren: Beyond Journey's End" and "Sousou no Frieren" in voci[0]["altri_titoli"]
+    assert len(voci) == 5  # niente voci della barra laterale
+    puntate = leggi_puntate((FIXTURE / "animeworld_play.html").read_text())
+    assert len(puntate) == 28 and puntate[0] == {"id": "vlhlNp", "numero": "1"}
+    assert leggi_anno((FIXTURE / "animeworld_tooltip.html").read_text()) == "2026"
+
+
+def test_animeworld_collega_le_stagioni_in_ordine():
+    from app.animeworld import leggi_ricerca
+
+    voci = leggi_ricerca((FIXTURE / "animeworld_ricerca.html").read_text())
+    for v, anno in zip(voci, ["2023", "2023", "2023", "2026", "2026"], strict=True):
+        v["anno"] = anno
+    scelti = scegli_collegamenti(voci, ["Sousou no Frieren"], {1: 28, 2: 12}, assoluta=False, italiano=True)
+    assert {(v["id"], v["stagione"]) for v in scelti} == {
+        ("sousou-no-frieren.kbcPv", 1), ("frieren-beyond-journeys-end-ita.v26Gn", 1),
+        ("frieren-beyond-journeys-end-2.JvOQx", 2), ("frieren-beyond-journeys-end-2-ita.NQfeO", 2)}
+
+
+def test_animeworld_link_diretto():
+    from app.animeworld import AnimeWorld
+
+    def gestore(r: httpx.Request) -> httpx.Response:
+        assert r.url.path == "/api/episode/info" and r.url.params["id"] == "vlhlNp"
+        return httpx.Response(200, json={"grabber": "https://srv17.test/DDL/Frieren_Ep_01_SUB_ITA.mp4", "name": "vlhlNp"})
+
+    aw = AnimeWorld(Config(animeworld_url="https://www.animeworld.test"))
+    aw._client = httpx.AsyncClient(transport=httpx.MockTransport(gestore))
+    url, intestazioni = asyncio.run(aw.link_video("vlhlNp"))
+    assert url.endswith("_SUB_ITA.mp4") and intestazioni["Referer"] == "https://www.animeworld.test/"
+
+
+def test_piu_siti_prima_la_lingua_poi_l_ordine_e_la_riserva():
+    au_sub, aw_sub, aw_dub = ({"fonte": "animeunity", "doppiato": False}, {"fonte": "animeworld", "doppiato": False},
+                              {"fonte": "animeworld", "doppiato": True})
+    disponibili = [(aw_sub, {"id": "x1"}), (au_sub, {"id": 11}), (aw_dub, {"id": "x2"})]
+    assert alternative(disponibili, aw_dub, italiano=True) == [["animeworld", "x2"]]
+    assert alternative(disponibili, au_sub, italiano=True) == [["animeunity", 11], ["animeworld", "x1"]]
+
+    class Sito:
+        attivo = True
+
+        def __init__(self, esito):
+            self.esito = esito
+
+        async def link_video(self, puntata):
+            if isinstance(self.esito, Exception):
+                raise self.esito
+            return self.esito, {}
+
+    from app.rete import ErroreServizio
+
+    anime = AnimeDiretti({"animeunity": Sito(ErroreServizio("Solo streaming.")), "animeworld": Sito("https://aw/x.mp4")},
+                         None, None, None, Config())
+    assert asyncio.run(anime.link([["animeunity", 11], ["animeworld", "x1"]]))[0] == "https://aw/x.mp4"

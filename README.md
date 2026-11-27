@@ -305,17 +305,16 @@ Attivali dalle **impostazioni** (voce *Anime*). In Jellyfin compare la libreria 
 
 Per i sottotitoli degli anime aggiungi l'inglese e, se vuoi, il giapponese alle lingue (voce 6 del menu). Prowlarr passa a Sonarr anche le categorie anime degli indexer.
 
-#### AnimeUnity: link diretti, prima dei torrent
+#### Link diretti (AnimeUnity e AnimeWorld), prima dei torrent
 
-Per gli anime Cerca usa anche [AnimeUnity](https://animeunity.cx) come fonte: le puntate si scaricano direttamente (HTTP), senza torrent.
+Per gli anime Cerca usa anche due siti con i link diretti: [AnimeUnity](https://animeunity.cx) e [AnimeWorld](https://www.animeworld.ac). Le puntate si scaricano direttamente (HTTP), senza torrent.
 
-- **Si collega da solo**: quando apri un anime in Cerca, lo cerca su AnimeUnity e collega a ogni stagione la voce giusta, sia doppiata (ITA) sia sottotitolata. Le serie lunghe con un'unica voce (es. *One Piece*) si collegano con la numerazione assoluta. Le voci collegate le vedi in fondo alla finestra della serie, nella sezione **AnimeUnity**: se ne ha scelta una sbagliata premi **Scollega**, cerca quella giusta, scegli la stagione e premi **Collega**.
-- **I link diretti sono sempre i preferiti**: *Scarica tutte*, *Stagione*, la singola puntata e *Da qui* prendono da AnimeUnity tutto quello che c'è (prima la versione nella tua lingua preferita); solo le puntate che AnimeUnity non ha le cerca Sonarr come torrent. Le puntate prese da AnimeUnity Sonarr non le cerca più, e se le stava già scaricando si fermano.
-- **La versione in italiano sostituisce il resto**: se una puntata c'è già ma non in italiano (per esempio un torrent in giapponese) e su AnimeUnity esiste doppiata, Cerca la scarica e la mette al posto di quella vecchia.
-- **Le puntate nuove**: ogni ora Cerca controlla gli anime collegati e scarica le puntate nuove (con *Scarica tutte* o *Da qui*). Se una puntata è uscita da più di 2 giorni e AnimeUnity non ce l'ha ancora, la cerca Sonarr.
-- Scarica al massimo 2 puntate alla volta; le altre aspettano il loro turno nella pagina **Download**. A download finito la puntata passa a Sonarr e compare in Jellyfin come le altre (`… - S01E05 - ITA.mp4`).
-- Non tutte le puntate su AnimeUnity sono scaricabili: quelle solo in streaming compaiono come problema, e ci pensa Sonarr.
-- AnimeUnity cambia spesso indirizzo: se non risponde più, scrivi quello nuovo in `ANIMEUNITY_URL` nel file `.env` e scrivi `mediabox configura`. Lasciala vuota per spegnere questa fonte.
+- **Si collega da solo**: quando apri un anime in Cerca, lo cerca su entrambi i siti e collega a ogni stagione la voce giusta, sia doppiata (ITA) sia sottotitolata. Gli spin-off (ONA, OVA, film, speciali) non vengono collegati da soli. Le serie lunghe con un'unica voce (es. *One Piece* su AnimeUnity) si collegano con la numerazione assoluta. Le voci collegate le vedi in fondo alla finestra della serie, nella sezione **Link diretti**, con il nome del sito: se ne ha scelta una sbagliata premi **Scollega**, poi cerca quella giusta, scegli la stagione e premi **Collega**.
+- **I link diretti sono sempre i preferiti**: *Scarica tutte*, *Stagione*, la singola puntata e *Da qui* prendono dai siti diretti tutto quello che c'è: prima la versione nella tua lingua preferita, poi AnimeUnity, poi AnimeWorld. Se un sito non dà il file di una puntata (per esempio solo in streaming), Cerca prova da solo l'altro. Solo le puntate che nessuno dei due ha le cerca Sonarr come torrent. Le puntate prese dai siti diretti Sonarr non le cerca più, e se le stava già scaricando si fermano.
+- **La versione in italiano sostituisce il resto**: se una puntata c'è già ma non in italiano (per esempio un torrent in giapponese) e su un sito diretto esiste doppiata, Cerca la scarica e la mette al posto di quella vecchia.
+- **Le puntate nuove**: ogni ora Cerca controlla gli anime collegati e scarica le puntate nuove (con *Scarica tutte* o *Da qui*). Se una puntata è uscita da più di 2 giorni e nessun sito ce l'ha ancora, la cerca Sonarr.
+- Scarica al massimo 2 puntate alla volta per sito; le altre aspettano il loro turno nella pagina **Download**. Un download interrotto riparte da dove era. A download finito la puntata passa a Sonarr e compare in Jellyfin come le altre (`… - S01E05 - ITA.mp4`).
+- I siti cambiano spesso indirizzo: se uno non risponde più, scrivi quello nuovo in `ANIMEUNITY_URL` o `ANIMEWORLD_URL` nel file `.env` e scrivi `mediabox configura`. Lascia vuoto l'indirizzo per spegnere quel sito.
 
 ### Musica
 
