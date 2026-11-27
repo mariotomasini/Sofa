@@ -168,21 +168,25 @@ class ImportaMusica:
                 playlist.setdefault(nome_pl, []).extend(brani)
         if sum(len(b) for b in playlist.values()) > MAX_BRANI:
             raise ErroreServizio(f"Sono più di {MAX_BRANI} brani.", "Carica le playlist poche alla volta.")
+        return [self.nuova_da_brani(utente, nome_pl, brani, indice=i) for i, (nome_pl, brani) in enumerate(playlist.items())]
+
+    def nuova_da_brani(self, utente: dict | None, nome: str, brani: list[dict], origine: str = "importazione",
+                       indice: int = 0) -> dict:
+        """Una playlist da portare in Navidrome. brani: [{"titolo", "artista", "album", "id_deezer"?}].
+        origine "scoperte": la playlist automatica della settimana (cambia solo l'avviso)."""
         chi = {"id": str((utente or {}).get("id") or "admin"), "nome": (utente or {}).get("nome") or self.config.utente,
                "admin": bool(not utente or utente.get("admin"))}
-        creati = []
-        for nome_pl, brani in playlist.items():
-            visti, unici = set(), []
-            for b in brani:  # lo stesso brano due volte nella stessa playlist: una volta sola
-                k = chiave_brano(b["artista"], b["titolo"])
-                if k not in visti:
-                    visti.add(k)
-                    unici.append({**b, "stato": "attesa"})
-            lavoro = {"id": f"{int(time.time() * 1000)}{len(creati)}", "nome": nome_pl, "tipo": tipo_playlist(nome_pl),
-                      "utente": chi, "creato": time.time(), "brani": unici, "id_playlist": "", "avvisato": False}
-            self._salva(lavoro)
-            creati.append(riassunto(lavoro))
-        return creati
+        visti, unici = set(), []
+        for b in brani:  # lo stesso brano due volte nella stessa playlist: una volta sola
+            k = chiave_brano(b["artista"], b["titolo"])
+            if k not in visti:
+                visti.add(k)
+                unici.append({**b, "stato": "attesa"})
+        lavoro = {"id": f"{int(time.time() * 1000)}{indice}", "nome": nome,
+                  "tipo": "playlist" if origine == "scoperte" else tipo_playlist(nome), "origine": origine,
+                  "utente": chi, "creato": time.time(), "brani": unici, "id_playlist": "", "avvisato": False}
+        self._salva(lavoro)
+        return riassunto(lavoro)
 
     def elimina(self, id_lavoro: str, utente: dict | None) -> None:
         """Smette di importare (i brani già scaricati e la playlist in Navidrome restano)."""
@@ -237,7 +241,7 @@ class ImportaMusica:
             return liberi
         if liberi <= 0:
             return liberi
-        id_deezer = await self._trova_su_deezer(b["artista"], b["titolo"])
+        id_deezer = b.get("id_deezer") or await self._trova_su_deezer(b["artista"], b["titolo"])
         if not id_deezer:
             b.update(stato="non_trovato", motivo="Non lo trovo su Deezer: controlla titolo e artista.")
             return liberi
@@ -311,11 +315,14 @@ class ImportaMusica:
             messaggio += ", 1 non trovato." if r["non_trovati"] == 1 else f", {r['non_trovati']} non trovati."
         else:
             messaggio += "."
-        log.info("Importazione finita: %s", messaggio)
+        titolo, dove = "Musica importata", "/musica/importa"
+        if lavoro.get("origine") == "scoperte":
+            titolo, dove = "Le tue scoperte sono pronte", f"/musica/playlist/{lavoro.get('id_playlist', '')}"
+            messaggio = f"{brani} nuovi da ascoltare, scelti in base a quello che ti piace."
+        log.info("%s: %s", titolo, messaggio)
         if self.notifica:
             try:
-                await self.notifica("Musica importata", messaggio,
-                                    f"{self.config.indirizzo_pubblico}{self.config.root_path}/musica/importa")
+                await self.notifica(titolo, messaggio, f"{self.config.indirizzo_pubblico}{self.config.root_path}{dove}")
             except Exception:  # noqa: BLE001
                 log.warning("Avviso dell'importazione non inviato", exc_info=True)
 

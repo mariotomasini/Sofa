@@ -1151,6 +1151,97 @@ function codaPreferiti(brani) {
   return brani.map((t) => `jf:${t.id}`).join(",");
 }
 
+function copertinaNd(id) {
+  return id ? `${BASE}/api/musica/copertina-nd/${encodeURIComponent(id)}` : "";
+}
+
+function htmlCartaPlaylist(p) {
+  const scoperta = p.nome.startsWith("Scoperte");
+  const copertina = copertinaNd(p.copertina);
+  return `<a class="carta-musica carta-playlist${scoperta ? " scoperta" : ""}" href="${BASE}/musica/playlist/${encodeURIComponent(p.id)}">` +
+    `<span class="immagine">${copertina ? `<img src="${esc(copertina)}" alt="" loading="lazy">` : `<span class="copertina-vuota">${ICONE.nota}</span>`}` +
+    (scoperta ? `<span class="nastro">Nuova musica</span>` : "") +
+    `<span class="play-tondo" aria-hidden="true">${PLAY}</span></span>` +
+    `<span class="nome">${esc(p.nome)}</span><span class="dettaglio">${p.brani} ${p.brani === 1 ? "brano" : "brani"}</span></a>`;
+}
+
+function htmlRigaNd(t, i, coda) {
+  const copertina = copertinaNd(t.copertina);
+  return `<div class="riga-con-scarica"><button type="button" class="riga-brano" data-brano="nd:${esc(t.id)}" data-coda="${coda}" ` +
+    `data-titolo="${esc(t.titolo)}" data-artista="${esc(t.artista)}" data-copertina="${esc(copertina)}">` +
+    `<span class="numero">${i + 1}</span>` +
+    (copertina ? `<img src="${esc(copertina)}" alt="" loading="lazy">` : `<span class="copertina-vuota" aria-hidden="true">${ICONE.nota}</span>`) +
+    `<span class="testi"><span class="titolo">${esc(t.titolo)}</span><span class="artista">${esc(t.artista)}</span></span>` +
+    `<span class="durata">${durataBrano(t.durata)}</span></button>` +
+    `<span class="scarica-musica fatto" title="In casa" aria-label="In casa">${SCARICATO}</span></div>`;
+}
+
+async function avviaPlaylist(id) {
+  const pagina = document.getElementById("pagina-playlist");
+  try {
+    const p = await chiama(`/api/musica/playlist/${encodeURIComponent(id)}`);
+    document.title = `${p.nome} · mediabox`;
+    const coda = p.brani.map((t) => `nd:${t.id}`).join(",");
+    const minuti = Math.round(p.brani.reduce((n, t) => n + (t.durata || 0), 0) / 60);
+    const sotto = [`${p.brani.length} ${p.brani.length === 1 ? "brano" : "brani"}`, minuti ? `${minuti} min` : ""].filter(Boolean).join(" • ");
+    const scoperta = p.nome.startsWith("Scoperte");
+    const copertina = copertinaNd(p.copertina);
+    pagina.innerHTML =
+      `<header class="testa-musica testa-album">` +
+      (copertina ? `<img class="copertina-album" src="${esc(copertina)}" alt="">` : `<span class="copertina-preferiti">${ICONE.nota}</span>`) +
+      `<div class="testa-testo"><p class="etichetta-musica">${scoperta ? "Scoperte per te" : "Playlist"}</p><h1>${esc(p.nome)}</h1>` +
+      `<p class="dettaglio">${esc(sotto)}</p>` +
+      (scoperta ? `<p class="dettaglio">Brani nuovi simili a quelli che ami, già scaricati. Quello che ti piace mettilo nei preferiti.</p>` : "") +
+      `</div></header>` +
+      (p.brani.length
+        ? `<div class="azioni-musica"><button type="button" class="play-grande" data-brano="nd:${esc(p.brani[0].id)}" data-coda="${coda}" ` +
+          `aria-label="Ascolta la playlist">${PLAY}</button>` +
+          `<button type="button" class="segui" data-mescola="${coda}">Casuale</button></div>` +
+          `<div class="elenco-brani">${p.brani.map((t, i) => htmlRigaNd(t, i, coda)).join("")}</div>`
+        : `<div class="nota"><p>La playlist si sta riempiendo: i brani arrivano man mano che finiscono di scaricarsi.</p></div>`);
+    const casuale = pagina.querySelector("[data-mescola]");
+    if (casuale) casuale.addEventListener("click", () => {
+      const ids = casuale.dataset.mescola.split(",");
+      lettore.elemento();
+      if (!lettore.mescola) lettore.mescola = true;
+      document.getElementById("lg-mescola").setAttribute("aria-pressed", "true");
+      lettore.suona(ids[Math.floor(Math.random() * ids.length)], ids);
+    });
+    if (!FERMO) G.from(pagina.querySelectorAll(".riga-con-scarica"), { opacity: 0, y: 12, duration: 0.4, stagger: 0.025, ease: CURVA });
+  } catch (e) { pagina.innerHTML = htmlErrore(e); }
+  pagina.removeAttribute("aria-busy");
+}
+
+// Scoperte per te: la playlist automatica della settimana, accesa o spenta per ogni persona
+function htmlScoperte(sc) {
+  if (!sc || !sc.attivo) return "";
+  const giorno = (t) => new Date(t * 1000).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  const quando = sc.accese
+    ? (sc.ultima ? `La prossima arriva ${giorno(sc.prossima)}.` : "La prima arriva entro qualche ora.")
+    : "Spente: non scarico musica nuova da solo.";
+  return `<section class="scoperte${sc.accese ? " accese" : ""}" id="scoperte">` +
+    `<span class="scoperte-disco" aria-hidden="true"><i></i></span>` +
+    `<div class="scoperte-testo"><strong>Scoperte per te</strong>` +
+    `<p>Ogni settimana ${sc.brani} brani nuovi simili a quelli che ami, già scaricati e pronti in una playlist. ${esc(quando)}</p></div>` +
+    `<button type="button" class="interruttore" role="switch" aria-checked="${sc.accese}" aria-label="Scoperte per te">` +
+    `<span class="pallino"></span></button></section>`;
+}
+
+function preparaScoperte(box) {
+  const b = box.querySelector(".interruttore");
+  if (!b) return;
+  b.addEventListener("click", async () => {
+    const accese = b.getAttribute("aria-checked") !== "true";
+    b.disabled = true;
+    try {
+      const r = await inviaJSON("/api/musica/scoperte", { accese });
+      avviso(r.messaggio);
+      box.outerHTML = htmlScoperte(r);
+      preparaScoperte(document.getElementById("scoperte").parentElement);
+    } catch (e) { avviso(`${e.errore} ${e.cosa_fare || ""}`, true); b.disabled = false; }
+  });
+}
+
 function htmlRigaMusica(r) {
   if (r.tipo === "preferiti") {
     const coda = codaPreferiti(r.elementi);
@@ -1161,86 +1252,364 @@ function htmlRigaMusica(r) {
       `</section>`;
   }
   const coda = r.tipo === "brani" ? r.elementi.map((t) => t.id).join(",") : "";
-  const carte = r.elementi.map((x) =>
-    r.tipo === "artisti" ? htmlCartaArtista(x) : r.tipo === "album" ? htmlCartaAlbum(x) : htmlCartaBrano(x, coda)).join("");
+  const carte = r.elementi.map((x) => r.tipo === "artisti" ? htmlCartaArtista(x) : r.tipo === "album" ? htmlCartaAlbum(x)
+    : r.tipo === "playlist" ? htmlCartaPlaylist(x) : htmlCartaBrano(x, coda)).join("");
   return `<section class="riga-musica"><h2>${esc(r.titolo)}</h2>` +
     (r.sottotitolo ? `<p class="sottotitolo">${esc(r.sottotitolo)}</p>` : "") +
     `<div class="striscia-musica">${carte}</div></section>`;
 }
 
-// Il mini-lettore in basso: si apre al primo brano e passa da solo al successivo
+// --- Il lettore: piccolo in basso, grande a tutto schermo toccandolo --------------------------
+// Brani: "jf:<id>" scaricato (Jellyfin), "nd:<id>" di una playlist (Navidrome), interi;
+// un numero è l'anteprima da 30 s di Deezer.
+const PRECEDENTE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2.2v14H6zM19 5.6v12.8L9.4 12z"/></svg>';
+const SUCCESSIVO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 5H18v14h-2.2zM5 5.6v12.8L14.6 12z"/></svg>';
+const MESCOLA = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h4v4M4 20 20 4M20 16v4h-4M14.5 14.5 20 20M4 4l5 5"/></svg>';
+const RIPETI = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11.5V10a4 4 0 0 1 4-4h13"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 12.5V14a4 4 0 0 1-4 4h-13"/></svg>';
+const GIU = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const VOLUME = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/></svg>';
+
+function tempoBrano(s) {
+  if (!Number.isFinite(s) || s < 0) return "0:00";
+  return durataBrano(Math.floor(s));
+}
+
+// titolo, artista e copertina di un brano, presi dalla riga o dalla carta su cui è stato toccato
+function metaDaPagina(id) {
+  // lo stesso brano può comparire più volte (es. il tasto Play grande, senza testi): vale la riga con il titolo
+  for (const el of document.querySelectorAll(`[data-brano="${CSS.escape(String(id))}"]`)) {
+    const testo = (sel) => (el.querySelector(sel) || {}).textContent || "";
+    const titolo = el.dataset.titolo || testo(".titolo") || testo(".nome");
+    if (!titolo) continue;
+    const img = el.querySelector("img");
+    return {
+      titolo,
+      artista: el.dataset.artista || testo(".artista") || testo(".dettaglio"),
+      copertina: el.dataset.copertina || (img ? img.src : ""),
+    };
+  }
+  return null;
+}
+
 const lettore = {
-  audio: null, coda: [], posto: 0,
+  audio: null, coda: [], originale: [], posto: 0, meta: new Map(), mescola: false, ripeti: "no",
+  corrente: null, aperto: false, trascino: false,
+
   elemento() {
     let el = document.getElementById("lettore");
     if (el) return el;
     document.body.insertAdjacentHTML("beforeend",
-      '<div id="lettore" class="lettore" hidden><img id="lettore-copertina" alt="">' +
-      '<span class="testi"><span id="lettore-titolo" class="titolo"></span><span id="lettore-artista" class="artista"></span></span>' +
+      '<div id="lettore" class="lettore" hidden>' +
+      '<button type="button" class="lettore-apri" id="lettore-apri" aria-label="Apri il lettore grande">' +
+      '<img id="lettore-copertina" alt=""><span class="testi"><span id="lettore-titolo" class="titolo"></span>' +
+      '<span id="lettore-artista" class="artista"></span></span></button>' +
       `<button type="button" id="lettore-play" class="lettore-play" aria-label="Pausa">${PAUSA}</button>` +
-      '<span class="lettore-barra"><span id="lettore-avanzamento"></span></span></div>');
+      `<button type="button" id="lettore-avanti" class="lettore-tasto" aria-label="Brano successivo">${SUCCESSIVO}</button>` +
+      '<span class="lettore-barra"><span id="lettore-avanzamento"></span></span></div>' +
+      '<div id="lettore-grande" class="lettore-grande" role="dialog" aria-modal="true" aria-label="In riproduzione" hidden>' +
+      '<div class="lg-sfondo" aria-hidden="true"><img id="lg-sfondo" alt=""></div>' +
+      '<div class="lg-pannello" id="lg-pannello">' +
+      `<header class="lg-testa" id="lg-testa"><button type="button" class="lg-chiudi" id="lg-chiudi" aria-label="Chiudi il lettore">${GIU}</button>` +
+      '<span class="lg-maniglia" aria-hidden="true"></span><span class="lg-etichetta">In riproduzione</span></header>' +
+      '<div class="lg-corpo"><div class="lg-copertina" id="lg-copertina"><img id="lg-immagine" alt=""></div>' +
+      '<div class="lg-lato">' +
+      '<div class="lg-info"><div class="lg-testi"><h2 id="lg-titolo"></h2><p id="lg-artista"></p></div><span id="lg-extra"></span></div>' +
+      '<div class="lg-tempo"><input type="range" id="lg-barra" class="lg-barra" min="0" max="1000" value="0" step="1" aria-label="Posizione nel brano">' +
+      '<span id="lg-trascorso">0:00</span><span id="lg-restante">-0:00</span></div>' +
+      `<div class="lg-comandi"><button type="button" class="lg-tasto lg-piccolo" id="lg-mescola" aria-pressed="false" aria-label="Ordine casuale">${MESCOLA}</button>` +
+      `<button type="button" class="lg-tasto" id="lg-indietro" aria-label="Brano precedente">${PRECEDENTE}</button>` +
+      `<button type="button" class="lg-play" id="lg-play" aria-label="Pausa">${PAUSA}</button>` +
+      `<button type="button" class="lg-tasto" id="lg-avanti" aria-label="Brano successivo">${SUCCESSIVO}</button>` +
+      `<button type="button" class="lg-tasto lg-piccolo" id="lg-ripeti" aria-pressed="false" aria-label="Ripeti: no">${RIPETI}<span class="lg-uno">1</span></button></div>` +
+      `<label class="lg-volume">${VOLUME}<input type="range" id="lg-volume" min="0" max="100" value="100" aria-label="Volume"></label>` +
+      '<section class="lg-coda"><h3>Dopo</h3><ol id="lg-coda"></ol></section>' +
+      '</div></div></div></div>');
     el = document.getElementById("lettore");
     this.audio = new Audio();
-    this.audio.addEventListener("timeupdate", () => {
-      const a = this.audio;
-      document.getElementById("lettore-avanzamento").style.width = a.duration ? `${100 * a.currentTime / a.duration}%` : "0";
+    this.audio.preload = "auto";
+    const a = this.audio;
+    a.addEventListener("timeupdate", () => this.tempo());
+    a.addEventListener("loadedmetadata", () => this.tempo());
+    a.addEventListener("ended", () => (this.ripeti === "uno" ? (a.currentTime = 0, a.play()) : this.prossimo(true)));
+    a.addEventListener("play", () => this.icona());
+    a.addEventListener("pause", () => this.icona());
+    const $ = (id) => document.getElementById(id);
+    const alterna = () => (a.paused ? a.play() : a.pause());
+    $("lettore-play").addEventListener("click", alterna);
+    $("lg-play").addEventListener("click", alterna);
+    $("lettore-avanti").addEventListener("click", () => this.prossimo());
+    $("lg-avanti").addEventListener("click", () => this.prossimo());
+    $("lg-indietro").addEventListener("click", () => this.precedente());
+    $("lettore-apri").addEventListener("click", () => this.apri());
+    $("lg-chiudi").addEventListener("click", () => this.chiudi());
+    $("lg-mescola").addEventListener("click", () => this.cambiaMescola());
+    $("lg-ripeti").addEventListener("click", () => this.cambiaRipeti());
+    const barra = $("lg-barra");
+    barra.addEventListener("input", () => {
+      this.trascino = true;
+      if (a.duration) $("lg-trascorso").textContent = tempoBrano(a.duration * barra.value / 1000);
+      barra.style.setProperty("--p", `${barra.value / 10}%`);
     });
-    this.audio.addEventListener("ended", () => this.prossimo());
-    this.audio.addEventListener("play", () => this.icona());
-    this.audio.addEventListener("pause", () => this.icona());
-    document.getElementById("lettore-play").addEventListener("click", () => {
-      if (this.audio.paused) this.audio.play(); else this.audio.pause();
+    barra.addEventListener("change", () => {
+      if (a.duration) a.currentTime = a.duration * barra.value / 1000;
+      this.trascino = false;
     });
+    const volume = $("lg-volume");
+    try { volume.value = Number(localStorage.getItem("cerca:volume") ?? 100); } catch { /* senza memoria */ }
+    a.volume = volume.value / 100;
+    volume.style.setProperty("--p", `${volume.value}%`);
+    volume.addEventListener("input", () => {
+      a.volume = volume.value / 100;
+      volume.style.setProperty("--p", `${volume.value}%`);
+      try { localStorage.setItem("cerca:volume", volume.value); } catch { /* senza memoria */ }
+    });
+    $("lg-coda").addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-posto]");
+      if (b) this.vaiA(Number(b.dataset.posto));
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (!this.aperto) return;
+      if (ev.key === "Escape") this.chiudi();
+      else if (ev.key === " " && !ev.target.closest("input, button")) { ev.preventDefault(); alterna(); }
+      else if (ev.key === "ArrowRight" && !ev.target.closest("input")) a.currentTime = Math.min(a.duration || 0, a.currentTime + 10);
+      else if (ev.key === "ArrowLeft" && !ev.target.closest("input")) a.currentTime = Math.max(0, a.currentTime - 10);
+    });
+    this.trascinaPerChiudere();
     return el;
   },
+
+  // trascinando verso il basso la parte alta (o la copertina sul telefono) il lettore si chiude
+  trascinaPerChiudere() {
+    const pannello = document.getElementById("lg-pannello");
+    let inizio = null, dy = 0;
+    const presa = (ev) => ev.target.closest("#lg-testa, #lg-copertina") && !ev.target.closest("button, input");
+    pannello.addEventListener("pointerdown", (ev) => {
+      if (!presa(ev)) return;
+      inizio = ev.clientY; dy = 0;
+      pannello.setPointerCapture(ev.pointerId);
+    });
+    pannello.addEventListener("pointermove", (ev) => {
+      if (inizio === null) return;
+      dy = Math.max(0, ev.clientY - inizio);
+      pannello.style.transform = `translateY(${dy}px)`;
+    });
+    const lascia = () => {
+      if (inizio === null) return;
+      inizio = null;
+      if (dy > 120) { this.chiudi(dy); return; }
+      if (G && !FERMO) G.to(pannello, { y: 0, duration: 0.35, ease: CURVA, onStart: () => { pannello.style.transform = ""; G.set(pannello, { y: dy }); } });
+      else pannello.style.transform = "";
+    };
+    pannello.addEventListener("pointerup", lascia);
+    pannello.addEventListener("pointercancel", lascia);
+  },
+
+  apri() {
+    const g = document.getElementById("lettore-grande");
+    if (!this.corrente || this.aperto) return;
+    this.aperto = true;
+    g.hidden = false;
+    document.body.classList.add("con-lettore-grande");
+    this.disegnaCoda();
+    document.getElementById("lg-chiudi").focus({ preventScroll: true });
+    if (FERMO) return;
+    const pannello = document.getElementById("lg-pannello");
+    pannello.style.transform = "";
+    G.timeline({ defaults: { ease: CURVA } })
+      .fromTo(g, { opacity: 0 }, { opacity: 1, duration: 0.25 })
+      .fromTo(pannello, { yPercent: 100 }, { yPercent: 0, duration: 0.5 }, 0)
+      .fromTo("#lg-copertina", { scale: 0.82, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6 }, 0.12)
+      .fromTo(".lg-info, .lg-tempo, .lg-comandi, .lg-volume, .lg-coda", { y: 18, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.45, stagger: 0.05 }, 0.2);
+  },
+
+  chiudi(giaSpostato = 0) {
+    const g = document.getElementById("lettore-grande");
+    if (!this.aperto) return;
+    this.aperto = false;
+    document.body.classList.remove("con-lettore-grande");
+    const fine = () => {
+      g.hidden = true;
+      const p = document.getElementById("lg-pannello");
+      p.style.transform = "";
+      if (G) G.set([g, p], { clearProps: "all" });
+      document.getElementById("lettore-apri").focus({ preventScroll: true });
+    };
+    if (FERMO) { fine(); return; }
+    const pannello = document.getElementById("lg-pannello");
+    pannello.style.transform = "";
+    G.timeline({ onComplete: fine })
+      .fromTo(pannello, { y: giaSpostato }, { y: window.innerHeight, duration: 0.38, ease: "power2.in" })
+      .to(g, { opacity: 0, duration: 0.2 }, 0.18);
+  },
+
   icona() {
-    const b = document.getElementById("lettore-play");
-    b.innerHTML = this.audio.paused ? PLAY : PAUSA;
-    b.setAttribute("aria-label", this.audio.paused ? "Riproduci" : "Pausa");
-    document.querySelectorAll("[data-brano]").forEach((x) => x.classList.toggle("in-ascolto",
-      !this.audio.paused && x.dataset.brano === String(this.coda[this.posto])));
-  },
-  // "jf:<id>" = brano scaricato, intero (da Jellyfin); un numero = anteprima da 30 s (Deezer)
-  async info(id) {
-    if (String(id).startsWith("jf:")) {
-      const riga = document.querySelector(`[data-brano="${CSS.escape(id)}"][data-titolo]`);
-      const d = riga ? riga.dataset : {};
-      return { titolo: d.titolo || "", artista: d.artista || "", copertina: d.copertina || "",
-        url: `${BASE}/api/musica/ascolta/${id.slice(3)}`, intero: true };
+    const fermo = this.audio.paused;
+    for (const id of ["lettore-play", "lg-play"]) {
+      const b = document.getElementById(id);
+      b.innerHTML = fermo ? PLAY : PAUSA;
+      b.setAttribute("aria-label", fermo ? "Riproduci" : "Pausa");
     }
-    return chiama(`/api/musica/anteprima/${id}`);
+    document.getElementById("lg-copertina").classList.toggle("in-pausa", fermo);
+    document.querySelectorAll("[data-brano]").forEach((x) => x.classList.toggle("in-ascolto",
+      !fermo && x.dataset.brano === String(this.corrente)));
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = fermo ? "paused" : "playing";
   },
-  async suona(id, coda) {
-    const el = this.elemento();
-    this.coda = coda && coda.length ? coda : [id];
+
+  tempo() {
+    const a = this.audio;
+    const p = a.duration ? a.currentTime / a.duration : 0;
+    document.getElementById("lettore-avanzamento").style.width = `${100 * p}%`;
+    if (this.trascino) return;
+    const barra = document.getElementById("lg-barra");
+    barra.value = Math.round(1000 * p);
+    barra.style.setProperty("--p", `${100 * p}%`);
+    document.getElementById("lg-trascorso").textContent = tempoBrano(a.currentTime);
+    document.getElementById("lg-restante").textContent = Number.isFinite(a.duration) ? `-${tempoBrano(a.duration - a.currentTime)}` : "";
+    if ("mediaSession" in navigator && a.duration && navigator.mediaSession.setPositionState) {
+      try { navigator.mediaSession.setPositionState({ duration: a.duration, position: a.currentTime, playbackRate: 1 }); } catch { /* alcuni browser no */ }
+    }
+  },
+
+  async info(id) {
+    const noto = this.meta.get(String(id)) || metaDaPagina(id) || {};
+    const s = String(id);
+    if (s.startsWith("jf:")) return { ...noto, url: `${BASE}/api/musica/ascolta/${s.slice(3)}`, intero: true };
+    if (s.startsWith("nd:")) return { ...noto, url: `${BASE}/api/musica/ascolta-nd/${s.slice(3)}`, intero: true };
+    const t = await chiama(`/api/musica/anteprima/${id}`);
+    return { ...noto, ...t, intero: false };
+  },
+
+  ricorda(coda) {
+    for (const id of coda) {
+      if (!this.meta.has(String(id))) {
+        const m = metaDaPagina(id);
+        if (m) this.meta.set(String(id), m);
+      }
+    }
+  },
+
+  async suona(id, coda, verso = 0) {
+    this.elemento();
+    if (coda) {
+      this.originale = coda.length ? coda.slice() : [id];
+      this.coda = this.mescola ? mescolato(this.originale, id) : this.originale.slice();
+      this.ricorda(this.originale);
+    }
     this.posto = Math.max(0, this.coda.indexOf(id));
+    this.corrente = id;
     try {
       const t = await this.info(id);
-      document.getElementById("lettore-copertina").src = t.copertina || "";
-      document.getElementById("lettore-titolo").textContent = t.titolo;
-      document.getElementById("lettore-artista").textContent = t.intero ? t.artista : `${t.artista} · anteprima`;
-      el.hidden = false;
-      document.body.classList.add("con-lettore");
+      this.meta.set(String(id), { titolo: t.titolo, artista: t.artista, copertina: t.copertina });
+      this.mostra(t, verso);
       this.audio.src = t.url;
-      if ("mediaSession" in navigator) {  // titolo e copertina anche sulla schermata di blocco
-        navigator.mediaSession.metadata = new MediaMetadata({ title: t.titolo, artist: t.artista,
-          artwork: t.copertina ? [{ src: t.copertina, sizes: "400x400" }] : [] });
-        navigator.mediaSession.setActionHandler("nexttrack", () => this.prossimo());
-        navigator.mediaSession.setActionHandler("previoustrack", () => this.precedente());
+      if ("mediaSession" in navigator) {  // titolo e copertina anche sulla schermata di blocco e in auto
+        const ms = navigator.mediaSession;
+        ms.metadata = new MediaMetadata({ title: t.titolo, artist: t.artista,
+          artwork: t.copertina ? [{ src: t.copertina, sizes: "600x600" }] : [] });
+        ms.setActionHandler("play", () => this.audio.play());
+        ms.setActionHandler("pause", () => this.audio.pause());
+        ms.setActionHandler("nexttrack", () => this.prossimo());
+        ms.setActionHandler("previoustrack", () => this.precedente());
+        try { ms.setActionHandler("seekto", (d) => { this.audio.currentTime = d.seekTime; }); } catch { /* alcuni browser no */ }
       }
       await this.audio.play();
     } catch (e) {
       avviso(`${e.errore || "Non riesco a riprodurre questo brano."} ${e.cosa_fare || ""}`, true);
     }
   },
-  prossimo() {
-    if (this.posto + 1 < this.coda.length) this.suona(this.coda[this.posto + 1], this.coda);
+
+  mostra(t, verso) {
+    const el = document.getElementById("lettore");
+    const $ = (id) => document.getElementById(id);
+    $("lettore-copertina").src = t.copertina || "";
+    $("lettore-titolo").textContent = t.titolo;
+    $("lettore-artista").textContent = t.intero ? t.artista : `${t.artista} · anteprima`;
+    const primaVolta = el.hidden;
+    el.hidden = false;
+    document.body.classList.add("con-lettore");
+    if (primaVolta && !FERMO) G.fromTo(el, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: CURVA });
+    // il lettore grande: copertina che scorre nel verso del brano, testi che sfumano
+    const cambia = () => {
+      $("lg-immagine").src = t.copertina || "";
+      $("lg-sfondo").src = t.copertina || "";
+      $("lg-titolo").textContent = t.titolo;
+      $("lg-artista").textContent = t.artista;
+      const numero = String(this.corrente);
+      $("lg-extra").innerHTML = t.intero ? "" :
+        `<span class="lg-anteprima">Anteprima 30 s</span><button type="button" class="scarica-musica lg-scarica" data-scarica="brano" ` +
+        `data-id="${esc(numero)}" aria-label="Scarica la canzone completa" title="Scarica la canzone completa">${SCARICA}</button>`;
+      document.getElementById("lg-copertina").classList.toggle("senza-immagine", !t.copertina);
+    };
+    if (this.aperto && !FERMO) {
+      G.timeline()
+        .to("#lg-immagine, .lg-testi", { x: -40 * (verso || 1), opacity: 0, duration: 0.18, ease: "power2.in", onComplete: cambia })
+        .fromTo("#lg-immagine, .lg-testi", { x: 40 * (verso || 1) }, { x: 0, opacity: 1, duration: 0.4, ease: CURVA });
+    } else cambia();
+    if (this.aperto) this.disegnaCoda();
   },
+
+  disegnaCoda() {
+    const ol = document.getElementById("lg-coda");
+    const dopo = this.coda.slice(this.posto + 1, this.posto + 31);
+    const ripresa = this.ripeti === "tutti" ? this.coda.slice(0, Math.max(0, 30 - dopo.length)).slice(0, this.posto) : [];
+    const voci = [...dopo.map((id, i) => [id, this.posto + 1 + i]), ...ripresa.map((id, i) => [id, i])];
+    ol.closest(".lg-coda").hidden = !voci.length;
+    ol.innerHTML = voci.map(([id, posto]) => {
+      const m = this.meta.get(String(id)) || {};
+      return `<li><button type="button" data-posto="${posto}">` +
+        (m.copertina ? `<img src="${esc(m.copertina)}" alt="" loading="lazy">` : `<span class="copertina-vuota" aria-hidden="true">${ICONE.nota}</span>`) +
+        `<span class="testi"><span class="titolo">${esc(m.titolo || "Brano")}</span><span class="artista">${esc(m.artista || "")}</span></span></button></li>`;
+    }).join("");
+    if (!FERMO && this.aperto) G.fromTo(ol.children, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.02, ease: CURVA });
+  },
+
+  vaiA(posto) {
+    const verso = posto > this.posto ? 1 : -1;
+    this.suona(this.coda[posto], null, verso);
+  },
+
+  prossimo(daSolo = false) {
+    if (this.posto + 1 < this.coda.length) this.vaiA(this.posto + 1);
+    else if (this.ripeti === "tutti" && this.coda.length) this.suona(this.coda[0], null, 1);
+    else if (!daSolo) this.audio.currentTime = this.audio.duration || 0;
+  },
+
   precedente() {
     if (this.audio.currentTime > 3 || this.posto === 0) this.audio.currentTime = 0;
-    else this.suona(this.coda[this.posto - 1], this.coda);
+    else this.vaiA(this.posto - 1);
+  },
+
+  cambiaMescola() {
+    this.mescola = !this.mescola;
+    this.coda = this.mescola ? mescolato(this.originale, this.corrente) : this.originale.slice();
+    this.posto = Math.max(0, this.coda.indexOf(this.corrente));
+    const b = document.getElementById("lg-mescola");
+    b.setAttribute("aria-pressed", String(this.mescola));
+    if (!FERMO) G.fromTo(b, { rotate: -20, scale: 0.8 }, { rotate: 0, scale: 1, duration: 0.4, ease: "back.out(3)" });
+    this.disegnaCoda();
+  },
+
+  cambiaRipeti() {
+    this.ripeti = { no: "tutti", tutti: "uno", uno: "no" }[this.ripeti];
+    const b = document.getElementById("lg-ripeti");
+    b.setAttribute("aria-pressed", String(this.ripeti !== "no"));
+    b.dataset.modo = this.ripeti;
+    b.setAttribute("aria-label", { no: "Ripeti: no", tutti: "Ripeti: tutta la coda", uno: "Ripeti: questo brano" }[this.ripeti]);
+    if (!FERMO) G.fromTo(b, { rotate: -180 }, { rotate: 0, duration: 0.45, ease: CURVA });
+    this.disegnaCoda();
   },
 };
+
+// la coda in ordine casuale, con il brano che suona adesso per primo
+function mescolato(coda, primo) {
+  const resto = coda.filter((x) => x !== primo);
+  for (let i = resto.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [resto[i], resto[j]] = [resto[j], resto[i]];
+  }
+  return coda.includes(primo) ? [primo, ...resto] : resto;
+}
 
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-brano]");
@@ -1269,9 +1638,14 @@ function avviaMusica() {
     scorciatoie.innerHTML = preferiti + d.scorciatoie.slice(0, preferiti ? 7 : 8).map((a) =>
       `<a class="scorciatoia" href="${BASE}/musica/artista/${a.id}">` +
       `${a.foto ? `<img src="${esc(a.foto)}" alt="">` : "<span></span>"}<span>${esc(a.nome)}</span></a>`).join("");
-    righe.innerHTML = d.righe.map(htmlRigaMusica).join("") +
+    righe.innerHTML = htmlScoperte(d.scoperte) + d.righe.map(htmlRigaMusica).join("") +
       (d.avviso && !d.righe.length ? `<div class="nota"><p>${esc(d.avviso)}</p></div>` : "");
     righe.removeAttribute("aria-busy");
+    preparaScoperte(righe);
+    if (!FERMO) {
+      G.from(righe.querySelectorAll(".riga-musica, .scoperte"), { opacity: 0, y: 18, duration: 0.5, stagger: 0.06, ease: CURVA });
+      G.from(righe.querySelectorAll(".carta-playlist"), { opacity: 0, scale: 0.92, duration: 0.45, stagger: 0.05, ease: "back.out(1.6)", delay: 0.15 });
+    }
   }, (e) => { righe.innerHTML = htmlErrore(e); righe.removeAttribute("aria-busy"); }, "Carico la tua musica", righe);
 }
 

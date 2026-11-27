@@ -350,6 +350,12 @@ Nell'app scegli **Subsonic** o **Navidrome** se te lo chiede, poi scrivi:
 - **Server**: `http://mediabox.local/navidrome` (fuori casa: l'indirizzo Tailscale, es. `http://100.x.y.z/navidrome`);
 - **Utente e password**: `admin` con la password di mediabox. Ogni persona di casa (*Utenti di casa* nelle impostazioni) ha anche il suo utente, con il suo nome e, come password, il nome in minuscolo (es. `Anna` / `anna`): così ognuno ha i suoi preferiti e le sue playlist. La password si cambia da Navidrome (in alto a destra → *Personale*).
 
+#### Scoperte per te: musica nuova, già scaricata
+
+Ogni settimana Cerca prepara per ognuno di casa una playlist **Scoperte · <data>** con 20 brani di artisti nuovi, simili a quelli che ami: guarda i tuoi preferiti, gli album che ascolti di più e le tue playlist in Navidrome (se non c'è ancora niente, quello che ascolti in Jellyfin), chiede a ListenBrainz gli artisti simili e prende da Deezer i loro brani più famosi, mai proposti prima. I brani si scaricano da soli e quando sono pronti arriva un avviso. Le scoperte si accendono e si spengono per ogni persona dalla pagina **Musica** (sono accese di base); le playlist delle settimane passate restano, e si cancellano da Navidrome quando vuoi.
+
+Nella pagina **Musica** trovi anche **Le tue playlist**, quelle importate e le scoperte, da ascoltare per intero. Toccando il lettore in basso si apre il **lettore grande**: copertina, barra per spostarsi nel brano, ordine casuale, ripeti, volume e i brani che vengono dopo. Si chiude con la freccia, con Esc o trascinandolo verso il basso.
+
 #### Portare qui le playlist di Apple Music (o Spotify)
 
 In Cerca, pagina **Musica → Importa la tua musica** (`/musica/importa`):
