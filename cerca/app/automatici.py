@@ -201,6 +201,7 @@ class Automatici:
         self.radarr = radarr
         self.serie = serie
         self._attesa: tuple[float, list[dict]] | None = None
+        self.avvisi = None  # AvvisiItaliano: avvisa dei MULTI che hanno l'audio nella lingua preferita
 
     @property
     def preferita(self) -> str:
@@ -418,28 +419,36 @@ class Automatici:
         migliorare" per sempre e verrebbe sostituito senza motivo. Restano scaricati e in
         Jellyfin; non si cercano più (film o puntata non più "monitorati").
         """
-        fermati = 0
+        film: list[dict] = []
+        puntate: list[dict] = []
         try:
             dati = await tutte_le_pagine(self.radarr._r, "wanted/cutoff", {})
-            film = [m["id"] for m in dati if self._gia_buono(m.get("movieFile") or {})]
+            film = [m for m in dati if self._gia_buono(m.get("movieFile") or {})]
             if film:
-                await self.radarr._r("PUT", "movie/editor", json={"movieIds": film, "monitored": False})
-                fermati += len(film)
+                await self.radarr._r("PUT", "movie/editor", json={"movieIds": [m["id"] for m in film], "monitored": False})
         except Exception:  # noqa: BLE001
+            film = []
             log.warning("Controllo delle tracce audio in Radarr non riuscito", exc_info=True)
         if self.serie.attivo:
             try:
-                dati = await tutte_le_pagine(self.serie._api, "wanted/cutoff", {"includeEpisodeFile": "true"})
-                puntate = [e["id"] for e in dati
-                           if self._gia_buono(e.get("episodeFile") or {})]
+                dati = await tutte_le_pagine(self.serie._api, "wanted/cutoff", {
+                    "includeEpisodeFile": "true", "includeSeries": "true"})
+                puntate = [e for e in dati if self._gia_buono(e.get("episodeFile") or {})]
                 if puntate:
-                    await self.serie._api("PUT", "episode/monitor", json={"episodeIds": puntate, "monitored": False})
-                    fermati += len(puntate)
+                    await self.serie._api("PUT", "episode/monitor", json={
+                        "episodeIds": [e["id"] for e in puntate], "monitored": False})
             except Exception:  # noqa: BLE001
+                puntate = []
                 log.warning("Controllo delle tracce audio in Sonarr non riuscito", exc_info=True)
+        fermati = len(film) + len(puntate)
         if fermati:
             log.info("%s file hanno già l'audio in %s: non cerco altre versioni", fermati, self.preferita.lower())
             self._attesa = None
+            if self.avvisi is not None:
+                try:
+                    await self.avvisi.multi_confermati(film, puntate)
+                except Exception:  # noqa: BLE001 - l'avviso non deve fermare il controllo
+                    log.warning("Avviso dei MULTI in %s non riuscito", self.preferita.lower(), exc_info=True)
         return fermati
 
     async def cambia_fermi(self) -> list[str]:

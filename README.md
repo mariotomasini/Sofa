@@ -503,6 +503,7 @@ mediabox può mandarti notifiche con l'app gratuita **ntfy**, senza account:
 Riceverai un avviso quando:
 
 - un film scaricato è **pronto in Jellyfin**;
+- Radarr o Sonarr trovano da soli un film o delle puntate **in italiano** (la tua prima lingua): quando parte il download, quando è in Jellyfin, quando sostituisce una versione in un'altra lingua, e quando un MULTI scaricato risulta avere l'audio italiano. Le puntate della stessa serie arrivano in un avviso solo, e gli stessi avvisi li trovi in cima alla pagina Download di Cerca;
 - un film della lista "avvisami" diventa **gratis**;
 - il disco è **quasi pieno**, o mediabox ha fatto pulizia;
 - mediabox si è **aggiornato**, o l'aggiornamento non è riuscito;

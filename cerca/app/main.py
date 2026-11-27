@@ -42,6 +42,7 @@ from .animeworld import AnimeWorld
 from .archive import InternetArchive
 from .automatici import Automatici
 from .avvisami import Avvisami
+from .avvisi_italiano import AvvisiItaliano
 from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
@@ -113,6 +114,8 @@ class Servizi:
         self.serie = Serie(config, client)
         self.download.serie = self.serie
         self.automatici = Automatici(config, self.radarr, self.serie, self.qbit)
+        self.avvisi_italiano = AvvisiItaliano(config, self.archivio, self.radarr, self.serie, self.avvisami.notifica)
+        self.automatici.avvisi = self.avvisi_italiano
         self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.puntate_italiane = PuntateItaliane(config, self.archivio, self.serie, self.prowlarr, self.download)
         # le fonti dirette degli anime: link HTTP, preferiti ai torrent
@@ -174,6 +177,7 @@ async def ciclo_di_vita(app: FastAPI):
             asyncio.create_task(servizi.automatici.ricerca_notturna()),
             asyncio.create_task(dopo(45, servizi.ordine.ciclo())),
             asyncio.create_task(dopo(180, servizi.automatici.ciclo_tracce())),
+            asyncio.create_task(dopo(120, servizi.avvisi_italiano.ciclo())),
             asyncio.create_task(dopo(600, servizi.puntate_italiane.ciclo())),
             asyncio.create_task(dopo(240, servizi.anime.ciclo())),
             asyncio.create_task(dopo(30, servizi.foto_profili.assegna())),
@@ -1114,7 +1118,15 @@ async def api_download_gruppi(request: Request):
         cerca = con_coda_qbit(cerca, torrent, {h.lower(): p for h, p in posizioni(torrent).items()})
     except Exception:  # noqa: BLE001 - senza qBittorrent si mostra lo stato salvato
         pass
-    return {"gruppi": raggruppa(coda, attesa, cerca, s.automatici.preferita), "lingua_preferita": s.automatici.preferita}
+    return {"gruppi": raggruppa(coda, attesa, cerca, s.automatici.preferita), "lingua_preferita": s.automatici.preferita,
+            "novita": s.avvisi_italiano.recenti()}
+
+
+@app.post("/api/avvisi-lingua/visti")
+async def api_avvisi_lingua_visti(request: Request):
+    """Nasconde dalla pagina Download gli avvisi della lingua preferita già letti."""
+    servizi(request).avvisi_italiano.segna_visti()
+    return {"ok": True}
 
 
 class Prima(BaseModel):
