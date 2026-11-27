@@ -501,10 +501,29 @@ function avviaPaginaDownload() {
     riassunto.innerHTML = pezzi.map(([n, t]) => `<span><span class="num">${n}</span> ${t}</span>`).join("");
   }
 
+  // gli avvisi della lingua preferita: cosa Radarr/Sonarr hanno trovato da soli in italiano
+  const novita = document.getElementById("novita-lingua");
+  let ultimeNovita = "";
+  function disegnaNovita(elenco, lingua = "") {
+    const html = elenco.length ? `<h2>Novità in ${esc(lingua.toLowerCase())}</h2><ul class="elenco-novita">` +
+      elenco.map((a) => `<li class="novita-${esc(a.tipo)}"><strong>${esc(a.titolo)}</strong> · ${esc(a.messaggio)}</li>`).join("") +
+      `</ul><button type="button" class="secondario" id="novita-viste">Ok, visto</button>` : "";
+    if (html === ultimeNovita) return;
+    ultimeNovita = html;
+    novita.innerHTML = html;
+    novita.hidden = !html;
+  }
+  novita.addEventListener("click", async (ev) => {
+    if (!ev.target.closest("#novita-viste")) return;
+    try { await chiama("/api/avvisi-lingua/visti", { method: "POST" }); disegnaNovita([]); }
+    catch (e) { avviso(e.errore + " " + (e.cosa_fare || ""), true); }
+  });
+
   async function aggiorna() {
     try {
       const d = await chiama("/api/download/gruppi");
       gruppi = d.gruppi;
+      disegnaNovita(d.novita || [], d.lingua_preferita || "");
       const html = gruppi.length ? gruppi.map(htmlSchedaDownload).join("")
         : `<div class="salotto-vuoto">${SALOTTO}<h2>Niente in download</h2>` +
           `<p>Cerca un film e premi Scarica: lo ritrovi in Jellyfin, pronto da guardare sulla TV.</p>` +

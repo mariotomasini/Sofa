@@ -493,6 +493,10 @@ div.errore p, .nota p { margin: 2px 0 0; color: var(--testo-2); }
 /* pagina Download */
 .riassunto-download { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 12px 0 0; color: var(--testo-2); font-size: .92rem; }
 .riassunto-download .num { color: var(--testo); }
+.novita-lingua { margin-top: 16px; }
+.elenco-novita { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.elenco-novita li { color: var(--testo-2); overflow-wrap: anywhere; }
+.elenco-novita strong { color: var(--testo); }
 .ora { display: grid; grid-template-columns: 104px minmax(0, 1fr) minmax(200px, 320px); gap: 24px; align-items: center; margin: 24px 0 32px; }
 .ora .copertina img, .ora .copertina .senza-poster { width: 104px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--r); border: 1px solid var(--linea); }
 .ora h2 { font-size: 1.3rem; margin: 6px 0 14px; }
