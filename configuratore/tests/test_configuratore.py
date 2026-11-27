@@ -850,13 +850,13 @@ def test_navidrome_password_sbagliata(cartella, monkeypatch):
 def test_immich_spento_di_base(cartella):
     genera(Impostazioni.carica(cartella), cartella)
     compose = (cartella / "generato" / "docker-compose.yml").read_text()
-    assert "immich-server" not in compose and "/copia-foto" not in compose
+    assert "immich-server" not in compose and "foto-cloud" not in compose
     assert ":2283" not in (cartella / "generato" / "Caddyfile").read_text()
 
 
 def test_immich_acceso(cartella):
     with open(cartella / ".env", "a") as f:
-        f.write("WITH_IMMICH=si\nFOTO_COPIA_DIR=E:\\Copie\\Foto\\\n")
+        f.write("WITH_IMMICH=si\n")
     genera(Impostazioni.carica(cartella), cartella)
     compose = (cartella / "generato" / "docker-compose.yml").read_text()
     for servizio in ("immich-server:", "immich-machine-learning:", "immich-redis:", "immich-db:"):
@@ -864,7 +864,7 @@ def test_immich_acceso(cartella):
     assert '"D:/Mediabox/foto:/data"' in compose  # le foto nella cartella dei media
     assert "immich_db:/var/lib/postgresql/data" in compose  # il database in un volume di Docker
     assert '"2283:2283"' in compose and 'IMMICH_URL: "http://immich-server:2283"' in compose
-    assert '"E:/Copie/Foto:/copia-foto"' in compose and 'FOTO_COPIA: "si"' in compose
+    assert "foto-cloud:" not in compose  # senza Storage Box né S3 la copia nel cloud è spenta
     # la password del database si crea da sola e resta nel .env
     password = Impostazioni.carica(cartella).get("IMMICH_DB_PASSWORD")
     assert len(password) == 48 and compose.count(password) == 2

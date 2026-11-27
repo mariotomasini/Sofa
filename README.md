@@ -448,7 +448,6 @@ Oggi le foto stanno su iCloud: sul PC devono avere almeno una copia **fuori casa
 
 - **Ogni notte Immich** salva una copia del suo database (account, album, volti con i nomi) in `foto/backups`, sul disco dei media.
 - **Ogni notte alle 3** mediabox manda le foto e i video nuovi **nel cloud, cifrati sul PC** prima di partire (restic): chi gestisce il cloud vede solo dati illeggibili. Tiene anche le versioni passate (7 giorni, 8 settimane, 24 mesi): una foto cancellata per sbaglio si recupera.
-- Facoltativa, la copia notturna su un **altro disco** collegato al PC (`FOTO_COPIA_DIR` nel file `.env`).
 
 #### Hetzner Storage Box (consigliato)
 

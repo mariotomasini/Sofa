@@ -134,11 +134,6 @@ class Impostazioni:
         return risultato
 
     @property
-    def foto_copia(self) -> str:
-        """Cartella su un altro disco per la copia notturna delle foto ("" = nessuna)."""
-        return self.get("FOTO_COPIA_DIR").strip() if self.immich else ""
-
-    @property
     def storagebox(self) -> str:
         """Utente dello Storage Box di Hetzner (es. u123456), "" se non usato."""
         return self.get("FOTO_STORAGEBOX").strip()

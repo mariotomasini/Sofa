@@ -126,7 +126,6 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
         attivi.append("Navidrome (musica nelle app: Amperfy, Symfonium, Feishin)")
     if imp.immich:
         attivi.append("Foto (Immich: backup dei telefoni e volti, ognuno vede solo le sue"
-                      + (", copia notturna su un altro disco" if imp.foto_copia else "")
                       + (", copia cifrata nel cloud)" if imp.foto_cloud else ")"))
     if imp.bazarr:
         attivi.append("Bazarr (sottotitoli: " + ", ".join(imp.lingue_sottotitoli) + ")")

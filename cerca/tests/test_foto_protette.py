@@ -55,6 +55,7 @@ def test_la_pulizia_non_cancella_i_video_dell_iphone(dati, monkeypatch):
 def test_controlla_di_base_sulla_cartella_di_mediabox():
     assert tocca_le_foto(Path("/data/foto/library/mario/2026/x.jpg"))
     assert tocca_le_foto(Path("/data"))
+    assert tocca_le_foto(Path("/data/foto-ripristinate/library/anna/x.heic"))  # anche quelle riprese dal cloud
     assert not tocca_le_foto(Path("/data/media/serie/Una serie"))
     with pytest.raises(FotoProtette):
         controlla("/data/foto/encoded-video")

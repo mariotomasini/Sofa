@@ -4,7 +4,7 @@ Stanno in MEDIA_DIR/foto (in Cerca /data/foto), fuori dalle cartelle che la puli
 pagina Spazio conoscono (downloads/ e media/). Questo controllo è una cintura di
 sicurezza in più: anche per sbaglio (un percorso strano, un collegamento, una
 configurazione cambiata a mano) niente dentro la cartella delle foto viene toccato,
-né le foto né i video importati dall'iPhone, né le copie di sicurezza.
+né le foto né i video importati dall'iPhone, né quelle riprese dal cloud.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-CARTELLE_FOTO = (Path("/data/foto"), Path("/data/foto-ripristinate"), Path("/copia-foto"))
+CARTELLE_FOTO = (Path("/data/foto"), Path("/data/foto-ripristinate"))
 
 
 class FotoProtette(PermissionError):

@@ -577,7 +577,6 @@ services:
       LIDARR_API_KEY: "{{ LIDARR_API_KEY if lidarr else '' }}"
       NAVIDROME_URL: "{{ 'http://navidrome:4533' if navidrome else '' }}"
       IMMICH_URL: "{{ 'http://immich-server:2283' if immich else '' }}"
-      FOTO_COPIA: "{{ 'si' if foto_copia else 'no' }}"
       FOTO_CLOUD: "{{ 'si' if foto_cloud else 'no' }}"
     volumes:
       - cerca_dati:/dati
@@ -585,10 +584,6 @@ services:
 {%- if foto_cloud %}
       # solo per mostrare in Controllo servizi com'è andata l'ultima copia nel cloud
       - foto_cloud_stato:/foto-cloud:ro
-{%- endif %}
-{%- if foto_copia %}
-      # copia di sicurezza notturna delle foto, su un altro disco
-      - "{{ foto_copia }}:/copia-foto"
 {%- endif %}
     labels: *custodito
     healthcheck:

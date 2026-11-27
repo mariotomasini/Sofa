@@ -30,7 +30,6 @@ SERVIZI: dict[str, tuple[str, ...]] = {
     "WITH_NAVIDROME": ("navidrome",),
     "WITH_IMMICH": ("immich",),
     "FOTO_PERSONE": ("immich",),
-    "FOTO_COPIA_DIR": (),
     "FOTO_STORAGEBOX": (),
     "FOTO_STORAGEBOX_HOST": (),
     "FOTO_CLOUD_REPO": (),
