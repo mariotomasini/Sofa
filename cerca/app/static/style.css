@@ -1003,3 +1003,26 @@ body[data-tema] .logo-segno { color: var(--lampada); }
 @media (prefers-reduced-motion: reduce) {
   .faccia, .faccia .lettere, .faccia .anello path, .nome-profilo { transition: none; }
 }
+
+/* --- pagina Spazio: cosa c'è sul disco ----------------------------------------------------- */
+.libreria { margin-top: 16px; }
+.libreria > .sottotitolo { margin: 0 0 12px; }
+.schede-libreria { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.schede-libreria button { background: var(--rialzo); color: var(--testo-2); border: 1px solid var(--linea); border-radius: 999px; padding: 6px 14px; font-size: .9rem; }
+.schede-libreria button[aria-selected="true"] { background: var(--testo); color: var(--carta); border-color: transparent; }
+.elenco-libreria { display: flex; flex-direction: column; }
+.voce-libreria { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--linea); }
+.voce-libreria:first-child { border-top: 0; }
+.voce-libreria > img, .voce-libreria > .senza-poster { width: 44px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.voce-libreria > .senza-poster { padding: 2px; }
+.voce-libreria > .senza-poster .titolo, .voce-libreria > .senza-poster .anno { display: none; }
+.voce-libreria .descrizione { flex: 1 1 12rem; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; overflow-wrap: anywhere; }
+.voce-libreria .descrizione strong { font-weight: 500; }
+.voce-libreria .azioni, .stagione-libreria .azioni { display: flex; gap: 12px; align-items: center; }
+.voce-libreria button.collegamento { background: none; border: 0; padding: 2px 0; color: var(--lampada); font-size: .85rem; cursor: pointer; }
+.dettaglio-serie { flex-basis: 100%; padding-left: 60px; }
+.stagione-libreria { border-top: 1px solid var(--linea); padding-top: 8px; margin-top: 8px; }
+.testa-stagione { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.testa-stagione .sottotitolo { flex: 1; }
+button.pericolo { color: var(--rosso); }
+@media (max-width: 640px) { .dettaglio-serie { padding-left: 0; } }

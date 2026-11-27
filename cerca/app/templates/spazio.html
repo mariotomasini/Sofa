@@ -35,5 +35,17 @@
     <div id="registro"><p class="caricamento">Carico</p></div>
   </section>
 </div>
+
+<section class="blocco libreria" aria-labelledby="titolo-libreria">
+  <h2 id="titolo-libreria">Cosa c'è sul disco</h2>
+  <p class="sottotitolo">Elimina a mano film, serie, stagioni o singole puntate (tieni premuto per confermare). Sparisce ovunque: dal disco, da Jellyfin e dalle serie seguite, così non torna</p>
+  <nav class="schede-libreria" role="tablist" aria-label="Tipo">
+    <button role="tab" data-scheda="film" aria-selected="true">Film</button>
+    <button role="tab" data-scheda="serie" aria-selected="false">Serie</button>
+    <button role="tab" data-scheda="anime" aria-selected="false">Anime</button>
+    <button role="tab" data-scheda="altro" aria-selected="false">Altro</button>
+  </nav>
+  <div id="libreria"><p class="caricamento">Leggo la libreria</p></div>
+</section>
 {% endblock %}
 {% block script %}<script>avviaSpazio();</script>{% endblock %}

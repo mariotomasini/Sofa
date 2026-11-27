@@ -1328,8 +1328,106 @@ function avviaSpazio() {
     bottone.classList.remove("confermato");
     bottone._presa = false;
     carica();
+    libreria.carica();
   });
   carica();
+  const libreria = avviaLibreria(carica);
+}
+
+// --- pagina Spazio: cosa c'è sul disco, da eliminare a mano ---------------------------------
+function avviaLibreria(dopoEliminazione) {
+  const box = document.getElementById("libreria");
+  if (!box) return { carica() {} };
+  let dati = null;
+  let scheda = "film";
+  const aperte = new Map();  // id serie -> stagioni già lette
+
+  const tasto = (corpo, etichetta = "Elimina") =>
+    `<button class="secondario pericolo" data-tieni data-elimina="${esc(JSON.stringify(corpo))}">${etichetta}</button>`;
+  const copertina = (x) => x.poster
+    ? `<img src="${esc(x.poster)}" alt="" loading="lazy">` : htmlSenzaPoster(x.titolo, x.anno);
+
+  function htmlStagioni(s, stagioni) {
+    if (!stagioni) return '<p class="caricamento">Leggo le puntate</p>';
+    if (!stagioni.length) return '<p class="sottotitolo">Nessuna puntata sul disco</p>';
+    return stagioni.map((st) => `<div class="stagione-libreria"><div class="testa-stagione">` +
+      `<strong>${st.numero === 0 ? "Speciali" : "Stagione " + st.numero}</strong>` +
+      `<span class="sottotitolo num">${st.puntate.length} puntate · ${dimensione(st.dimensione)}</span>` +
+      tasto({ tipo: "stagione", id: s.id, stagione: st.numero }, "Elimina stagione") + `</div><ul class="risultati">` +
+      st.puntate.map((p) => `<li><div class="descrizione"><strong>Ep. ${esc(p.numero)}${p.titolo ? " · " + esc(p.titolo) : ""}</strong>` +
+        `<span class="sottotitolo">${esc(p.nome_file)}</span></div>` +
+        `<div class="azioni"><span class="num">${dimensione(p.dimensione)}</span>` +
+        tasto({ tipo: "puntata", id: s.id, file_id: p.file_id }) + `</div></li>`).join("") +
+      "</ul></div>").join("");
+  }
+
+  function htmlSerie(s) {
+    const aperta = aperte.has(s.id);
+    return `<article class="voce-libreria${aperta ? " aperta" : ""}" data-serie="${s.id}">${copertina(s)}` +
+      `<div class="descrizione"><strong>${esc(s.titolo)}${s.anno ? " (" + esc(s.anno) + ")" : ""}</strong>` +
+      `<span class="sottotitolo num">${s.puntate} puntate · ${s.stagioni.length} stagioni · ${dimensione(s.dimensione)}` +
+      `${s.seguita ? " · seguita" : ""}</span>` +
+      `<button class="collegamento" data-apri-serie="${s.id}" aria-expanded="${aperta}">${aperta ? "Nascondi" : "Stagioni e puntate"}</button>` +
+      `</div><div class="azioni">${tasto({ tipo: "serie", id: s.id }, "Elimina tutta")}</div>` +
+      (aperta ? `<div class="dettaglio-serie">${htmlStagioni(s, aperte.get(s.id))}</div>` : "") + "</article>";
+  }
+
+  function disegna() {
+    document.querySelectorAll(".schede-libreria [data-scheda]").forEach((b) =>
+      b.setAttribute("aria-selected", String(b.dataset.scheda === scheda)));
+    if (!dati) return;
+    let html = dati.errori.length
+      ? `<div class="nota"><p>${esc(dati.errori.join(" "))} L'elenco può essere incompleto.</p></div>` : "";
+    let voci = [];
+    if (scheda === "film") {
+      voci = dati.film.map((f) => `<article class="voce-libreria">${copertina(f)}<div class="descrizione">` +
+        `<strong>${esc(f.titolo)}${f.anno ? " (" + esc(f.anno) + ")" : ""}</strong>` +
+        `<span class="sottotitolo num">${dimensione(f.dimensione)}</span></div>` +
+        `<div class="azioni">${tasto({ tipo: "film", id: f.id })}</div></article>`);
+    } else if (scheda === "altro") {
+      voci = dati.altro.map((a) => `<article class="voce-libreria"><div class="descrizione"><strong>${esc(a.nome)}</strong>` +
+        `<span class="sottotitolo">nella cartella ${esc(a.libreria)}, sconosciuto a Radarr e Sonarr · <span class="num">${dimensione(a.dimensione)}</span></span></div>` +
+        `<div class="azioni">${tasto({ tipo: "altro", percorso: a.percorso })}</div></article>`);
+    } else {
+      voci = dati.serie.filter((s) => s.anime === (scheda === "anime")).map(htmlSerie);
+    }
+    html += voci.length ? `<div class="elenco-libreria">${voci.join("")}</div>` : '<p class="sottotitolo">Niente qui</p>';
+    box.innerHTML = html;
+    preparaTieni(box, elimina);
+  }
+
+  async function elimina(b) {
+    b.disabled = true;
+    try {
+      await conAvviso(inviaJSON("/api/libreria/elimina", JSON.parse(b.dataset.elimina)), "Elimino");
+      aperte.clear();
+      await carica();
+      if (dopoEliminazione) dopoEliminazione();
+    } catch (e) { b.disabled = false; b.classList.remove("confermato"); }
+  }
+
+  async function apri(id) {
+    if (aperte.has(id)) { aperte.delete(id); disegna(); return; }
+    aperte.set(id, null);
+    disegna();
+    try { aperte.set(id, await chiama(`/api/libreria/serie/${id}`).then((r) => r.stagioni)); }
+    catch (e) { aperte.delete(id); avviso(e.errore, true); }
+    disegna();
+  }
+
+  box.addEventListener("click", (ev) => {
+    const a = ev.target.closest("[data-apri-serie]");
+    if (a) apri(Number(a.dataset.apriSerie));
+  });
+  document.querySelectorAll(".schede-libreria [data-scheda]").forEach((b) =>
+    b.addEventListener("click", () => { scheda = b.dataset.scheda; disegna(); }));
+
+  async function carica() {
+    try { dati = await chiama("/api/libreria", { attesa: 90000 }); disegna(); }
+    catch (e) { box.innerHTML = htmlErrore(e); }
+  }
+  carica();
+  return { carica };
 }
 
 // --- "Segui la serie": la aggiunge a Sonarr senza passare dalla sua pagina (in inglese) ----------

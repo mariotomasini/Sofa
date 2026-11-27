@@ -220,6 +220,12 @@ class Archivio:
                 risultato[int(i)] = r
         return risultato
 
+    def download_del_film(self, tmdb_id: int) -> list[dict]:
+        return self._righe("SELECT * FROM download WHERE tmdb_id = ? AND serie IS NULL", (tmdb_id,))
+
+    def download_della_serie(self, serie_id: int) -> list[dict]:
+        return self._righe("SELECT * FROM download WHERE serie = ?", (serie_id,))
+
     def elimina_download(self, id_download: int) -> None:
         self._esegui("DELETE FROM download WHERE id = ?", (id_download,))
 
@@ -266,6 +272,9 @@ class Archivio:
     def stato_con_prefisso(self, prefisso: str) -> dict[str, str]:
         return {r["chiave"]: r["valore"] for r in self._righe(
             "SELECT chiave, valore FROM stato WHERE chiave LIKE ?", (prefisso.replace("%", "") + "%",))}
+
+    def stato_togli(self, chiave: str) -> None:
+        self._esegui("DELETE FROM stato WHERE chiave = ?", (chiave,))
 
     def stato_scrivi(self, chiave: str, valore: str) -> None:
         self._esegui("INSERT OR REPLACE INTO stato (chiave, valore) VALUES (?, ?)", (chiave, valore))

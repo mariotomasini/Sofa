@@ -51,6 +51,7 @@ from .foto_profili import FotoProfili
 from .gruppi_download import con_coda_qbit, raggruppa
 from .jellyfin import Jellyfin
 from .justwatch import CODICI as CODICI_PIATTAFORME
+from .libreria import Libreria
 from .musica import Musica
 from .musica_download import ScaricaMusica
 from .ordine_download import OrdineDownload, posizioni
@@ -125,6 +126,7 @@ class Servizi:
         self.scarica_musica = ScaricaMusica(config, self.deezer, self.prowlarr, self.download)
         self.pulizia = Pulizia(config, self.archivio, client, self.qbit, self.jellyfin, self.avvisami)
         self.disco = ControlloDisco(config, self.archivio, self.avvisami, self.pulizia)
+        self.libreria = Libreria(config, self.archivio, client, self.qbit, self.jellyfin, self.download, self.serie)
         self.foto_profili = FotoProfili(self.archivio, client, self.jellyfin)
 
     async def _link_diretto(self, voce: dict) -> tuple[str, dict]:
@@ -912,6 +914,43 @@ async def api_pulizia_avvia(request: Request):
     if not esito["tolti"]:
         return {**esito, "messaggio": "Non c'era niente da togliere."}
     return {**esito, "messaggio": f"Liberati {gb:.1f} GB ({esito['tolti']} elementi)."}
+
+
+@app.get("/api/libreria")
+async def api_libreria(request: Request):
+    return await servizi(request).libreria.elenco()
+
+
+@app.get("/api/libreria/serie/{serie_id}")
+async def api_libreria_serie(request: Request, serie_id: int):
+    return {"stagioni": await servizi(request).libreria.puntate(serie_id)}
+
+
+class RichiestaElimina(BaseModel):
+    tipo: str = Field(pattern="^(film|serie|stagione|puntata|altro)$")
+    id: int | None = None
+    stagione: int | None = None
+    file_id: int | None = None
+    percorso: str = ""
+
+
+@app.post("/api/libreria/elimina")
+async def api_libreria_elimina(request: Request, dati: RichiestaElimina):
+    if in_kids(request):
+        return JSONResponse({"errore": "Da Kids non si elimina niente."}, status_code=403)
+    lib = servizi(request).libreria
+    mancano = JSONResponse({"errore": "Richiesta incompleta.", "cosa_fare": "Ricarica la pagina."}, status_code=400)
+    if dati.tipo == "altro":
+        return await lib.elimina_altro(dati.percorso) if dati.percorso else mancano
+    if dati.id is None:
+        return mancano
+    if dati.tipo == "film":
+        return await lib.elimina_film(dati.id)
+    if dati.tipo == "serie":
+        return await lib.elimina_serie(dati.id)
+    if dati.tipo == "stagione":
+        return await lib.elimina_stagione(dati.id, dati.stagione) if dati.stagione is not None else mancano
+    return await lib.elimina_puntata(dati.id, dati.file_id) if dati.file_id is not None else mancano
 
 
 @app.get("/api/film/{tmdb_id}/provider")
