@@ -29,6 +29,9 @@ volumes:
 {%- if lidarr %}
   lidarr_config:
 {%- endif %}
+{%- if navidrome %}
+  navidrome_dati:
+{%- endif %}
 {%- if bazarr %}
   bazarr_config:
 {%- endif %}
@@ -241,6 +244,31 @@ services:
       test: ["CMD", "curl", "-fsS", "-m", "10", "-o", "/dev/null", "http://localhost:8686/lidarr/ping"]
       start_period: 300s
 {%- endif %}
+{%- if navidrome %}
+
+  # Musica nelle app per telefono e computer (API Subsonic: Amperfy, Symfonium, Feishin…).
+  # Legge la stessa cartella di Jellyfin; l'accesso lo chiede lui (utente e password di mediabox).
+  navidrome:
+    image: "{{ IMG_NAVIDROME }}"
+    restart: unless-stopped
+    user: "{{ PUID }}:{{ PGID }}"
+    environment:
+      TZ: "{{ TZ }}"
+      ND_BASEURL: /navidrome
+      ND_DEFAULTLANGUAGE: "{{ LINGUA | default('it') }}"
+      # se la cartella non avvisa dei file nuovi (es. dischi di Windows), ricontrolla ogni ora
+      ND_SCANNER_SCHEDULE: "@every 1h"
+      ND_ENABLEINSIGHTSCOLLECTOR: "false"
+      ND_LOGLEVEL: warn
+    volumes:
+      - navidrome_dati:/data
+      - "{{ MEDIA_DIR }}/media/musica:/music:ro"
+    labels: *custodito
+    healthcheck:
+      <<: *controllo
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4533/ping"]
+      start_period: 120s
+{%- endif %}
 {%- if bazarr %}
 
   # Sottotitoli automatici per film{% if sonarr %} e serie{% endif %}
@@ -422,6 +450,7 @@ services:
       STREAMINGCOMMUNITY_URL: "{{ STREAMINGCOMMUNITY_URL | default('') }}"
       LIDARR_URL: "{{ 'http://lidarr:8686/lidarr' if lidarr else '' }}"
       LIDARR_API_KEY: "{{ LIDARR_API_KEY if lidarr else '' }}"
+      NAVIDROME_URL: "{{ 'http://navidrome:4533' if navidrome else '' }}"
     volumes:
       - cerca_dati:/dati
       - "{{ MEDIA_DIR }}:/data"
@@ -520,6 +549,9 @@ services:
 {%- endif %}
 {%- if lidarr %}
       - lidarr_config:/volumi/lidarr_config
+{%- endif %}
+{%- if navidrome %}
+      - navidrome_dati:/volumi/navidrome_dati
 {%- endif %}
 {%- if bazarr %}
       - bazarr_config:/volumi/bazarr_config

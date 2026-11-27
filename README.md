@@ -5,6 +5,7 @@
 Con mediabox puoi:
 
 - **guardare** film, serie, anime e TV in diretta, e **ascoltare musica**, sulla TV, sul telefono o sul PC, con locandine, stagioni, saghe e guida TV (Jellyfin);
+- **ascoltare la musica nelle app fatte apposta**, anche offline e in auto: Amperfy su iPhone, Symfonium su Android (Navidrome);
 - **cercare qualsiasi film** per titolo e vedere subito:
   - dove guardarlo legalmente in Italia (gratis, in abbonamento, a noleggio);
   - se esiste su Internet Archive, per scaricarlo direttamente;
@@ -147,6 +148,7 @@ Apri **http://mediabox.local** dal browser di un PC o di un telefono collegato a
 | Prowlarr | `/prowlarr` | sì |
 | Sonarr *(serie e anime)* | `/sonarr` | sì |
 | Lidarr *(musica)* | `/lidarr` | sì |
+| Navidrome *(musica nelle app)* | `/navidrome` | il suo accesso: admin e la password di mediabox |
 | Bazarr *(sottotitoli)* | `/bazarr` | sì |
 | Beszel *(grafici del PC)* | `/beszel` | il suo accesso: admin@mediabox.local |
 | TVHeadend *(se c'è un tuner USB)* | `/tv` | sì |
@@ -331,7 +333,24 @@ La libreria **Musica** di Jellyfin c'è sempre: copia i tuoi album in `media/mus
 
 Per scaricare e ordinare musica in automatico attiva **Lidarr** (voce 3): cerchi un artista, scegli gli album e Lidarr li mette in `Artista/Album (Anno)/`.
 
-Per ascoltare dal telefono, anche offline e fuori casa, le app **Finamp** (gratuita) e **Symfonium** funzionano meglio dell'app Jellyfin. Symfonium (Android, circa 5 €) crea anche mix e playlist automatiche dai tuoi ascolti, come Spotify.
+#### Ascoltare dal telefono: Navidrome
+
+Jellyfin è fatto soprattutto per i video. Per la musica mediabox accende anche **Navidrome**: legge la stessa cartella `media/musica` (quello che copi tu e quello che scarica Lidarr o Cerca) e funziona con le app musicali migliori, anche **offline**, **fuori casa** (con Tailscale) e **in auto** (CarPlay, Android Auto).
+
+| Dove | App | Prezzo |
+|---|---|---|
+| iPhone, iPad | **Amperfy** (consigliata: CarPlay, download offline, playlist) | gratis, open source |
+| iPhone, iPad | **play:Sub** | a pagamento |
+| Android | **Symfonium** (crea anche mix automatici dai tuoi ascolti, come Spotify) | circa 5 € |
+| Mac, Windows, Linux | **Feishin** | gratis |
+| Browser | `http://mediabox.local/navidrome` | – |
+
+Nell'app scegli **Subsonic** o **Navidrome** se te lo chiede, poi scrivi:
+
+- **Server**: `http://mediabox.local/navidrome` (fuori casa: l'indirizzo Tailscale, es. `http://100.x.y.z/navidrome`);
+- **Utente e password**: `admin` con la password di mediabox. Ogni persona di casa (*Utenti di casa* nelle impostazioni) ha anche il suo utente, con il suo nome e, come password, il nome in minuscolo (es. `Anna` / `anna`): così ognuno ha i suoi preferiti e le sue playlist. La password si cambia da Navidrome (in alto a destra → *Personale*).
+
+La musica che c'è già compare dopo la prima scansione, in pochi minuti; quella nuova appena arriva (al più tardi entro un'ora). Navidrome è leggero (circa 50 MB di memoria): se non ti serve, spegnilo dalle impostazioni (*Musica nelle app per telefono*).
 
 ### Scoprire musica nuova
 
@@ -749,7 +768,7 @@ Alcune idee (Bazarr, FlareSolverr, anime, menu delle scelte) vengono dal progett
 
 L'aspetto di Cerca è stato ridisegnato con il metodo [unslop](https://github.com/heydamir/unslop) di Damir Sokolovsky ([@heydamir](https://x.com/heydamir), CC BY 4.0). Le animazioni seguono il modo di lavorare di [OpenMotion](https://github.com/nexu-io/openmotion) (timeline [GSAP](https://gsap.com), linee che si disegnano, titoli che compaiono da una maschera); alcuni componenti sono rifatti senza React a partire da [kokonutui](https://github.com/kokonut-labs/kokonutui) (tieni premuto per confermare, campanella, schede con l'indicatore che scorre, avvisi, barre dei controlli) e da [bklit-ui](https://github.com/bklit/bklit-ui) (la lancetta del disco e la linea della velocità). I dettagli e le licenze sono in `cerca/app/static/vendor/CREDITI.md`.
 
-[Jellyfin](https://jellyfin.org), [qBittorrent](https://www.qbittorrent.org), [Radarr](https://radarr.video), [Prowlarr](https://prowlarr.com), [Sonarr](https://sonarr.tv), [Lidarr](https://lidarr.audio), [Bazarr](https://www.bazarr.media), [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr), [TVHeadend](https://tvheadend.org), [Caddy](https://caddyserver.com), [Homepage](https://gethomepage.dev), [Intro Skipper](https://github.com/intro-skipper/intro-skipper). I dati dei film vengono da [TMDB](https://www.themoviedb.org) e quelli sulla disponibilità da [JustWatch](https://www.justwatch.com). Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
+[Jellyfin](https://jellyfin.org), [qBittorrent](https://www.qbittorrent.org), [Radarr](https://radarr.video), [Prowlarr](https://prowlarr.com), [Sonarr](https://sonarr.tv), [Lidarr](https://lidarr.audio), [Navidrome](https://www.navidrome.org), [Bazarr](https://www.bazarr.media), [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr), [TVHeadend](https://tvheadend.org), [Caddy](https://caddyserver.com), [Homepage](https://gethomepage.dev), [Intro Skipper](https://github.com/intro-skipper/intro-skipper). I dati dei film vengono da [TMDB](https://www.themoviedb.org) e quelli sulla disponibilità da [JustWatch](https://www.justwatch.com). Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.
 
 ### Uso responsabile
 

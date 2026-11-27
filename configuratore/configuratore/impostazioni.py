@@ -109,6 +109,11 @@ class Impostazioni:
         return _si(self.get("WITH_LIDARR", "no"))
 
     @property
+    def navidrome(self) -> bool:
+        """Navidrome: la musica nelle app Subsonic (Amperfy, Symfonium…). Leggero, acceso di base."""
+        return _si(self.get("WITH_NAVIDROME", "si"))
+
+    @property
     def bazarr(self) -> bool:
         return _si(self.get("WITH_BAZARR", "si"))
 

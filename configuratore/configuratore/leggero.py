@@ -23,6 +23,7 @@ MEMORIA_MB = {
     "WITH_SONARR": 250,
     "WITH_BAZARR": 200,
     "WITH_BESZEL": 100,
+    "WITH_NAVIDROME": 50,
     "WITH_TGARR": 600,
 }
 # Quelli che la modalità leggera spegne (Serie TV e Anime restano come li hai scelti)

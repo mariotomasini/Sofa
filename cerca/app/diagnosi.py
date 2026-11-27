@@ -99,6 +99,9 @@ async def controlla(config: Config, client: httpx.AsyncClient) -> dict:
     if config.lidarr_url:
         prove.append(_prova(client, "Lidarr", "musica da scaricare", f"{config.lidarr_url}/api/v1/system/status",
                             servizio="lidarr", intestazioni={"X-Api-Key": config.lidarr_chiave}))
+    if config.navidrome_url:
+        prove.append(_prova(client, "Navidrome", "musica nelle app per telefono (Amperfy, Symfonium)",
+                            f"{config.navidrome_url}/ping", servizio="navidrome"))
     esterni = {"User-Agent": AGENTE}
     if config.con_tmdb:
         lunga = len(config.tmdb_chiave) > 40  # il token lungo va nell'intestazione, la chiave corta nell'indirizzo

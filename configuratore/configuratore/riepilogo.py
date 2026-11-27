@@ -72,6 +72,8 @@ def pagine(imp: Impostazioni) -> list[tuple[str, str, bool]]:
         elenco.append(("Sonarr", "/sonarr/", True))
     if imp.lidarr:
         elenco.append(("Lidarr", "/lidarr/", True))
+    if imp.navidrome:
+        elenco.append(("Navidrome", "/navidrome/", False))
     if imp.bazarr:
         elenco.append(("Bazarr", "/bazarr/", True))
     if imp.beszel:
@@ -101,6 +103,9 @@ def stampa_indirizzi(imp: Impostazioni) -> None:
         print(f"  Per Beszel l'utente è l'email {imp.utente}@mediabox.local (stessa password)")
     print("  Nell'app Jellyfin della TV scrivi come server:")
     print(f"    {principale}/jellyfin")
+    if imp.navidrome:
+        print("  Nell'app della musica (Amperfy, Symfonium…) scrivi come server:")
+        print(f"    {principale}/navidrome")
 
 
 def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
@@ -112,6 +117,8 @@ def stampa_riepilogo(imp: Impostazioni, esito: Esito) -> None:
         attivi.append("Sonarr (serie" + (" e anime)" if imp.anime else ")"))
     if imp.lidarr:
         attivi.append("Lidarr (musica)")
+    if imp.navidrome:
+        attivi.append("Navidrome (musica nelle app: Amperfy, Symfonium, Feishin)")
     if imp.bazarr:
         attivi.append("Bazarr (sottotitoli: " + ", ".join(imp.lingue_sottotitoli) + ")")
     if imp.flaresolverr:

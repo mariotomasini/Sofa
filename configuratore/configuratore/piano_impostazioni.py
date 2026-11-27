@@ -27,6 +27,7 @@ SERVIZI: dict[str, tuple[str, ...]] = {
     "WITH_SONARR": ("sonarr", "prowlarr", "bazarr", "jellyfin"),
     "WITH_ANIME": ("sonarr", "jellyfin"),
     "WITH_LIDARR": ("lidarr", "prowlarr", "jellyfin"),
+    "WITH_NAVIDROME": ("navidrome",),
     "WITH_BAZARR": ("bazarr",),
     "WITH_TGARR": ("tgarr", "prowlarr"),
     "WITH_FLARESOLVERR": ("prowlarr",),
@@ -38,7 +39,7 @@ SERVIZI: dict[str, tuple[str, ...]] = {
     "TG_API_HASH": ("tgarr",),
     "TG_PHONE": ("tgarr",),
     "NTFY_TOPIC": ("beszel",),
-    "UTENTI_CASA": ("jellyfin",),
+    "UTENTI_CASA": ("jellyfin", "navidrome"),
     # solo nelle variabili dei servizi (Cerca e altri): basta ricrearli, lo fa Docker
     "TMDB_API_KEY": (),
     "PULIZIA_VISTI": (),
@@ -52,7 +53,7 @@ SERVIZI: dict[str, tuple[str, ...]] = {
 PREPARA = {"MEDIA_DIR"} | {k for k in SERVIZI if k.startswith("WITH_")}
 NOMI = {"qbittorrent": "qBittorrent", "radarr": "Radarr", "sonarr": "Sonarr", "lidarr": "Lidarr",
         "prowlarr": "Prowlarr", "tgarr": "Telegram (tgarr)", "bazarr": "Bazarr", "beszel": "Beszel",
-        "jellyfin": "Jellyfin", "tvheadend": "TVHeadend"}
+        "jellyfin": "Jellyfin", "navidrome": "Navidrome", "tvheadend": "TVHeadend"}
 
 
 @dataclass

@@ -101,6 +101,7 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         sonarr=imp.sonarr,
         anime=imp.anime,
         lidarr=imp.lidarr,
+        navidrome=imp.navidrome,
         bazarr=imp.bazarr,
         flaresolverr=imp.flaresolverr,
         beszel=imp.beszel,

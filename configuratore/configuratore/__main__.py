@@ -44,7 +44,7 @@ def errore_imprevisto(nome: str, exc: Exception) -> ErroreMediabox:
 def _configura(imp: Impostazioni, solo: set[str] | None = None) -> int:
     """Configura i servizi via API. Con `solo` (es. {"radarr", "sonarr"}) solo quelli."""
     from .riepilogo import Esito, stampa_riepilogo
-    from .servizi import bazarr, beszel, jellyfin, lidarr, prowlarr, qbittorrent, radarr, sonarr, tgarr, tvheadend
+    from .servizi import bazarr, beszel, jellyfin, lidarr, navidrome, prowlarr, qbittorrent, radarr, sonarr, tgarr, tvheadend
 
     esito = Esito()
     passi = [
@@ -65,6 +65,8 @@ def _configura(imp: Impostazioni, solo: set[str] | None = None) -> int:
     if imp.beszel:
         passi.append(("Beszel", beszel.configura))
     passi.append(("Jellyfin", jellyfin.configura))
+    if imp.navidrome:
+        passi.append(("Navidrome", navidrome.configura))
     if solo is not None:
         codici = {"Telegram (tgarr)": "tgarr"}
         passi = [(nome, f) for nome, f in passi if codici.get(nome, nome.lower()) in solo]

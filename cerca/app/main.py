@@ -322,7 +322,8 @@ def pagina(request: Request, nome: str, **contesto) -> HTMLResponse:
          "pannello": indirizzo_pannello(request, s.config) if e_admin(request) else "",
          "utente": utente, "iniziali_utente": iniziali(utente["nome"]) if utente else "",
          "foto_utente": foto_utente(utente.get("id", ""), larghezza=96) if utente else "",
-         "lidarr": bool(s.config.lidarr_url), "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
+         "lidarr": bool(s.config.lidarr_url), "navidrome": bool(s.config.navidrome_url),
+         "sonarr": bool(s.config.sonarr_url), "mondi": MONDI,
          "kids": in_kids(request), "download_attivi": len(attivi), "con_tmdb": s.config.con_tmdb, **contesto},
     )
 
@@ -463,7 +464,10 @@ async def pagina_download(request: Request):
 
 @app.get("/musica", response_class=HTMLResponse)
 async def pagina_musica(request: Request):
-    return solo_adulti(request) or pagina(request, "musica.html", mondo="musica")
+    host = request.headers.get("host") or "mediabox.local"
+    return solo_adulti(request) or pagina(request, "musica.html", mondo="musica",
+                                          indirizzo_navidrome=f"http://{host}/navidrome",
+                                          admin=e_admin(request))
 
 
 @app.get("/musica/artista/{id_artista}", response_class=HTMLResponse)
