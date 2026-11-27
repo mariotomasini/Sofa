@@ -24,6 +24,7 @@ FILE_DA_GENERARE = {
     "homepage/widgets.yaml.j2": "homepage/widgets.yaml",
     "homepage/bookmarks.yaml.j2": "homepage/bookmarks.yaml",
     "homepage/custom.css.j2": "homepage/custom.css",
+    "foto-cloud.sh.j2": "foto-cloud.sh",
 }
 
 
@@ -60,6 +61,7 @@ def normalizza_percorso(percorso: str) -> str:
 
 SEGRETI_TGARR = ("TGARR_API_KEY", "TGARR_DB_PASSWORD", "TGARR_MEILI_KEY")
 SEGRETI_IMMICH = ("IMMICH_DB_PASSWORD",)
+SEGRETI_CLOUD = ("FOTO_CLOUD_PASSWORD",)
 
 
 def assicura_segreti_tgarr(imp: Impostazioni, file_env: Path, chiavi: tuple[str, ...] = SEGRETI_TGARR) -> None:
@@ -80,6 +82,8 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         assicura_segreti_tgarr(imp, cartella_generato.parent / ".env")
     if imp.immich:
         assicura_segreti_tgarr(imp, cartella_generato.parent / ".env", SEGRETI_IMMICH)
+    if imp.foto_cloud:
+        assicura_segreti_tgarr(imp, cartella_generato.parent / ".env", SEGRETI_CLOUD)
     valori = dict(imp.valori)
     # la chiave TMDB è facoltativa: senza, Cerca usa fonti gratuite
     for chiave in ("ADMIN_PASSWORD", "RADARR_API_KEY", "PROWLARR_API_KEY"):
@@ -108,6 +112,7 @@ def contesto(imp: Impostazioni, cartella_generato: Path) -> dict:
         navidrome=imp.navidrome,
         immich=imp.immich,
         foto_porta=imp.get("FOTO_PORT", "2283") or "2283",
+        foto_cloud=imp.foto_cloud,
         foto_copia=normalizza_percorso(imp.foto_copia) if imp.foto_copia else "",
         bazarr=imp.bazarr,
         flaresolverr=imp.flaresolverr,

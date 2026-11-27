@@ -156,6 +156,15 @@ def configura(imp: Impostazioni, esito) -> None:
             f"poi email {email(nome)} e password {password}. Al primo accesso Immich ne chiede una nuova, "
             f"che solo {nome} conosce."
         )
+    if imp.foto_cloud:
+        esito.da_fare(
+            f"Copia delle foto nel cloud: scrivi su carta questa password e tienila fuori casa: "
+            f"{imp.get('FOTO_CLOUD_PASSWORD')}. Se il PC si rompe, senza di lei la copia non si può aprire. "
+            f"La copia parte ogni notte alle 3."
+        )
+    elif imp.get("FOTO_CLOUD_REPO") or imp.get("FOTO_CLOUD_ID"):
+        esito.da_fare("Copia delle foto nel cloud: mancano FOTO_CLOUD_REPO, FOTO_CLOUD_ID o FOTO_CLOUD_CHIAVE "
+                      "nel file .env, quindi è spenta.")
     esito.nota(
         f"Foto: app Immich sul telefono, server {server}.{fuori_casa} Ognuno vede solo le sue foto; "
         f"dal browser: {indirizzo_app(imp)}."

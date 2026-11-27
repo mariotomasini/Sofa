@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-CARTELLE_FOTO = (Path("/data/foto"), Path("/copia-foto"))
+CARTELLE_FOTO = (Path("/data/foto"), Path("/data/foto-ripristinate"), Path("/copia-foto"))
 
 
 class FotoProtette(PermissionError):

@@ -139,6 +139,11 @@ class Impostazioni:
         return self.get("FOTO_COPIA_DIR").strip() if self.immich else ""
 
     @property
+    def foto_cloud(self) -> bool:
+        """Copia delle foto nel cloud (restic, cifrata): serve indirizzo e chiave del bucket."""
+        return self.immich and all(self.get(k).strip() for k in ("FOTO_CLOUD_REPO", "FOTO_CLOUD_ID", "FOTO_CLOUD_CHIAVE"))
+
+    @property
     def bazarr(self) -> bool:
         return _si(self.get("WITH_BAZARR", "si"))
 

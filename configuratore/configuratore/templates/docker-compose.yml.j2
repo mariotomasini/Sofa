@@ -36,6 +36,10 @@ volumes:
   immich_db:
   immich_modelli:
 {%- endif %}
+{%- if foto_cloud %}
+  foto_cloud_cache:
+  foto_cloud_stato:
+{%- endif %}
 {%- if bazarr %}
   bazarr_config:
 {%- endif %}
@@ -349,6 +353,34 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d immich"]
       start_period: 120s
 {%- endif %}
+{%- if foto_cloud %}
+
+  # Copia delle foto fuori casa, nel cloud: cifrata qui sul PC (restic) prima di partire.
+  # Ogni notte solo le foto nuove; tiene le versioni passate fino a 24 mesi.
+  foto-cloud:
+    image: "{{ IMG_RESTIC }}"
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/copia.sh"]
+    environment:
+      TZ: "{{ TZ }}"
+      RESTIC_REPOSITORY: "{{ FOTO_CLOUD_REPO }}"
+      RESTIC_PASSWORD: "{{ FOTO_CLOUD_PASSWORD }}"
+      AWS_ACCESS_KEY_ID: "{{ FOTO_CLOUD_ID }}"
+      AWS_SECRET_ACCESS_KEY: "{{ FOTO_CLOUD_CHIAVE }}"
+      LIMITE_KB: "{{ FOTO_CLOUD_LIMITE_KB | default('') }}"
+      NTFY_TOPIC: "{{ NTFY_TOPIC }}"
+      NTFY_SERVER: "{{ NTFY_SERVER }}"
+      # restic gira con priorità bassa: chi guarda un film non se ne accorge
+      NICE: "10"
+    volumes:
+      - ./foto-cloud.sh:/copia.sh:ro
+      - "{{ MEDIA_DIR }}/foto:/foto:ro"
+      - foto_cloud_cache:/root/.cache/restic
+      - foto_cloud_stato:/stato
+      # per i ripristini: le foto tornano qui, mai sopra quelle che ci sono
+      - "{{ MEDIA_DIR }}/foto-ripristinate:/ripristino"
+    cpu_shares: 256
+{%- endif %}
 {%- if bazarr %}
 
   # Sottotitoli automatici per film{% if sonarr %} e serie{% endif %}
@@ -533,9 +565,14 @@ services:
       NAVIDROME_URL: "{{ 'http://navidrome:4533' if navidrome else '' }}"
       IMMICH_URL: "{{ 'http://immich-server:2283' if immich else '' }}"
       FOTO_COPIA: "{{ 'si' if foto_copia else 'no' }}"
+      FOTO_CLOUD: "{{ 'si' if foto_cloud else 'no' }}"
     volumes:
       - cerca_dati:/dati
       - "{{ MEDIA_DIR }}:/data"
+{%- if foto_cloud %}
+      # solo per mostrare in Controllo servizi com'è andata l'ultima copia nel cloud
+      - foto_cloud_stato:/foto-cloud:ro
+{%- endif %}
 {%- if foto_copia %}
       # copia di sicurezza notturna delle foto, su un altro disco
       - "{{ foto_copia }}:/copia-foto"

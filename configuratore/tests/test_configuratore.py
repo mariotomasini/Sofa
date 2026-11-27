@@ -961,3 +961,32 @@ def test_immich_password_sbagliata(cartella, monkeypatch):
     with pytest.raises(ErroreMediabox) as e:
         immich.configura(Impostazioni.carica(cartella), None)
     assert "ADMIN_PASSWORD" in e.value.cosa_fare
+
+
+def test_copia_delle_foto_nel_cloud(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nFOTO_CLOUD_REPO=s3:https://s3.eu-central-003.backblazeb2.com/foto\n"
+                "FOTO_CLOUD_ID=003abc\nFOTO_CLOUD_CHIAVE=K003segreta\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    blocco = compose.split("  foto-cloud:", 1)[1].split("\n\n", 1)[0]
+    password = Impostazioni.carica(cartella).get("FOTO_CLOUD_PASSWORD")
+    assert len(password) == 48 and f'RESTIC_PASSWORD: "{password}"' in blocco  # creata una volta, resta nel .env
+    assert '"D:/Mediabox/foto:/foto:ro"' in blocco  # la copia legge soltanto: non può toccare le foto
+    assert "AWS_SECRET_ACCESS_KEY: \"K003segreta\"" in blocco
+    assert "foto_cloud_stato:/foto-cloud:ro" in compose and 'FOTO_CLOUD: "si"' in compose
+    script = (cartella / "generato" / "foto-cloud.sh").read_text()
+    assert "restic backup" in script and "--keep-monthly 24" in script and "restic init" in script
+    # rigenerando, la password non cambia (altrimenti la copia non si aprirebbe più)
+    genera(Impostazioni.carica(cartella), cartella)
+    assert Impostazioni.carica(cartella).get("FOTO_CLOUD_PASSWORD") == password
+
+
+def test_copia_nel_cloud_spenta_senza_chiavi(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_IMMICH=si\nFOTO_CLOUD_REPO=s3:https://x/foto\n")
+    imp = Impostazioni.carica(cartella)
+    assert not imp.foto_cloud
+    genera(imp, cartella)
+    assert "foto-cloud:" not in (cartella / "generato" / "docker-compose.yml").read_text()
+    assert not Impostazioni.carica(cartella).get("FOTO_CLOUD_PASSWORD")

@@ -7,8 +7,10 @@ ogni servizio viene provato con un tempo massimo breve, tutti insieme.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import httpx
 
@@ -82,6 +84,35 @@ async def _jellyfin(client: httpx.AsyncClient, config: Config) -> Risultato:
     return base
 
 
+STATO_CLOUD = Path("/foto-cloud")
+GIORNI_SENZA_COPIA = 3
+
+
+def copia_cloud(cartella: Path = STATO_CLOUD, adesso: dt.datetime | None = None) -> Risultato:
+    """Com'è andata l'ultima copia delle foto nel cloud (la scrive il servizio foto-cloud)."""
+    nome, scopo = "Copia delle foto nel cloud", "le foto al sicuro fuori casa, cifrate"
+    adesso = adesso or dt.datetime.now()
+    try:
+        esito, quando = ((cartella / "ultima").read_text().splitlines() + ["", ""])[:2]
+    except OSError:
+        iniziata = (cartella / "giorno").exists()
+        return Risultato(nome, scopo, "ok", 0,
+                         "La prima copia è in corso: con tante foto dura qualche notte." if iniziata
+                         else "La prima copia parte stanotte alle 3.")
+    if esito.strip() != "ok":
+        return Risultato(nome, scopo, "errore", 0, f"L'ultima copia ({quando}) non è riuscita.",
+                         "Controlla FOTO_CLOUD_REPO, FOTO_CLOUD_ID e FOTO_CLOUD_CHIAVE nel file .env e che lo "
+                         "spazio nel cloud sia pagato. Sul PC: \"mediabox logs foto-cloud\".")
+    try:
+        giorni = (adesso - dt.datetime.strptime(quando.strip(), "%Y-%m-%d %H:%M")).days
+    except ValueError:
+        giorni = 0
+    if giorni > GIORNI_SENZA_COPIA:
+        return Risultato(nome, scopo, "errore", 0, f"L'ultima copia riuscita è di {giorni} giorni fa ({quando}).",
+                         "Sul PC scrivi \"mediabox logs foto-cloud\" e poi \"mediabox restart foto-cloud\".")
+    return Risultato(nome, scopo, "ok", 0, f"Ultima copia riuscita: {quando}.")
+
+
 async def controlla(config: Config, client: httpx.AsyncClient) -> dict:
     prove = [
         _prova(client, "Radarr", "film: ricerca e schede (senza chiave TMDB), download e importazione",
@@ -102,6 +133,11 @@ async def controlla(config: Config, client: httpx.AsyncClient) -> dict:
     if config.navidrome_url:
         prove.append(_prova(client, "Navidrome", "musica nelle app per telefono (Amperfy, Symfonium)",
                             f"{config.navidrome_url}/ping", servizio="navidrome"))
+    if config.immich_url:
+        prove.append(_prova(client, "Foto (Immich)", "foto e video dei telefoni, con i volti",
+                            f"{config.immich_url}/api/server/ping", servizio="immich-server"))
+    if config.foto_cloud:
+        prove.append(asyncio.to_thread(copia_cloud))
     esterni = {"User-Agent": AGENTE}
     if config.con_tmdb:
         lunga = len(config.tmdb_chiave) > 40  # il token lungo va nell'intestazione, la chiave corta nell'indirizzo

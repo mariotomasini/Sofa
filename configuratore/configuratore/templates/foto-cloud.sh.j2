@@ -1,0 +1,78 @@
+#!/bin/sh
+# -----------------------------------------------------------------------------
+#  FILE GENERATO DA MEDIABOX — non modificarlo a mano.
+#  Copia delle foto nel cloud, cifrata sul PC con restic prima di partire: chi
+#  gestisce il cloud vede solo dati illeggibili. Ogni notte manda solo le foto nuove.
+#  Tiene anche le versioni passate (7 giorni, 8 settimane, 24 mesi): una foto
+#  cancellata per sbaglio si recupera.
+#
+#  Con degli argomenti esegue restic e basta, per controllare o ripristinare:
+#    docker compose run --rm foto-cloud snapshots
+#    docker compose run --rm foto-cloud restore latest --target /ripristino
+# -----------------------------------------------------------------------------
+set -u
+
+if [ "$#" -gt 0 ]; then
+	exec restic "$@"
+fi
+
+ORA="${ORA_COPIA:-3}"
+STATO=/stato
+
+avvisa() {
+	[ -n "${NTFY_TOPIC:-}" ] || return 0
+	wget -q -O /dev/null --header "Title: $1" --header "Tags: camera" \
+		--post-data "$2" "${NTFY_SERVER:-https://ntfy.sh}/${NTFY_TOPIC}" || true
+}
+
+scrivi_stato() {
+	# per Cerca (pagina Controllo servizi): esito e data dell'ultima copia
+	printf '%s\n%s\n' "$1" "$(date '+%Y-%m-%d %H:%M')" > "$STATO/ultima.tmp" && mv "$STATO/ultima.tmp" "$STATO/ultima"
+}
+
+copia() {
+	if ! restic cat config > /dev/null 2>&1; then
+		echo "Prima copia: preparo lo spazio nel cloud"
+		restic init || return 1
+	fi
+	cartelle=""
+	for c in library upload profile backups; do
+		[ -d "/foto/$c" ] && cartelle="$cartelle /foto/$c"
+	done
+	[ -n "$cartelle" ] || { echo "Ancora nessuna foto da copiare"; return 0; }
+	limite=""
+	[ -n "${LIMITE_KB:-}" ] && limite="--limit-upload ${LIMITE_KB}"
+	# shellcheck disable=SC2086
+	restic backup --tag foto --exclude-caches $limite $cartelle || return 1
+	# la domenica si fa ordine (costa qualche richiesta in più al cloud)
+	if [ "$(date +%u)" = "7" ]; then
+		restic forget --tag foto --keep-daily 7 --keep-weekly 8 --keep-monthly 24 --prune || return 1
+		# un piccolo controllo che i dati nel cloud si leggano davvero (1% ogni settimana)
+		restic check --read-data-subset=1% || return 1
+	else
+		restic forget --tag foto --keep-daily 7 --keep-weekly 8 --keep-monthly 24 || return 1
+	fi
+}
+
+mkdir -p "$STATO"
+echo "Copia delle foto nel cloud: ogni notte alle ${ORA}"
+while true; do
+	oggi="$(date +%Y-%m-%d)"
+	ora="$(date +%H | sed 's/^0//')"
+	fatta="$(cat "$STATO/giorno" 2>/dev/null || true)"
+	if [ "$ora" = "$ORA" ] && [ "$fatta" != "$oggi" ]; then
+		echo "$oggi" > "$STATO/giorno"
+		if copia; then
+			echo "Copia riuscita"
+			if [ ! -f "$STATO/prima-fatta" ]; then
+				touch "$STATO/prima-fatta"
+				avvisa "Foto al sicuro nel cloud" "La prima copia completa delle foto nel cloud è finita. Da ora ogni notte copio solo quelle nuove."
+			fi
+			scrivi_stato ok
+		else
+			scrivi_stato errore
+			avvisa "Copia delle foto non riuscita" "Stanotte la copia delle foto nel cloud non è riuscita. Guarda in Controllo servizi o con: mediabox logs foto-cloud. Riprovo domani notte."
+		fi
+	fi
+	sleep 600
+done

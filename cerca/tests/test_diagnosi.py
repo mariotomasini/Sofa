@@ -127,3 +127,22 @@ def test_sentinella(caplog, monkeypatch):
     assert s.controlla() == ""  # l'avviso si scrive una volta sola
     adesso[0] = 200
     assert s.controlla() == "riavvio" and uscite == [1]
+
+
+def test_copia_delle_foto_nel_cloud(tmp_path):
+    import datetime as dt
+
+    from app.diagnosi import copia_cloud
+
+    adesso = dt.datetime(2026, 11, 28, 9, 0)
+    assert "stanotte" in copia_cloud(tmp_path, adesso).messaggio
+    (tmp_path / "giorno").write_text("2026-11-28\n")
+    assert "in corso" in copia_cloud(tmp_path, adesso).messaggio
+    (tmp_path / "ultima").write_text("ok\n2026-11-28 05:12\n")
+    r = copia_cloud(tmp_path, adesso)
+    assert r.stato == "ok" and "2026-11-28 05:12" in r.messaggio
+    (tmp_path / "ultima").write_text("ok\n2026-11-20 05:12\n")
+    assert copia_cloud(tmp_path, adesso).stato == "errore"  # da troppi giorni nessuna copia
+    (tmp_path / "ultima").write_text("errore\n2026-11-28 03:40\n")
+    r = copia_cloud(tmp_path, adesso)
+    assert r.stato == "errore" and "FOTO_CLOUD_CHIAVE" in r.cosa_fare
