@@ -81,6 +81,7 @@ def leggi_anno(tooltip: str) -> str:
 # --- il sito -------------------------------------------------------------------
 
 class AnimeWorld:
+    solo_anime = True
     nome = "AnimeWorld"
 
     def __init__(self, config) -> None:

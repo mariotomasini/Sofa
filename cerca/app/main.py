@@ -31,6 +31,7 @@ from .accesso import DURATA as DURATA_ACCESSO
 from .accesso import Accesso, destinazione_sicura, iniziali, percorso_libero, utente_corrente
 from .animeunity import (
     NOMI_FONTI,
+    TUTTE_LE_STAGIONI,
     AnimeDiretti,
     AnimeUnity,
     con_download_cerca,
@@ -45,7 +46,7 @@ from .catalogo_libero import CatalogoLibero
 from .config import Config
 from .db import Archivio
 from .deezer import Deezer
-from .download import GestoreDownload, e_magnet, nome_da_magnet
+from .download import GestoreDownload, e_magnet, nome_cartella, nome_da_magnet
 from .foto_profili import FotoProfili
 from .gruppi_download import con_coda_qbit, raggruppa
 from .jellyfin import Jellyfin
@@ -62,6 +63,8 @@ from .rete import ErroreServizio, non_raggiungibile, nuovo_client
 from .sentinella import Sentinella, ultimo_blocco
 from .serie import Serie, e_anime
 from .stato import ControlloDisco
+from .streamingcommunity import StreamingCommunity
+from .streamingcommunity import id_puntata as id_puntata_sc
 from .tmdb import TMDB, tipo_tmdb
 from .trailer import trova as trova_trailer
 
@@ -112,7 +115,8 @@ class Servizi:
         self.ordine = OrdineDownload(self.archivio, self.qbit)
         self.puntate_italiane = PuntateItaliane(config, self.archivio, self.serie, self.prowlarr, self.download)
         # le fonti dirette degli anime: link HTTP, preferiti ai torrent
-        self.siti_anime = {"animeunity": AnimeUnity(config), "animeworld": AnimeWorld(config)}
+        self.siti_anime = {"animeunity": AnimeUnity(config), "animeworld": AnimeWorld(config),
+                           "streamingcommunity": StreamingCommunity(config)}
         self.anime = AnimeDiretti(self.siti_anime, self.archivio, self.serie, self.download, config)
         for fonte in self.siti_anime:
             self.download.risolutori[fonte] = self._link_diretto
@@ -960,9 +964,39 @@ class RichiestaAuto(BaseModel):
 @app.post("/api/scarica/auto")
 async def api_scarica_auto(request: Request, dati: RichiestaAuto):
     s = servizi(request)
+    diretto = await _film_diretto(s, dati.tmdb_id)
+    if diretto:
+        return diretto
     film = await s.radarr.scarica_da_solo(dati.tmdb_id)
     gia = " (il file c'è già: cerco solo una versione migliore)" if film.get("hasFile") else ""
     return {"messaggio": f"Fatto! Radarr cerca la versione migliore, prima in italiano, e la mette in Jellyfin{gia}."}
+
+
+async def _film_diretto(s, tmdb_id: int) -> dict | None:
+    """I link diretti prima di tutto: se il film è su StreamingCommunity lo prendo da lì
+    (se non riesce, il download passa da solo a Radarr). None: niente link diretto, ci pensa Radarr."""
+    sito = s.siti_anime["streamingcommunity"]
+    if not sito.attivo:
+        return None
+    try:
+        nel_catalogo = await s.radarr._r("GET", "movie", params={"tmdbId": tmdb_id}) or []
+        if any(f.get("hasFile") for f in nel_catalogo):
+            return None  # c'è già: Radarr cerca solo una versione migliore, come sempre
+        film = await s.tmdb.dettagli(tmdb_id)
+        voce = await sito.trova_film(film)
+    except ErroreServizio as exc:
+        log.info("StreamingCommunity non disponibile per il film %s: %s", tmdb_id, exc.cosa)
+        return None
+    if not voce:
+        return None
+    for d in s.archivio.download_per_stato("in_corso", "completato", "importazione"):
+        if d.get("tmdb_id") == tmdb_id:
+            return {"messaggio": "Lo sto già scaricando: lo trovi nella pagina Download."}
+    nome = nome_cartella(film["titolo"], film.get("anno", "")) + (" ITA" if voce["doppiato"] else "") + ".mkv"
+    await s.download.da_diretto_film(film, [["streamingcommunity", id_puntata_sc(voce["id"])]], nome)
+    lingua = "in italiano" if voce["doppiato"] else "sottotitolato in italiano"
+    return {"messaggio": f"Fatto! Lo scarico {lingua} con un link diretto (StreamingCommunity) e lo metto in "
+                         "Jellyfin. Se non riesce, passa da solo ai torrent."}
 
 
 class RichiestaProwlarr(BaseModel):
@@ -1133,7 +1167,9 @@ async def api_serie_apri(request: Request, dati: RichiestaSerie):
         except (TimeoutError, ErroreServizio):
             pass
     risposta = await _puntate_e_anime(s, serie["id"])
-    risposta["diretti"]["anime"] = serie.get("seriesType") == "anime" or e_anime(serie)
+    anime = serie.get("seriesType") == "anime" or e_anime(serie)
+    # la sezione dei link diretti: per gli anime, e per tutte le serie se c'è StreamingCommunity
+    risposta["diretti"]["anime"] = anime or any(not s.siti_anime[f].solo_anime for f in s.anime.siti_attivi())
     return risposta
 
 
@@ -1254,13 +1290,15 @@ async def api_diretti_cerca(request: Request, serie_id: int, q: str = ""):
         stagioni[e.get("seasonNumber", 0)] = stagioni.get(e.get("seasonNumber", 0), 0) + 1
     assoluta = any(e.get("absoluteEpisodeNumber") for e in episodi)
     voci = ordina_risultati(voci, [q], s.anime.italiano)[:24]
+    voci = [v for v in voci if v["tipo"] != "Movie"]
     return {"risultati": [{**v, "nome_fonte": NOMI_FONTI.get(v["fonte"], v["fonte"]),
-                           "stagione": indovina_stagione(v, voci, stagioni, assoluta)} for v in voci],
+                           "stagione": TUTTE_LE_STAGIONI if v.get("stagioni_proprie")
+                           else indovina_stagione(v, voci, stagioni, assoluta)} for v in voci],
             "stagioni": sorted(n for n in stagioni if n > 0), "assoluta": assoluta}
 
 
 class VoceDiretta(BaseModel):
-    fonte: str = Field(pattern="^(animeunity|animeworld)$")
+    fonte: str = Field(pattern="^(animeunity|animeworld|streamingcommunity)$")
     id: int | str
     slug: str = ""
     titolo: str = ""

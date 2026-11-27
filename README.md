@@ -316,6 +316,15 @@ Per gli anime Cerca usa anche due siti con i link diretti: [AnimeUnity](https://
 - Scarica al massimo 2 puntate alla volta per sito; le altre aspettano il loro turno nella pagina **Download**. Un download interrotto riparte da dove era. A download finito la puntata passa a Sonarr e compare in Jellyfin come le altre (`… - S01E05 - ITA.mp4`).
 - I siti cambiano spesso indirizzo: se uno non risponde più, scrivi quello nuovo in `ANIMEUNITY_URL` o `ANIMEWORLD_URL` nel file `.env` e scrivi `mediabox configura`. Lascia vuoto l'indirizzo per spegnere quel sito.
 
+#### StreamingCommunity: film e serie con link diretto (da accendere)
+
+Lo stesso principio vale anche per **film e serie** con [StreamingCommunity](https://it.wikipedia.org/wiki/StreamingCommunity) (oggi anche *StreamingUnity*), dove quasi tutto è doppiato in italiano.
+
+- **È spento di base.** Cambia dominio molto spesso, viene bloccato, e i domini vecchi diventano copie truffa: per questo mediabox non sceglie l'indirizzo al posto tuo. Per accenderlo scrivi l'indirizzo attuale in `STREAMINGCOMMUNITY_URL` nel file `.env` (solo se sei sicuro che sia quello vero) e scrivi `mediabox configura`.
+- **Film**: il pulsante **Scarica** della scheda, se il film è su StreamingCommunity (stesso codice TMDB, o stesso titolo e anno), lo scarica da lì e lo passa a Radarr, che lo mette in Jellyfin. Se il download non riesce, passa da solo ai torrent (Radarr). Se il film c'è già in Jellyfin, decide Radarr come sempre.
+- **Serie**: nella finestra della serie la sezione **Link diretti** compare per tutte le serie. StreamingCommunity si collega da solo se il titolo è proprio quello (non basta che "inizi con": *Dark* non è *Dark Matter*) e l'anno è vicino. Ha le stesse stagioni di Sonarr ("Tutte le stagioni"), e da lì in poi funziona come per gli anime: prima i link diretti, la versione italiana sostituisce le altre, le puntate nuove ogni ora.
+- Il video arriva a pezzi (HLS): lo scarica **ffmpeg**, già dentro Cerca, in un file MKV con l'audio italiano. Un download interrotto ricomincia da capo, non da metà.
+
 ### Musica
 
 La libreria **Musica** di Jellyfin c'è sempre: copia i tuoi album in `media/musica`, meglio se ordinati come `Artista/Album/01 - Brano.mp3`. Jellyfin scarica copertine e informazioni da MusicBrainz.

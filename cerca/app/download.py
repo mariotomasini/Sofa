@@ -8,6 +8,7 @@ import contextlib
 import json
 import logging
 import re
+import shutil
 import time
 import unicodedata
 from pathlib import Path
@@ -31,7 +32,7 @@ PREFISSO_ETICHETTA = "mediabox-"
 CATEGORIE_SORVEGLIATE = ("cerca", "manuale")
 CATEGORIA_MUSICA = "musica"
 # download HTTP contemporanei per fonte: i siti degli anime non amano troppe richieste insieme
-CONTEMPORANEI = {"animeunity": 2, "animeworld": 2}
+CONTEMPORANEI = {"animeunity": 2, "animeworld": 2, "streamingcommunity": 2}
 
 
 # --- funzioni pure (testate) ---------------------------------------------------
@@ -151,6 +152,17 @@ class GestoreDownload:
             anno="", poster=poster, fonte=fonti[0][0], tipo="http", url="diretto:" + json.dumps(fonti),
             nome_file=nome_file, percorso=str(cartella / nome_file), categoria="cerca", serie=serie_id,
             puntate=json.dumps([episodio["id"]]), totale=0,
+        )
+        self._avvia_http(id_download)
+        return id_download
+
+    async def da_diretto_film(self, film: dict, fonti: list[list], nome_file: str) -> int:
+        """Un film da un sito diretto (StreamingCommunity): poi a Radarr come gli altri."""
+        cartella = self.config.cartella_download / "cerca" / nome_cartella(film["titolo"], film.get("anno", ""))
+        id_download = self.archivio.nuovo_download(
+            tmdb_id=film["id"], titolo=film["titolo"], anno=film.get("anno", ""), poster=film.get("poster", ""),
+            fonte=fonti[0][0], tipo="http", url="diretto:" + json.dumps(fonti), nome_file=nome_file,
+            percorso=str(cartella / nome_file), categoria="cerca", totale=0,
         )
         self._avvia_http(id_download)
         return id_download
@@ -343,6 +355,9 @@ class GestoreDownload:
             gia_scaricati = parziale.stat().st_size if parziale.exists() else 0
             try:
                 url, intestazioni = await self._link(voce)
+                if url.startswith("hls:"):
+                    await self._scarica_hls(id_download, parziale, json.loads(url[4:]), intestazioni)
+                    break
                 intestazioni = {**intestazioni, **({"Range": f"bytes={gia_scaricati}-"} if gia_scaricati else {})}
                 async with self.client.stream(
                     "GET", url, headers=intestazioni, timeout=httpx.Timeout(60, connect=20)
@@ -377,6 +392,8 @@ class GestoreDownload:
                 tentativi += 1
                 log.warning("Download %s interrotto (%s), tentativo %s", id_download, exc, tentativi)
                 if tentativi >= 5:
+                    if await self._riserva_radarr(voce):
+                        return
                     messaggio = (f"{exc.cosa} {exc.cosa_fare}".strip() if isinstance(exc, ErroreServizio) else
                                  "Il download si è interrotto più volte. Premi \"Riprova\": riparte da dove era.")
                     self.archivio.aggiorna_download(id_download, stato="errore", velocita=0, messaggio=messaggio)
@@ -386,6 +403,60 @@ class GestoreDownload:
         self._compiti.pop(id_download, None)  # da qui "Annulla" non interrompe più l'importazione
         self.archivio.aggiorna_download(id_download, stato="completato", velocita=0)
         await self._passa_a_radarr(id_download)
+
+    async def _riserva_radarr(self, voce: dict) -> bool:
+        """Un film da un sito diretto che non si scarica: lo passo a Radarr (torrent), senza fermarmi."""
+        if voce.get("serie") or not voce.get("tmdb_id") or not str(voce.get("url") or "").startswith("diretto:"):
+            return False
+        try:
+            await self.radarr.scarica_da_solo(voce["tmdb_id"])
+        except ErroreServizio:
+            return False
+        for p in (Path(voce["percorso"]), Path(voce["percorso"] + ".part")):
+            with contextlib.suppress(OSError):
+                p.unlink()
+        self.archivio.elimina_download(voce["id"])
+        log.info("Download diretto di %s non riuscito: ci pensa Radarr", voce.get("titolo"))
+        return True
+
+    async def _scarica_hls(self, id_download: int, parziale: Path, flussi: dict, intestazioni: dict) -> None:
+        """Video (e audio italiano, se è a parte) con ffmpeg, in un unico file MKV. Lo streaming a pezzi
+        non si riprende da metà: se si interrompe, ricomincia. L'avanzamento è stimato dalla durata."""
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise ErroreServizio("Manca ffmpeg, che serve per questo sito.", "Aggiorna mediabox (\"mediabox update\").")
+        testata = "".join(f"{k}: {v}\r\n" for k, v in intestazioni.items())
+        comando = [ffmpeg, "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1",
+                   "-headers", testata, "-i", flussi["video"]]
+        if flussi.get("audio"):
+            comando += ["-headers", testata, "-i", flussi["audio"], "-map", "0:v:0", "-map", "1:a:0"]
+        else:
+            comando += ["-map", "0:v:0", "-map", "0:a?"]
+        comando += ["-c", "copy", "-f", "matroska", str(parziale)]
+        banda = int(flussi.get("banda") or 0) or 4_000_000
+        totale = int(banda / 8 * float(flussi.get("durata") or 0))
+        processo = await asyncio.create_subprocess_exec(*comando, stdout=asyncio.subprocess.PIPE,
+                                                        stderr=asyncio.subprocess.PIPE)
+        try:
+            ultimo = 0.0
+            async for riga in processo.stdout:
+                chiave, _, valore = riga.decode(errors="ignore").strip().partition("=")
+                if chiave == "out_time_us" and valore.isdigit() and time.monotonic() - ultimo > 2:
+                    fatti = int(banda / 8 * int(valore) / 1_000_000)
+                    self.archivio.aggiorna_download(id_download, scaricati=fatti, totale=max(totale, fatti))
+                    ultimo = time.monotonic()
+            errore = (await processo.stderr.read()).decode(errors="ignore").strip()
+            if await processo.wait() != 0:
+                with contextlib.suppress(OSError):
+                    parziale.unlink()
+                log.warning("ffmpeg: %s", errore[-500:])
+                raise ErroreServizio("Il download a pezzi (HLS) si è interrotto.", "Premi \"Riprova\": riparte da capo.")
+        except asyncio.CancelledError:
+            with contextlib.suppress(ProcessLookupError):
+                processo.kill()
+            raise
+        dimensione = parziale.stat().st_size if parziale.exists() else 0
+        self.archivio.aggiorna_download(id_download, scaricati=dimensione, totale=dimensione, velocita=0)
 
     # --- torrent -------------------------------------------------------------------
     async def _solo_file_scelto(self, id_download: int, nome_file: str) -> None:

@@ -43,8 +43,9 @@ MAX_PER_GIRO = 300  # puntate messe in coda al massimo in un giro (ne scarico po
 DURATA_TOKEN = 20 * 60
 CHIAVE = "animeunity:"
 # in ordine di preferenza (a parità di lingua): se una non dà il file si prova l'altra
-FONTI = ("animeunity", "animeworld")
-NOMI_FONTI = {"animeunity": "AnimeUnity", "animeworld": "AnimeWorld"}
+FONTI = ("animeunity", "animeworld", "streamingcommunity")
+NOMI_FONTI = {"animeunity": "AnimeUnity", "animeworld": "AnimeWorld", "streamingcommunity": "StreamingCommunity"}
+TUTTE_LE_STAGIONI = -1  # collegamento di un sito che ha le stesse stagioni di Sonarr (StreamingCommunity)
 
 RE_CSRF = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', re.I)
 RE_DOWNLOAD = re.compile(r"""window\.downloadUrl\s*=\s*['"]([^'"]+)['"]""")
@@ -132,8 +133,12 @@ def indovina_stagione(voce: dict, voci: list[dict], stagioni: dict[int, int], as
     return normali[min(posto, len(normali) - 1)]
 
 
-def puntata_sonarr(episodi: list[dict], stagione: int, numero: int) -> dict | None:
-    """La puntata di Sonarr per il numero di AnimeUnity: nella stagione, o con la numerazione assoluta."""
+def puntata_sonarr(episodi: list[dict], stagione: int, numero: int, stagione_sito: int | None = None) -> dict | None:
+    """La puntata di Sonarr per il numero sul sito: nella stagione, con la numerazione assoluta,
+    o (TUTTE_LE_STAGIONI) nella stessa stagione che dice il sito."""
+    if stagione == TUTTE_LE_STAGIONI:
+        return next((e for e in episodi if e.get("seasonNumber") == stagione_sito
+                     and e.get("episodeNumber") == numero), None)
     for e in episodi:
         if stagione > 0 and e.get("seasonNumber") == stagione and e.get("episodeNumber") == numero:
             return e
@@ -144,6 +149,8 @@ def puntata_sonarr(episodi: list[dict], stagione: int, numero: int) -> dict | No
 
 def numero_au(collegamento: dict, episodio: dict) -> int | None:
     """Il contrario: il numero su AnimeUnity di una puntata di Sonarr (None se non è di quella voce)."""
+    if collegamento["stagione"] == TUTTE_LE_STAGIONI:
+        return episodio.get("episodeNumber") if episodio.get("seasonNumber", 0) > 0 else None
     if collegamento["stagione"] > 0:
         return episodio.get("episodeNumber") if episodio.get("seasonNumber") == collegamento["stagione"] else None
     return episodio.get("absoluteEpisodeNumber") if episodio.get("seasonNumber", 0) > 0 else None
@@ -174,10 +181,25 @@ def candidati_forti(voci: list[dict], titoli: list[str]) -> list[dict]:
 
 
 def scegli_collegamenti(voci: list[dict], titoli: list[str], stagioni: dict[int, int], assoluta: bool,
-                        italiano: bool) -> list[dict]:
-    """I collegamenti automatici: per ogni sito e stagione la voce doppiata e quella sottotitolata migliori."""
-    forti = ordina_risultati(candidati_forti(voci, titoli), titoli, italiano)
+                        italiano: bool, anno: str = "") -> list[dict]:
+    """I collegamenti automatici: per ogni sito e stagione la voce doppiata e quella sottotitolata migliori.
+
+    I siti con le stesse stagioni di Sonarr (StreamingCommunity) hanno una voce per tutta la serie:
+    lì basta il titolo uguale (non "che inizia con": "Dark" non è "Dark Matter") e l'anno vicino.
+    """
+    cercati = {_semplice(t) for t in titoli if t} - {""}
+    proprie = []
+    for v in voci:
+        if not v.get("stagioni_proprie") or v["tipo"] != "TV":
+            continue
+        nomi = {_semplice(n) for n in [v["titolo"], *v.get("altri_titoli", [])]}
+        vicino = not anno or not v["anno"] or abs(int(v["anno"]) - int(anno)) <= 1 or int(v["anno"]) > int(anno)
+        if nomi & cercati and vicino:
+            proprie.append(v)
+    forti = ordina_risultati(candidati_forti([v for v in voci if not v.get("stagioni_proprie")], titoli), titoli, italiano)
     scelti: dict[tuple[str, int, bool], dict] = {}
+    for v in ordina_risultati(proprie, titoli, italiano):
+        scelti.setdefault((v["fonte"], TUTTE_LE_STAGIONI, v["doppiato"]), {**v, "stagione": TUTTE_LE_STAGIONI})
     for v in forti:
         stagione = indovina_stagione(v, forti, stagioni, assoluta)
         scelti.setdefault((v.get("fonte", "animeunity"), stagione, v["doppiato"]), {**v, "stagione": stagione})
@@ -247,6 +269,9 @@ def da_scaricare(episodi: list[dict], fonti: dict[int, list[tuple[dict, dict]]],
 # --- il sito -------------------------------------------------------------------
 
 class AnimeUnity:
+    nome = "AnimeUnity"
+    solo_anime = True
+
     def __init__(self, config) -> None:
         self.config = config
         self._client: httpx.AsyncClient | None = None
@@ -453,9 +478,9 @@ class AnimeDiretti:
                 "puntate": voce.get("puntate", 0), "stagione": stagione, "auto": auto}
 
     # --- ricerca -----------------------------------------------------------------
-    async def cerca(self, titolo: str) -> list[dict]:
+    async def cerca(self, titolo: str, fonti: list[str] | None = None) -> list[dict]:
         """Su tutti i siti accesi insieme; un sito che non risponde non ferma gli altri."""
-        fonti = self.siti_attivi()
+        fonti = fonti or self.siti_attivi()
         esiti = await asyncio.gather(*(self.siti[f].cerca(titolo) for f in fonti), return_exceptions=True)
         voci, errori = [], []
         for f, esito in zip(fonti, esiti, strict=True):
@@ -474,7 +499,9 @@ class AnimeDiretti:
     async def collega_da_solo(self, serie_id: int, dati: dict, episodi: list[dict], forza: bool = False) -> list[dict]:
         """Cerca l'anime sui siti e lo collega da solo (una volta al giorno, o subito con `forza`)."""
         stato = self.leggi(serie_id)
-        if not self.attivo or not (dati.get("seriesType") == "anime" or e_anime(dati)):
+        anime = dati.get("seriesType") == "anime" or e_anime(dati)
+        siti = [f for f in self.siti_attivi() if anime or not getattr(self.siti[f], "solo_anime", True)]
+        if not siti:
             return self.collegamenti(serie_id)
         if not forza and time.time() - stato["cercato"] < self.RICERCA_OGNI:
             return self.collegamenti(serie_id)
@@ -483,7 +510,7 @@ class AnimeDiretti:
         voci: dict[str, dict] = {}
         for t in titoli[:3]:
             try:
-                for v in await self.cerca(t):
+                for v in await self.cerca(t, siti):
                     voci.setdefault(chiave_voce(v), v)
             except ErroreServizio:
                 return self.collegamenti(serie_id)
@@ -496,7 +523,7 @@ class AnimeDiretti:
         occupati = {(fonte_di(c), c["stagione"], c["doppiato"]) for c in a_mano}
         automatici = [self._collegamento(v, v["stagione"], auto=True)
                       for v in scegli_collegamenti([v for k, v in voci.items() if k not in scollegati],
-                                                   titoli, stagioni, assoluta, self.italiano)
+                                                   titoli, stagioni, assoluta, self.italiano, str(dati.get("year") or ""))
                       if (fonte_di(v), v["stagione"], v["doppiato"]) not in occupati]
         stato.update(collegamenti=a_mano + automatici, cercato=time.time())
         self._scrivi(serie_id, stato)
@@ -516,7 +543,7 @@ class AnimeDiretti:
                 continue
             for p in puntate:
                 n = numero_puntata(p["numero"])
-                e = puntata_sonarr(episodi, c["stagione"], n) if n is not None else None
+                e = puntata_sonarr(episodi, c["stagione"], n, p.get("stagione")) if n is not None else None
                 if e is not None:
                     fonti.setdefault(e["id"], []).append((c, p))
         return fonti

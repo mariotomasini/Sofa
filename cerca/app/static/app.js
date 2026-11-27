@@ -248,7 +248,7 @@ function avviaTorrent() {
 
 // --- elenco download (pagina Download e home) -----------------------------------------
 function htmlDownload(d, compatto = false) {
-  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", animeunity: "AnimeUnity", animeworld: "AnimeWorld" }[d.fonte] || d.fonte;
+  const fonte = { archive: "Internet Archive", prowlarr: "Indexer", manuale: "Torrent manuale", animeunity: "AnimeUnity", animeworld: "AnimeWorld", streamingcommunity: "StreamingCommunity" }[d.fonte] || d.fonte;
   if (compatto) {
     const riga = d.stato === "in_corso"
       ? `${Math.round(d.percentuale)}% · ${esc(d.scaricati_testo)} di ${esc(d.totale_testo)}${d.velocita_testo ? " · " + esc(d.velocita_testo) : ""}`
@@ -1377,13 +1377,16 @@ function htmlPuntate(stagioni) {
 }
 
 // --- Link diretti (AnimeUnity, AnimeWorld): preferiti ai torrent, e la versione doppiata in italiano sostituisce le altre
-function nomeStagione(n) { return Number(n) === 0 ? "Numerazione assoluta" : `Stagione ${n}`; }
+function nomeStagione(n) {
+  if (Number(n) === -1) return "Tutte le stagioni";
+  return Number(n) === 0 ? "Numerazione assoluta" : `Stagione ${n}`;
+}
 
 function htmlCollegati(au) {
   if (!au.collegamenti.length) {
     return '<p class="sottotitolo">Nessuna voce collegata: le puntate le cerca Sonarr come torrent. Cerca qui sotto per collegarne una.</p>';
   }
-  const nomi = { animeunity: "AnimeUnity", animeworld: "AnimeWorld" };
+  const nomi = { animeunity: "AnimeUnity", animeworld: "AnimeWorld", streamingcommunity: "StreamingCommunity" };
   return au.collegamenti.map((c) => `<div class="au-voce">` +
     (c.immagine ? `<img src="${esc(c.immagine)}" alt="" loading="lazy">` : "") +
     `<div class="descrizione"><strong>${esc(c.titolo)}</strong><span class="sottotitolo">${esc(nomi[c.fonte] || c.fonte)} · ` +
@@ -1393,7 +1396,7 @@ function htmlCollegati(au) {
 
 function htmlRisultatiAU(r) {
   if (!r.risultati.length) return '<p class="sottotitolo">Nessun sito trova niente con questo titolo.</p>';
-  const opzioni = (scelta) => [...r.stagioni, ...(r.assoluta ? [0] : [])]
+  const opzioni = (scelta) => (scelta === -1 ? [-1] : [...r.stagioni, ...(r.assoluta ? [0] : [])])
     .map((n) => `<option value="${n}"${n === scelta ? " selected" : ""}>${esc(nomeStagione(n))}</option>`).join("");
   return r.risultati.map((v, i) => `<div class="au-voce">` +
     (v.immagine ? `<img src="${esc(v.immagine)}" alt="" loading="lazy">` : "") +
@@ -1408,6 +1411,10 @@ function mostraAnimeUnity(d, au) {
   if (!au || !au.attivo || !(au.anime || au.collegamenti.length || d._anime)) { sezione.hidden = true; return; }
   if (au.anime) d._anime = true;
   sezione.hidden = false;
+  if (au.siti && au.siti.length) {
+    document.getElementById("au-siti").textContent = `${au.siti.join(", ")}, senza torrent: se ci sono si usano sempre ` +
+      "per primi, e la versione doppiata in italiano sostituisce quelle in altre lingue.";
+  }
   const box = document.getElementById("au-collegati");
   const html = htmlCollegati(au);
   if (box._html !== html) { box.innerHTML = html; box._html = html; }
@@ -1431,10 +1438,10 @@ function dialogoSerie() {
     <div id="serie-puntate" class="serie-puntate"></div>
     <section id="serie-au" class="serie-au" hidden>
       <div class="au-testa"><strong>Link diretti</strong>
-        <span class="sottotitolo" id="au-siti">AnimeUnity e AnimeWorld, senza torrent: se ci sono si usano sempre per primi,
+        <span class="sottotitolo" id="au-siti">AnimeUnity, AnimeWorld e StreamingCommunity, senza torrent: se ci sono si usano sempre per primi,
           e la versione doppiata in italiano sostituisce quelle in altre lingue.</span></div>
       <div id="au-collegati"></div>
-      <form id="au-cerca" class="au-cerca"><input id="au-testo" type="search" placeholder="Cerca sui siti diretti" aria-label="Cerca su AnimeUnity e AnimeWorld">
+      <form id="au-cerca" class="au-cerca"><input id="au-testo" type="search" placeholder="Cerca sui siti diretti" aria-label="Cerca sui siti con link diretti">
         <button class="secondario" type="submit">${ICONE.lente}Cerca</button></form>
       <div id="au-risultati"></div>
     </section>
@@ -1489,7 +1496,7 @@ function dialogoSerie() {
   document.getElementById("au-cerca").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (!d.dataset.serieId) return;
-    risultatiAU.innerHTML = '<p class="caricamento">Cerco su AnimeUnity e AnimeWorld</p>';
+    risultatiAU.innerHTML = '<p class="caricamento">Cerco sui siti con link diretti</p>';
     try {
       const q = encodeURIComponent(document.getElementById("au-testo").value.trim());
       const r = await chiama(`/api/serie/${d.dataset.serieId}/diretti/cerca?q=${q}`);
