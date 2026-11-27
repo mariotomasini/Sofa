@@ -100,11 +100,11 @@ class ScaricaMusica:
             "I brani molto nuovi o di artisti piccoli spesso non ci sono: prova l'album intero, "
             "riprova tra qualche giorno o aggiungi in Prowlarr un indexer che ha musica.")
 
-    def _in_elenco(self, artista: str, titolo: str, copertina: str, origine: str) -> int:
+    def _in_elenco(self, artista: str, titolo: str, copertina: str, origine: str, fonte: str = "prowlarr") -> int:
         """La voce compare subito nella pagina Download ("Cerco sugli indexer"), prima della ricerca,
         che con molti indexer dura anche un minuto o due."""
         return self.download.archivio.nuovo_download(
-            tmdb_id=None, titolo=f"{artista} · {titolo}", anno="", poster=copertina, fonte="prowlarr",
+            tmdb_id=None, titolo=f"{artista} · {titolo}", anno="", poster=copertina, fonte=fonte,
             tipo="torrent", url=origine, categoria=CATEGORIA_QBIT, stato="ricerca")
 
     async def _avvia(self, id_download: int, scelto: dict, artista: str, titolo: str, copertina: str,
@@ -151,9 +151,10 @@ class ScaricaMusica:
             raise self._non_trovato(f"l'album \"{titolo}\" di {artista}")
         await self._avvia(id_download, scelto, artista, titolo, copertina)
 
-    async def brano(self, id_brano: int) -> dict:
+    async def brano(self, id_brano: int, fonte: str = "prowlarr") -> dict:
+        """fonte="importazione": dall'importazione delle playlist, senza un avviso per ogni brano."""
         artista, titolo, nome_album, copertina = await self._dati_brano(id_brano)
-        id_download = self._in_elenco(artista, titolo, copertina, f"deezer:brano:{id_brano}")
+        id_download = self._in_elenco(artista, titolo, copertina, f"deezer:brano:{id_brano}", fonte)
         self.download.cerca_in_sottofondo(
             id_download, self._scarica_brano(id_download, artista, titolo, nome_album, copertina))
         return {"id": id_download,
