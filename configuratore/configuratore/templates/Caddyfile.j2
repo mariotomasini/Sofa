@@ -73,6 +73,13 @@
 		reverse_proxy lidarr:8686
 	}
 {%- endif %}
+{%- if navidrome %}
+	# Navidrome chiede da sé utente e password (anche alle app): niente password di Caddy qui
+	redir /navidrome /navidrome/
+	handle /navidrome/* {
+		reverse_proxy navidrome:4533
+	}
+{%- endif %}
 {%- if bazarr %}
 	handle /bazarr* {
 		import pannello
@@ -128,7 +135,7 @@
 		reverse_proxy cerca:8000
 	}
 
-	@servizi path /cerca/* /jellyfin* /qbit* /radarr* /prowlarr* /sonarr* /lidarr* /bazarr* /beszel* /tv* /impostazioni*
+	@servizi path /cerca/* /jellyfin* /qbit* /radarr* /prowlarr* /sonarr* /lidarr* /navidrome* /bazarr* /beszel* /tv* /impostazioni*
 	handle @servizi {
 		redir http://{host}{{ porta_principale }}{uri} 302
 	}

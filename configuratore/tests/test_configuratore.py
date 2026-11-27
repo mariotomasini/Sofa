@@ -758,4 +758,90 @@ def test_utenti_casa_dalla_pagina():
     for sbagliato in ("admin", "Mario<script>", "x" * 31, ",".join(f"u{i}" for i in range(13))):
         with pytest.raises(DatiNonValidi):
             utenti_validi(sbagliato)
-    assert piano(["UTENTI_CASA"]).configura == ["jellyfin"]
+    assert piano(["UTENTI_CASA"]).configura == ["jellyfin", "navidrome"]
+
+
+def test_navidrome_acceso_di_base(cartella):
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert "  navidrome:" in compose and "D:/Mediabox/media/musica:/music:ro" in compose
+    assert "navidrome_dati:/volumi/navidrome_dati" in compose  # nel backup
+    assert 'NAVIDROME_URL: "http://navidrome:4533"' in compose
+    caddy = (cartella / "generato" / "Caddyfile").read_text()
+    blocco = caddy.split("handle /navidrome/* {", 1)[1].split("}", 1)[0]
+    # le app (Amperfy, Symfonium) non sanno passare la password di Caddy: Navidrome ha il suo accesso
+    assert "reverse_proxy navidrome:4533" in blocco and "pannello" not in blocco
+    assert "Navidrome" in (cartella / "generato" / "homepage" / "services.yaml").read_text()
+
+
+def test_navidrome_spento(cartella):
+    with open(cartella / ".env", "a") as f:
+        f.write("WITH_NAVIDROME=no\n")
+    genera(Impostazioni.carica(cartella), cartella)
+    compose = (cartella / "generato" / "docker-compose.yml").read_text()
+    assert "navidrome" not in compose.replace('NAVIDROME_URL: ""', "")
+    assert "handle /navidrome" not in (cartella / "generato" / "Caddyfile").read_text()
+
+
+def test_piano_utenti_casa_rifa_navidrome():
+    from configuratore.piano_impostazioni import piano
+
+    assert piano({"UTENTI_CASA"}).configura == ["jellyfin", "navidrome"]
+    assert piano({"WITH_NAVIDROME"}).configura == ["navidrome"]
+
+
+def test_configura_navidrome(cartella, monkeypatch):
+    import httpx
+
+    from configuratore.riepilogo import Esito
+    from configuratore.servizi import navidrome
+
+    with open(cartella / ".env", "a") as f:
+        f.write("UTENTI_CASA=Anna,admin,Luca\n")
+    imp = Impostazioni.carica(cartella)
+    richieste = []
+
+    def gestore(r: httpx.Request) -> httpx.Response:
+        richieste.append(r)
+        percorso = r.url.path
+        if percorso == "/navidrome/auth/createAdmin":
+            return httpx.Response(403, json={"error": "Cannot create another first admin"})
+        if percorso == "/navidrome/auth/login":
+            assert json.loads(r.content) == {"username": "admin", "password": "Pa$$word123"}
+            return httpx.Response(200, json={"token": "tok"})
+        if percorso == "/navidrome/api/user" and r.method == "GET":
+            assert r.headers["x-nd-authorization"] == "Bearer tok"
+            return httpx.Response(200, json=[{"userName": "admin"}, {"userName": "anna"}])
+        if percorso == "/navidrome/api/user":
+            return httpx.Response(200, json={"id": "x"})
+        if percorso == "/navidrome/rest/startScan.view":
+            return httpx.Response(200, json={"subsonic-response": {"status": "ok"}})
+        raise AssertionError(percorso)
+
+    vero = httpx.Client
+    monkeypatch.setattr(navidrome.httpx, "Client", lambda **kw: vero(transport=httpx.MockTransport(gestore), **kw))
+    monkeypatch.setattr(navidrome, "attendi", lambda *a, **kw: None)
+    esito = Esito()
+    navidrome.configura(imp, esito)
+
+    creati = [json.loads(r.content) for r in richieste if r.url.path.endswith("/api/user") and r.method == "POST"]
+    # Anna c'è già (il nome non conta maiuscole), admin è l'amministratore: si crea solo Luca
+    assert creati == [{"userName": "Luca", "name": "Luca", "password": "luca", "isAdmin": False}]
+    scansione = next(r for r in richieste if r.url.path.endswith("startScan.view"))
+    assert "p=" not in str(scansione.url) and scansione.url.params["u"] == "admin"  # mai la password in chiaro
+    assert any("Amperfy" in n and "mediabox.local/navidrome" in n for n in esito.note)
+
+
+def test_navidrome_password_sbagliata(cartella, monkeypatch):
+    import httpx
+
+    from configuratore.servizi import navidrome
+
+    risposte = {"/navidrome/auth/createAdmin": 403, "/navidrome/auth/login": 401}
+    vero = httpx.Client
+    monkeypatch.setattr(navidrome.httpx, "Client", lambda **kw: vero(
+        transport=httpx.MockTransport(lambda r: httpx.Response(risposte[r.url.path], json={})), **kw))
+    monkeypatch.setattr(navidrome, "attendi", lambda *a, **kw: None)
+    with pytest.raises(ErroreMediabox) as e:
+        navidrome.configura(Impostazioni.carica(cartella), None)
+    assert "ADMIN_PASSWORD" in e.value.cosa_fare

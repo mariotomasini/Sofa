@@ -48,6 +48,8 @@ class Config:
     jellyfin_url: str = field(default_factory=lambda: _env("JELLYFIN_URL", "http://jellyfin:8096/jellyfin"))
     lidarr_url: str = field(default_factory=lambda: _env("LIDARR_URL"))
     lidarr_chiave: str = field(default_factory=lambda: _env("LIDARR_API_KEY"))
+    # Navidrome: la musica nelle app per telefono (vuoto = spento)
+    navidrome_url: str = field(default_factory=lambda: _env("NAVIDROME_URL"))
     lingue_audio: tuple[str, ...] = field(default_factory=lambda: tuple(
         c.strip().lower() for c in (_env("LINGUE_AUDIO", "it,es,en") or "it,es,en").split(",") if c.strip()
     ) or ("it", "es", "en"))

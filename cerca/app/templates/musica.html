@@ -16,6 +16,15 @@
     <strong>Vuoi la canzone intera?</strong>
     <p>Tocca la freccia accanto a un brano, o "Scarica l'album": quando è pronta la trovi in Brani preferiti.</p>
   </div>
+  {%- if navidrome %}
+  <div class="nota">
+    <strong>Ascoltala sul telefono, anche offline</strong>
+    <p>Installa <b>Amperfy</b> (iPhone) o <b>Symfonium</b> (Android) e come server scrivi
+      <code id="indirizzo-navidrome">{{ indirizzo_navidrome }}</code>, poi il tuo nome e
+      {% if admin %}la password di mediabox{% else %}come password il tuo nome in minuscolo{% endif %}.
+      Dal browser: <a href="/navidrome/">Navidrome</a>.</p>
+  </div>
+  {%- endif %}
 </div>
 {% endblock %}
 {% block script %}<script>window.LIDARR = {{ 'true' if lidarr else 'false' }}; avviaMusica();</script>{% endblock %}
