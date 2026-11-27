@@ -92,14 +92,23 @@ class Immich:
         self.client.headers["Authorization"] = f"Bearer {token}"
 
     def impostazioni_di_casa(self, imp: Impostazioni) -> bool:
-        """Cartelle per persona e per data, niente controllo delle versioni (gli
-        aggiornamenti li porta mediabox), indirizzo giusto nei link di condivisione.
-        Restituisce True se ha cambiato qualcosa."""
+        """Cartelle per persona e per data, video dell'iPhone tenuti come sono, niente
+        controllo delle versioni (gli aggiornamenti li porta mediabox), indirizzo giusto
+        nei link di condivisione. Restituisce True se ha cambiato qualcosa."""
         config = controlla(self.client.get("/system-config"), "leggere le impostazioni di Immich").json()
         prima = repr(config)
         modello = config.setdefault("storageTemplate", {})
         modello["enabled"] = True
         modello["template"] = MODELLO_CARTELLE
+        # L'iPhone registra in HEVC (.MOV): iPhone, Safari e quasi tutti i browser di oggi lo
+        # leggono, quindi niente seconda copia convertita (meno spazio, meno lavoro per il PC).
+        # Si convertono solo i video in formati che i browser non leggono.
+        video = config.setdefault("ffmpeg", {})
+        for chiave, aggiunte in (("acceptedVideoCodecs", ["h264", "hevc"]), ("acceptedContainers", ["mov", "mp4"])):
+            attuali = list(video.get(chiave) or [])
+            video[chiave] = attuali + [a for a in aggiunte if a not in attuali]
+        if video.get("transcode") in (None, "all", "optimal", "bitrate"):
+            video["transcode"] = "required"
         config.setdefault("newVersionCheck", {})["enabled"] = False
         config.setdefault("server", {})["externalDomain"] = indirizzo_app(imp)
         if repr(config) == prima:

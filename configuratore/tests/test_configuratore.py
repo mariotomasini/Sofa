@@ -918,7 +918,9 @@ def test_configura_immich(cartella, monkeypatch):
         assert r.headers["authorization"] == "Bearer tok"
         if percorso == "/api/system-config" and r.method == "GET":
             return httpx.Response(200, json={"storageTemplate": {"enabled": False, "template": "x"},
-                                             "newVersionCheck": {"enabled": True}, "server": {}})
+                                             "newVersionCheck": {"enabled": True}, "server": {},
+                                             "ffmpeg": {"acceptedVideoCodecs": ["h264"], "transcode": "optimal",
+                                                        "acceptedContainers": ["mov", "ogg", "webm"]}})
         if percorso == "/api/system-config":
             salvata.update(json.loads(r.content))
             return httpx.Response(200, json={})
@@ -945,6 +947,10 @@ def test_configura_immich(cartella, monkeypatch):
     assert mario["password"] not in ("mario", "Pa$$word123")  # mai una password che gli altri conoscono
     assert salvata["storageTemplate"] == {"enabled": True, "template": immich.MODELLO_CARTELLE}
     assert salvata["newVersionCheck"]["enabled"] is False
+    # i video HEVC dell'iPhone restano come sono: niente seconda copia convertita
+    assert salvata["ffmpeg"]["acceptedVideoCodecs"] == ["h264", "hevc"]
+    assert salvata["ffmpeg"]["acceptedContainers"] == ["mov", "ogg", "webm", "mp4"]
+    assert salvata["ffmpeg"]["transcode"] == "required"
     assert any(mario["password"] in d and "http://192.168.1.10:2283" in d for d in esito.cose_da_fare)
 
 
