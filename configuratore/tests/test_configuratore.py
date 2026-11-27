@@ -1059,3 +1059,15 @@ def test_immich_su_un_disco_con_le_foto_di_prima(cartella, monkeypatch, tmp_path
     immich.configura(Impostazioni.carica(cartella), esito)
     assert creati == []
     assert any("Ripristina da Backup" in d and "20261127T020000" in d for d in esito.cose_da_fare)
+
+
+def test_chi_ha_le_foto_dalla_pagina():
+    from configuratore.web.procedura import DatiNonValidi, modifiche_da_scelte, scelte_attuali
+
+    v = {"ADMIN_USER": "admin", "WITH_IMMICH": "si"}
+    assert modifiche_da_scelte(v, {"foto_persone": "Mario, Anna"})["FOTO_PERSONE"] == "Mario,Anna"
+    with pytest.raises(DatiNonValidi) as e:
+        modifiche_da_scelte(v, {"foto_persone": "admin"})  # l'amministratore non ha foto sue
+    assert e.value.campo == "foto_persone"
+    assert scelte_attuali({"FOTO_PERSONE": "Mario,Anna"})["foto_persone"] == "Mario, Anna"
+    assert any(x["chiave"] == "WITH_IMMICH" for x in scelte_attuali({})["voci"])

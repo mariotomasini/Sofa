@@ -81,20 +81,21 @@ def lingue_audio_valide(testo: str) -> str | None:
 MASSIMO_UTENTI = 12
 
 
-def utenti_validi(testo: str, admin: str = "admin") -> str:
-    """Le persone di casa per UTENTI_CASA: nomi brevi, separati da virgole ("" = nessuno)."""
+def utenti_validi(testo: str, admin: str = "admin", campo: str = "utenti_casa") -> str:
+    """Le persone di casa per UTENTI_CASA: nomi brevi, separati da virgole ("" = nessuno).
+    Con campo="foto_persone" le stesse regole valgono per chi ha le foto (FOTO_PERSONE)."""
     nomi: list[str] = []
     for nome in (n.strip() for n in testo.replace("\n", ",").split(",")):
         if not nome:
             continue
         if len(nome) > 30 or not re.fullmatch(r"[\w][\w .'-]*", nome):
-            raise DatiNonValidi("utenti_casa", f"\"{nome}\" non va bene: usa lettere, numeri e spazi (al massimo 30).")
+            raise DatiNonValidi(campo, f"\"{nome}\" non va bene: usa lettere, numeri e spazi (al massimo 30).")
         if nome.lower() == admin.lower():
-            raise DatiNonValidi("utenti_casa", f"\"{nome}\" è l'amministratore: scegli un altro nome.")
+            raise DatiNonValidi(campo, f"\"{nome}\" è l'amministratore: scegli un altro nome.")
         if nome.lower() not in {n.lower() for n in nomi}:
             nomi.append(nome)
     if len(nomi) > MASSIMO_UTENTI:
-        raise DatiNonValidi("utenti_casa", f"Al massimo {MASSIMO_UTENTI} utenti di casa.")
+        raise DatiNonValidi(campo, f"Al massimo {MASSIMO_UTENTI} utenti di casa.")
     return ",".join(nomi)
 
 
@@ -186,6 +187,7 @@ def scelte_attuali(v: dict[str, str]) -> dict:
         "lingue": v.get("LINGUE_SOTTOTITOLI", "it,en"),
         "ntfy": v.get("NTFY_TOPIC", ""),
         "utenti_casa": v.get("UTENTI_CASA", "").replace(",", ", "),
+        "foto_persone": v.get("FOTO_PERSONE", "").replace(",", ", "),
         "cartella": v.get("MEDIA_DIR", ""),
         "tmdb_impostata": bool(v.get("TMDB_API_KEY")),
         "lingue_audio": v.get("LINGUE_AUDIO", "it,es,en"),
@@ -267,6 +269,9 @@ def modifiche_da_scelte(v: dict[str, str], dati: dict) -> dict[str, str]:
         scelte["NTFY_TOPIC"] = pulisci_ntfy(str(dati["ntfy"]))
     if "utenti_casa" in dati:
         scelte["UTENTI_CASA"] = utenti_validi(str(dati["utenti_casa"]), v.get("ADMIN_USER") or "admin")
+    if "foto_persone" in dati:
+        scelte["FOTO_PERSONE"] = utenti_validi(str(dati["foto_persone"]), v.get("ADMIN_USER") or "admin",
+                                               campo="foto_persone")
     if "lingue_audio" in dati:
         audio = lingue_audio_valide(str(dati["lingue_audio"]))
         if not audio:

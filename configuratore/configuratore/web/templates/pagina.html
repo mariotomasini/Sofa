@@ -91,6 +91,12 @@
           <input id="utenti-casa" type="text" value="{{ s.utenti_casa or '' }}" placeholder="Mario, Anna, Bimbi" autocomplete="off" spellcheck="false">
           <p class="aiuto">Ognuno ha il suo utente, senza password: sulla TV e in Cerca sceglie la sua faccia e ritrova i suoi "già visto" e "Continua a guardare". L'utente admin resta solo per la configurazione e solo lui vede il Pannello.</p>
         </div>
+        <div class="lingue" id="blocco-foto">
+          <h2>Foto</h2>
+          <label class="campo" for="foto-persone">Chi ha le foto, separati da virgole</label>
+          <input id="foto-persone" type="text" value="{{ s.foto_persone or '' }}" placeholder="vuoto = gli utenti di casa" autocomplete="off" spellcheck="false">
+          <p class="aiuto">Ognuno ha il suo account delle foto, con la sua password, e vede solo le sue foto, i suoi album e i suoi volti. Nessuno vede quelle degli altri, nemmeno l'admin.</p>
+        </div>
         <h2>Download</h2>
         <div class="lingue">
           <label class="campo" for="lingue-audio">Lingue dell'audio, in ordine di preferenza</label>
