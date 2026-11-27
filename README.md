@@ -436,6 +436,21 @@ I film e gli episodi tolti non vengono riscaricati: Radarr e Sonarr smettono di 
 
 Se dopo la pulizia lo spazio è ancora poco, ricevi un avviso sul telefono (ntfy) e in Cerca compare un riquadro rosso.
 
+### Eliminare a mano
+
+Nella pagina **Spazio** di Cerca, sotto *Cosa c'è sul disco*, trovi tutto quello che è stato scaricato, diviso in **Film**, **Serie**, **Anime** e **Altro**, dal più pesante. Puoi eliminare un film, una serie intera, una stagione o una singola puntata (tocca *Stagioni e puntate*): tieni premuto *Elimina* per confermare.
+
+Eliminare vuol dire toglierlo **ovunque**:
+
+- dal disco, compreso il torrent ancora in condivisione, così lo spazio si libera davvero;
+- da **Jellyfin**, che aggiorna la libreria subito dopo;
+- da Radarr e Sonarr: un film o una serie eliminati non sono più **seguiti** e non vengono riscaricati. Per una stagione o una puntata, solo quelle smettono di essere seguite: le puntate nuove continuano ad arrivare;
+- i download ancora in corso e i link diretti salvati (AnimeUnity, AnimeWorld, StreamingCommunity) di quella serie.
+
+In **Altro** ci sono le cartelle dentro *film*, *serie* e *anime* che né Radarr né Sonarr conoscono (per esempio copiate a mano): eliminarle le cancella dal disco. Musica e registrazioni non compaiono mai.
+
+Ogni eliminazione finisce nell'elenco *Pulizie fatte*.
+
 Nella pagina **Spazio** di Cerca una lancetta mostra quanto disco è usato, con in rosso la zona in cui parte la pulizia automatica. Sotto vedi cosa si potrebbe liberare, puoi lanciare la pulizia a mano tenendo premuto **"Libera"** e trovi l'elenco di tutto quello che è stato tolto. La pagina **Controllo servizi** ricorda, in questo browser, gli ultimi controlli di ogni servizio con una fila di barrette: si vede subito se un servizio "va e viene".
 
 ![Pagina Spazio](docs/cerca-spazio.png)
