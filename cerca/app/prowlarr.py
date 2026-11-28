@@ -12,7 +12,7 @@ from .archive import normalizza
 from .config import Config
 from .db import Archivio
 from .lingue_release import lingue_audio, lingue_sottotitoli, valuta
-from .rete import ErroreServizio, non_raggiungibile
+from .rete import ErroreServizio, non_raggiungibile, scarica_torrent
 
 DIECI_MINUTI = 600
 ARTICOLI = {"the", "a", "an", "il", "lo", "la", "i", "gli", "le", "l", "un", "una", "uno"}
@@ -221,21 +221,16 @@ class Prowlarr:
         if not url:
             raise ErroreServizio("Questo risultato non ha un link per il download.", "Scegline un altro.")
         try:
-            r = await self.client.get(url, follow_redirects=False, timeout=60)
-            salti = 0
-            while r.is_redirect and salti < 5:
-                destinazione = r.headers.get("location", "")
-                if destinazione.startswith("magnet:"):
-                    return destinazione, None
-                r = await self.client.get(destinazione, follow_redirects=False, timeout=60)
-                salti += 1
+            magnet, contenuto = await scarica_torrent(self.client, url)
+        except httpx.HTTPStatusError as exc:
+            raise ErroreServizio(
+                f"L'indexer non ha restituito il torrent (errore {exc.response.status_code}).", "Scegli un altro risultato."
+            ) from exc
         except httpx.HTTPError as exc:
             raise ErroreServizio(
                 "Non riesco a scaricare il torrent da Prowlarr.",
                 "L'indexer potrebbe non rispondere: riprova o scegli un altro risultato.",
             ) from exc
-        if not r.is_success or not r.content:
-            raise ErroreServizio(
-                f"L'indexer non ha restituito il torrent (errore {r.status_code}).", "Scegli un altro risultato."
-            )
-        return None, r.content
+        except ValueError as exc:
+            raise ErroreServizio("L'indexer non ha dato un file .torrent valido.", "Scegli un altro risultato.") from exc
+        return (magnet, None) if magnet else (None, contenuto)

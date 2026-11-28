@@ -63,7 +63,7 @@ from .pulizia import Pulizia
 from .puntate_italiane import PuntateItaliane, ricorda_titoli
 from .qbittorrent import QBittorrent
 from .radarr import Radarr
-from .rete import ErroreServizio, non_raggiungibile, nuovo_client
+from .rete import ErroreServizio, non_raggiungibile, nuovo_client, scarica_torrent
 from .scoperte import Scoperte
 from .sentinella import Sentinella, ultimo_blocco
 from .serie import Serie, e_anime
@@ -1218,18 +1218,18 @@ async def api_torrent(
     elif e_magnet(link):
         magnet, titolo = link, nome_da_magnet(link)
     elif link.startswith(("http://", "https://")):
-        # Scarichiamo noi il .torrent: così gli errori sono chiari
+        # Scarichiamo noi il .torrent: così gli errori sono chiari (e un rimando a un magnet funziona)
         try:
-            r = await s.client.get(link, timeout=30)
-            r.raise_for_status()
+            magnet, contenuto = await scarica_torrent(s.client, link, timeout=30)
         except httpx.HTTPError as exc:
             raise ErroreServizio(
                 "Non riesco a scaricare il file .torrent da quell'indirizzo.",
                 "Controlla il link, oppure scarica il file sul tuo dispositivo e caricalo qui.",
             ) from exc
-        contenuto, magnet, titolo = r.content, None, Path(link.split("?")[0]).stem
-        if not contenuto.startswith(b"d"):
-            raise ErroreServizio("Quell'indirizzo non porta a un file .torrent.", "Controlla il link.")
+        except ValueError as exc:
+            raise ErroreServizio("Quell'indirizzo non porta a un file .torrent.", "Controlla il link.") from exc
+        titolo = nome_da_magnet(magnet) if magnet else Path(link.split("?")[0]).stem
+        contenuto = contenuto or None
     else:
         raise ErroreServizio(
             "Non hai inserito un torrent.",
