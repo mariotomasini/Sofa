@@ -72,7 +72,12 @@ def _dimensione_file(p: Path) -> int:
 
 def _cancella(percorso: Path) -> None:
     mai_le_foto(percorso)  # foto e video di Immich: mai, qualunque cosa succeda
-    shutil.rmtree(percorso) if percorso.is_dir() else percorso.unlink()
+    # un collegamento si toglie da solo: is_dir() lo segue e rmtree() rifiuta i collegamenti,
+    # così un collegamento a una cartella restava per sempre tra gli "abbandonati"
+    if percorso.is_dir() and not percorso.is_symlink():
+        shutil.rmtree(percorso)
+    else:
+        percorso.unlink()
 
 
 def protetto(percorso: Path, in_uso: set[str]) -> bool:

@@ -32,6 +32,19 @@ def _filtro(info_tar: tarfile.TarInfo) -> tarfile.TarInfo | None:
     return info_tar
 
 
+def nomi_pericolosi(nomi: list[str]) -> list[str]:
+    """I nomi che uscirebbero dalla cartella di destinazione: assoluti, con "..", o un volume
+    vuoto. Con "volumi/../x" il ripristino svuotava la cartella sopra /volumi."""
+    strani = []
+    for nome in nomi:
+        parti = nome.replace("\\", "/").split("/")
+        if nome.startswith(("/", "\\")) or ".." in parti or (len(nome) > 1 and nome[1] == ":"):
+            strani.append(nome)
+        elif parti[0] == "volumi" and len(parti) > 1 and parti[1] in ("", "."):
+            strani.append(nome)
+    return strani
+
+
 def backup(imp: Impostazioni, cartella_mediabox: Path) -> Path:
     cartella = cartella_mediabox / "backup"
     cartella.mkdir(exist_ok=True)
@@ -67,14 +80,29 @@ def ripristina(imp: Impostazioni, cartella_mediabox: Path, file: str) -> None:
             "Copia il file nella cartella \"backup\" di mediabox e indica il suo nome, "
             "es. mediabox restore backup/mediabox-backup-2025-01-31_2100.tar.gz",
         )
-    with tarfile.open(percorso, "r:gz") as tar:
+    try:
+        tar = tarfile.open(percorso, "r:gz")
+        # getnames() legge tutto l'archivio: un file troncato o rovinato si scopre qui,
+        # prima di aver cancellato qualcosa
         nomi = tar.getnames()
+    except (tarfile.TarError, OSError, EOFError) as exc:
+        raise ErroreMediabox(
+            "Il file di backup è rovinato o incompleto: non ho toccato niente.",
+            "Ricopialo dalla chiavetta o usa un altro backup.",
+        ) from exc
+    with tar:
         if ".env" not in nomi:
             raise ErroreMediabox(
                 "Questo file non sembra un backup di mediabox.",
                 "Usa un file creato con \"mediabox backup\".",
             )
+        if strani := nomi_pericolosi(nomi):
+            raise ErroreMediabox(
+                f"Il backup contiene percorsi non validi ({strani[0]}): non ho toccato niente.",
+                "Usa un file creato con \"mediabox backup\".",
+            )
         volumi = {n.split("/")[1] for n in nomi if n.startswith("volumi/") and n.count("/") >= 1}
+        volumi.discard("")
         for volume in volumi:
             destinazione = RADICE_VOLUMI / volume
             if not destinazione.exists():

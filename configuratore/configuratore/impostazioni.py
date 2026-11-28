@@ -7,12 +7,39 @@ così funziona allo stesso modo su Linux e su Windows.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .messaggi import ErroreMediabox
 
 CARTELLA_MEDIABOX = Path(os.environ.get("MEDIABOX_DIR", "/mediabox"))
+
+
+def scrivi_atomico(file: Path, testo: str, modo: int | None = None) -> None:
+    """Scrive il file tutto o niente: prima una copia accanto, poi la si mette al suo posto.
+
+    Con write_text uno spegnimento (o il disco pieno) a metà lasciava il .env troncato,
+    cioè mediabox senza password e chiavi. I permessi restano quelli del file di prima
+    (il .env è 600), oppure `modo` se indicato.
+    """
+    file.parent.mkdir(parents=True, exist_ok=True)
+    if modo is None:
+        try:
+            modo = file.stat().st_mode & 0o777
+        except OSError:
+            modo = 0o644
+    fd, temporaneo = tempfile.mkstemp(dir=file.parent, prefix=f".{file.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(testo)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(temporaneo, modo)
+        os.replace(temporaneo, file)
+    except BaseException:
+        Path(temporaneo).unlink(missing_ok=True)
+        raise
 
 
 def leggi_env(percorso: Path) -> dict[str, str]:

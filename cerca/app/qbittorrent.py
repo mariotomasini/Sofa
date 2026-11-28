@@ -9,10 +9,12 @@ from __future__ import annotations
 import httpx
 
 from .config import Config
-from .rete import ErroreServizio, non_raggiungibile
+from .rete import ErroreServizio, hash_da_magnet, non_raggiungibile
 
 STATI_FINITI = {"uploading", "stalledUP", "pausedUP", "stoppedUP", "queuedUP", "forcedUP", "checkingUP"}
 STATI_ERRORE = {"error", "missingFiles"}
+# finito ma qBittorrent sta ancora spostando i file: il percorso cambierà, non si importa ancora
+STATI_IN_MOVIMENTO = {"moving"}
 
 
 class QBittorrent:
@@ -63,13 +65,28 @@ class QBittorrent:
         else:
             raise ErroreServizio("Non hai indicato nessun torrent.", "Incolla un magnet o scegli un file .torrent.")
         r = await self._richiesta("POST", "torrents/add", data=dati, files=file)
-        if r.status_code == 415 or r.text.strip() == "Fails.":
+        rifiutato = r.status_code in (409, 415) or r.text.strip() == "Fails."
+        if rifiutato and magnet_o_url and not file_torrent and await self._gia_presente(magnet_o_url, etichetta):
+            return
+        if rifiutato:
             raise ErroreServizio(
                 "qBittorrent non riesce ad aprire questo torrent.",
                 "Controlla che il link o il file siano corretti (un magnet inizia con \"magnet:?\").",
             )
         if not r.is_success:
             raise ErroreServizio(f"qBittorrent ha rifiutato il torrent (errore {r.status_code}).", "Riprova.")
+
+    async def _gia_presente(self, magnet: str, etichetta: str) -> bool:
+        """qBittorrent rifiuta un torrent che ha già (aggiunto da Radarr, o da un download annullato a
+        metà): invece di un errore si usa quello, con l'etichetta di Cerca per seguirlo."""
+        hash_torrent = hash_da_magnet(magnet)
+        if not hash_torrent:
+            return False
+        r = await self._richiesta("GET", "torrents/info", params={"hashes": hash_torrent})
+        if not r.is_success or not r.json():
+            return False
+        await self.aggiungi_etichetta(hash_torrent, etichetta)
+        return True
 
     async def per_etichetta(self, etichetta: str) -> dict | None:
         r = await self._richiesta("GET", "torrents/info", params={"tag": etichetta})
